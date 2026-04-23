@@ -1,0 +1,12 @@
+[Unit]
+Description=Eastern Health Hospital Wait Time Monitor
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=pi-zwapp
+WorkingDirectory=/home/pi-zwapp/hospital-monitor/scripts
+ExecStart=/usr/bin/python3 /home/pi-zwapp/hospital-monitor/scripts/hospital_monitor.py
+StandardOutput=journal
+StandardError=journal
