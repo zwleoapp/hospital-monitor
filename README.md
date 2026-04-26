@@ -3,14 +3,14 @@
 
 A small, ML-ready data pipeline that scrapes Eastern Health's public ED dashboard (Box Hill, Angliss, Maroondah), engineers temporal and pressure features, and — eventually — predicts wait times.
 
-**Status:** Phase 1 (edge-only) · **Cost:** $0 · **Maintainer:** [@zwleoapp](https://github.com/zwleoapp)
+**Status:** v2.0 — Hybrid Edge-Cloud · **Cost:** $0 · **Maintainer:** [@zwleoapp](https://github.com/zwleoapp)
 
 ## What it does
 
-- Every 30 minutes, a Raspberry Pi scrapes the public ED wait-time dashboard.
+- Every 15 minutes, a Raspberry Pi scrapes the public ED wait-time dashboard.
 - Raw rows append to a Bronze CSV (the unalterable source of truth).
 - A Silver CSV is rebuilt each cycle with cleaned numeric features (`load_ratio`, `is_holiday`, `is_eve`, `season`, `hour`, `day_of_week`).
-- (Phase 2) The Pi will additionally push Bronze to Databricks for ML training and historical analysis.
+- When warranted, the Pi additionally pushes Bronze to Databricks for ML training and historical analysis.
 
 ## Repo layout
 
@@ -29,9 +29,9 @@ hospital-monitor/
 
 ## Quick links
 
-- 📐 [Design & SSOT](docs/DESIGN.md) — architecture, Phase 1 vs Phase 2, decisions log
+- 📐 [Design & SSOT](docs/DESIGN.md) — architecture, edge-cloud hybrid, decisions log
 - 🛡️ [QC guardrail](docs/QC.md) — gates, runbook, change-control checklist
-- 🌏 Live status (Phase 1): _not published yet — see DESIGN §6_
+- 🌏 Live status: _not published yet — see DESIGN §6_
 
 ## Conventions
 
