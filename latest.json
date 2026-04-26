@@ -1,18 +1,19 @@
 {
-  "generated_utc": "2026-04-26T11:00:18Z",
+  "generated_utc": "2026-04-26T11:02:23Z",
   "horizon_min": 60,
   "sites": [
     {
       "site": "Angliss Hospital",
       "latest_obs_utc": "2026-04-26T11:00:13Z",
       "current_wait_min": 19.0,
+      "max_wait_min": 219,
       "predicted_wait_min": 25.0,
       "wait_momentum": 3.0,
       "confidence": 0.852,
       "confidence_label": "High",
       "ctx_source": "VAHI",
       "color": "amber",
-      "heartbeat_age_mins": 0.1,
+      "heartbeat_age_mins": 2.2,
       "strain_index": 0.481,
       "suggest_diversion": true,
       "diversion_to": "Maroondah Hospital"
@@ -21,13 +22,14 @@
       "site": "Maroondah Hospital",
       "latest_obs_utc": "2026-04-26T11:00:13Z",
       "current_wait_min": 21.0,
+      "max_wait_min": 229,
       "predicted_wait_min": 0.0,
       "wait_momentum": -26.0,
       "confidence": 0.543,
       "confidence_label": "Moderate",
       "ctx_source": "VAHI",
       "color": "green",
-      "heartbeat_age_mins": 0.1,
+      "heartbeat_age_mins": 2.2,
       "strain_index": 0.0,
       "suggest_diversion": false
     },
@@ -35,13 +37,14 @@
       "site": "Box Hill Hospital",
       "latest_obs_utc": "2026-04-26T11:00:13Z",
       "current_wait_min": 16.0,
+      "max_wait_min": 242,
       "predicted_wait_min": 16.0,
       "wait_momentum": 0.0,
       "confidence": 0.775,
       "confidence_label": "High",
       "ctx_source": "VAHI",
       "color": "green",
-      "heartbeat_age_mins": 0.1,
+      "heartbeat_age_mins": 2.2,
       "strain_index": 0.18,
       "suggest_diversion": false
     }
