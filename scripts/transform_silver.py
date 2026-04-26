@@ -61,6 +61,7 @@ AIHW_NAME_MAP = {
 }
 
 CTX_COLS = [
+    "ctx_network",
     "ctx_wait_p90_mins", "ctx_wait_median_cat123_mins", "ctx_wait_median_cat45_mins",
     "ctx_los_pct_under_4hr", "ctx_los_pct_over_24hr", "ctx_non_admitted_los_pct_under_4hr",
     "ctx_source",
@@ -72,6 +73,7 @@ SILVER_COL_ORDER = [
     "wait_momentum",
     "hour", "day_of_week", "is_weekend",
     "is_holiday", "is_eve", "day_type", "season",
+    "ctx_network",
     "ctx_wait_p90_mins", "ctx_wait_median_cat123_mins", "ctx_wait_median_cat45_mins",
     "ctx_los_pct_under_4hr", "ctx_los_pct_over_24hr", "ctx_non_admitted_los_pct_under_4hr",
     "ctx_source",
@@ -187,6 +189,7 @@ def _join_vahi(bronze: pd.DataFrame, vahi: pd.DataFrame) -> tuple[pd.DataFrame, 
     v = vahi.sort_values("quarter_start_utc")
 
     _VAHI_CTX = [
+        "network",
         "wait_p90_mins", "wait_median_cat123_mins", "wait_median_cat45_mins",
         "los_pct_under_4hr", "los_pct_over_24hr", "non_admitted_los_pct_under_4hr",
     ]
@@ -207,6 +210,7 @@ def _join_vahi(bronze: pd.DataFrame, vahi: pd.DataFrame) -> tuple[pd.DataFrame, 
 
     matched = merged[in_quarter].copy().drop(columns=["quarter_start_utc", "quarter_end_utc"])
     matched = matched.rename(columns={
+        "network":                          "ctx_network",
         "wait_p90_mins":                    "ctx_wait_p90_mins",
         "wait_median_cat123_mins":          "ctx_wait_median_cat123_mins",
         "wait_median_cat45_mins":           "ctx_wait_median_cat45_mins",
