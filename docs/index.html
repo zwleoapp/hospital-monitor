@@ -125,7 +125,58 @@
 </footer>
 
 <script>
-const DATA_URL   = "https://raw.githubusercontent.com/zwleoapp/hospital-monitor/data/latest.json";
+const OUTLOOK    = {
+  "generated_utc": "2026-04-26T11:30:17Z",
+  "horizon_min": 60,
+  "sites": [
+    {
+      "site": "Angliss Hospital",
+      "latest_obs_utc": "2026-04-26T11:30:13Z",
+      "current_wait_min": 48.0,
+      "max_wait_min": 223,
+      "predicted_wait_min": 105.4,
+      "wait_momentum": 28.7,
+      "confidence": 0.595,
+      "confidence_label": "Moderate",
+      "ctx_source": "VAHI",
+      "color": "red",
+      "heartbeat_age_mins": 0.1,
+      "strain_index": 2.027,
+      "suggest_diversion": true,
+      "diversion_to": "Maroondah Hospital"
+    },
+    {
+      "site": "Maroondah Hospital",
+      "latest_obs_utc": "2026-04-26T11:30:13Z",
+      "current_wait_min": 21.0,
+      "max_wait_min": 250,
+      "predicted_wait_min": 21.0,
+      "wait_momentum": 0.0,
+      "confidence": 0.803,
+      "confidence_label": "High",
+      "ctx_source": "VAHI",
+      "color": "green",
+      "heartbeat_age_mins": 0.1,
+      "strain_index": 0.339,
+      "suggest_diversion": false
+    },
+    {
+      "site": "Box Hill Hospital",
+      "latest_obs_utc": "2026-04-26T11:30:13Z",
+      "current_wait_min": 30.0,
+      "max_wait_min": 224,
+      "predicted_wait_min": 38.0,
+      "wait_momentum": 4.0,
+      "confidence": 0.735,
+      "confidence_label": "High",
+      "ctx_source": "VAHI",
+      "color": "amber",
+      "heartbeat_age_mins": 0.1,
+      "strain_index": 0.427,
+      "suggest_diversion": false
+    }
+  ]
+};
 const STALE_MINS = 30;
 
 function light(p, m) {
@@ -232,10 +283,17 @@ function renderCard(s) {
     </div>`;
 }
 
-function checkStale(outlook) {
-  const genMs            = new Date(outlook.generated_utc).getTime();
+document.getElementById("gt").textContent =
+  new Date(OUTLOOK.generated_utc).toLocaleString("en-AU",
+    {timeZone:"Australia/Melbourne"});
+
+document.getElementById("grid").innerHTML =
+  OUTLOOK.sites.map(renderCard).join("");
+
+function checkStale() {
+  const genMs            = new Date(OUTLOOK.generated_utc).getTime();
   const minsSincePublish = (Date.now() - genMs) / 60000;
-  const dataAge          = Math.max(...outlook.sites.map(s => s.heartbeat_age_mins ?? 0));
+  const dataAge          = Math.max(...OUTLOOK.sites.map(s => s.heartbeat_age_mins ?? 0));
   const totalAge         = dataAge + minsSincePublish;
   const isStale          = totalAge > STALE_MINS;
 
@@ -252,31 +310,8 @@ function checkStale(outlook) {
   }
 }
 
-async function load() {
-  try {
-    const res     = await fetch(DATA_URL + '?t=' + Date.now(), { cache: 'no-store' });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const outlook = await res.json();
-
-    document.getElementById("gt").textContent =
-      new Date(outlook.generated_utc).toLocaleString("en-AU",
-        {timeZone:"Australia/Melbourne"});
-
-    document.getElementById("grid").innerHTML =
-      outlook.sites.map(renderCard).join("");
-
-    checkStale(outlook);
-    setInterval(() => checkStale(outlook), 60_000);
-  } catch (err) {
-    document.getElementById("grid").innerHTML =
-      `<div style="text-align:center;padding:3rem;color:#e53935;grid-column:1/-1">
-         Could not load wait times &mdash; ${err.message}.<br>
-         The Pi may be offline or the data branch not yet populated.
-       </div>`;
-  }
-}
-
-load();
+checkStale();
+setInterval(checkStale, 60_000);
 setTimeout(() => location.reload(), 5 * 60 * 1000);
 </script>
 </body>
