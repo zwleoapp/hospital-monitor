@@ -36,10 +36,11 @@ SOURCES = {
         "parser": "powerbi",
 
         # ── Set from DevTools Network Inspector ───────────────────────────────
-        # endpoint: POST URL — still needed, paste from network trace
-        #   e.g. "https://wabi-australia-east-b-api.analysis.windows.net/public/reports/querydata?synchronous=true"
-        "endpoint":     None,
-        "model_id":     "70ffff0b-d2c6-456d-9c2e-b0f259d3b30d",  # Dataset ID
+        "endpoint":     "https://wabi-australia-southeast-api.analysis.windows.net/public/reports/querydata?synchronous=true",
+        # Dataset GUID (for reference): 70ffff0b-d2c6-456d-9c2e-b0f259d3b30d
+        # modelId must be the INTEGER from the POST body in the network trace —
+        # open DevTools → Network → POST /querydata → Payload tab → "modelId"
+        "model_id":     None,  # TODO: replace with integer from network trace
         "resource_key": "da2bf0d9-bd8a-41b5-a572-ad5c35acdf7e",
 
         # ── Data-model names — verify from the Commands array in the POST body ─
