@@ -3,31 +3,61 @@
 Single source of truth for hospital configuration.
 
 To add a hospital:
-  1. Add its scrape key + formal name under the correct source in SOURCES.
-  2. Add its metadata row to HOSPITAL_META.
-  3. If the source URL is new, set its "url" in SOURCES (None = scraper skips it).
+  1. Add an entry to SOURCES under the right source (key = dashboard filter
+     value, value = canonical hospital name).
+  2. Add a row to HOSPITAL_META (network + aihw_code).
+  3. Nothing else needs editing — every pipeline script imports from here.
 
-Every pipeline script imports from here — no other file needs editing.
+Parser types
+  "html_js"  — page embeds `const patientCounts` + `const predictedWaitMinutes`
+               (Eastern Health pattern). Requires "url".
+  "powerbi"  — Power BI Embedded batch API. Requires "endpoint", "model_id",
+               "resource_key". Fill these from browser DevTools → Network tab:
+               filter for the POST to `/querydata`, copy the URL, modelId from
+               the request body, and X-PowerBI-ResourceKey from request headers.
+               Verify entity/column names from the SemanticQueryDataShapeCommand
+               Commands array in that same POST body.
 """
 
 # ── Per-source scraper configuration ─────────────────────────────────────────
-# "url": None means the dashboard URL is not yet confirmed; scraper skips silently.
-# "hospitals": maps the JS key from the dashboard JSON to the canonical hospital name.
 SOURCES = {
     "eastern_health": {
+        "parser": "html_js",
         "url": "https://waittime.easternhealth.org.au/",
+        # key = JS object key in patientCounts/predictedWaitMinutes
         "hospitals": {
             "BoxHill":   "Box Hill Hospital",
             "Angliss":   "Angliss Hospital",
             "Maroondah": "Maroondah Hospital",
         },
     },
+
     "monash_health": {
-        "url": None,  # TBC — set once Monash dashboard URL is confirmed
+        "parser": "powerbi",
+
+        # ── Fill from DevTools Network Inspector ──────────────────────────────
+        "endpoint":     None,   # POST URL  e.g. "https://wabi-australia-east-b-api.analysis.windows.net/..."
+        "model_id":     None,   # integer   from "modelId" in the POST request body
+        "resource_key": None,   # string    from "X-PowerBI-ResourceKey" request header
+
+        # ── Data-model names — verify from the Commands array in the POST body ─
+        "entity":       "CurrentPatients",  # table / entity name in the semantic model
+        "hospital_col": "Hospital",         # column used to filter by hospital
+
+        # measures: key used internally → {"property": column/measure name, "function": PBI agg code}
+        # PBI aggregation function codes: 0=Sum  1=Avg  4=Min  5=Max
+        "measures": {
+            "waiting":  {"property": "TotalWaiting",      "function": 0},
+            "treating": {"property": "TotalBeingTreated", "function": 0},
+            "wait":     {"property": "EstimatedWaitMins", "function": 4},
+        },
+
+        # key = literal value used in the WHERE filter (may differ from formal name)
+        # value = canonical hospital name matching HOSPITAL_META
         "hospitals": {
-            "Casey":     "Casey Hospital",
-            "Dandenong": "Dandenong Hospital",
-            "Clayton":   "Monash Medical Centre - Clayton",
+            "Casey Hospital":                  "Casey Hospital",
+            "Dandenong Hospital":              "Dandenong Hospital",
+            "Monash Medical Centre - Clayton": "Monash Medical Centre - Clayton",
         },
     },
 }
