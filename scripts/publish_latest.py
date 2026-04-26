@@ -148,7 +148,7 @@ _HTML = """\
     .strain-low{{color:var(--green)}}
     .strain-mid{{color:var(--amber)}}
     .strain-high{{color:var(--red)}}
-    .max-wait{{font-size:.72rem;color:#aaa;margin-top:.1rem;margin-bottom:.55rem}}
+    .max-exp .wv{{font-size:2rem;color:#bbb}}
     footer{{text-align:center;font-size:.67rem;color:#ccc;margin-top:1.5rem}}
     footer a{{color:#ccc}}
   </style>
@@ -259,8 +259,12 @@ function renderCard(s) {{
             <span class="wv">${{Math.round(s.predicted_wait_min)}}</span>
             <span class="wu">min</span>
           </div>
+          ${{fmtMins(s.max_wait_min) ? `
+          <div class="wb max-exp">
+            <label>Max wait</label>
+            <span class="wv">${{fmtMins(s.max_wait_min)}}</span>
+          </div>` : ""}}
         </div>
-        ${{fmtMins(s.max_wait_min) ? `<div class="max-wait">Maximum expected wait: ${{fmtMins(s.max_wait_min)}}</div>` : ""}}
         <div class="trend">
           <span class="${{a.cls}}">${{a.sym}}</span>
           ${{a.lbl}} &nbsp;&middot;&nbsp; ${{sign}}${{s.wait_momentum.toFixed(1)}} min / 15 min
