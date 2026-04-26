@@ -54,7 +54,10 @@ MOMENTUM_CEILING  = 30.0   # momentum beyond this (min/cadence) = max uncertaint
 MAX_WAIT_MIN      = 480    # hard upper clamp on projected wait (8 hours)
 LOS_TARGET_PCT    = 70.0   # Australian national 4-hour ED target
 
-HOSPITALS = ["Box Hill Hospital", "Angliss Hospital", "Maroondah Hospital"]
+HOSPITALS = [
+    "Angliss Hospital", "Box Hill Hospital", "Maroondah Hospital",
+    "Casey Hospital", "Dandenong Hospital", "Monash Medical Centre - Clayton",
+]
 
 
 # ── Core functions ────────────────────────────────────────────────────────────
@@ -123,6 +126,7 @@ def load_latest_silver(path: pathlib.Path) -> pd.DataFrame:
 def build_outlook(silver_row: pd.Series) -> dict:
     """Produce a single-site outlook dict from the most-recent Silver row."""
     hospital     = silver_row["hospital"]
+    network      = str(silver_row.get("ctx_network", ""))
     current_wait = float(silver_row["min_wait_mins"])
     raw_max      = silver_row.get("max_wait_mins", float("nan"))
     max_wait     = None if pd.isna(raw_max) else int(raw_max)
@@ -140,6 +144,7 @@ def build_outlook(silver_row: pd.Series) -> dict:
 
     return {
         "site":               hospital,
+        "network":            network,
         "latest_obs_utc":     obs_utc,
         "current_wait_min":   round(current_wait, 1),
         "max_wait_min":       max_wait,

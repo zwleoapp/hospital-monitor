@@ -386,23 +386,27 @@ def compute_strain_index(predicted_wait: float, p90: float) -> float:
 def annotate_diversion(sites: list) -> None:
     """
     Mutates site dicts in place.
-    If any site's strain_index is ≥ DIVERSION_STRAIN_DELTA above the least-strained
-    site, set suggest_diversion=True and diversion_to=<that site's name>.
-    All other sites get suggest_diversion=False.
+    Diversion is only meaningful within the same health network, so comparisons
+    are scoped per-network. Cross-network suggestions are never generated.
     """
-    if len(sites) < 2:
-        for s in sites:
-            s["suggest_diversion"] = False
-        return
-
-    least = min(sites, key=lambda s: s["strain_index"])
+    from itertools import groupby
+    by_network: dict[str, list] = {}
     for s in sites:
-        gap = s["strain_index"] - least["strain_index"]
-        if s is not least and gap >= DIVERSION_STRAIN_DELTA:
-            s["suggest_diversion"] = True
-            s["diversion_to"]      = least["site"]
-        else:
-            s["suggest_diversion"] = False
+        by_network.setdefault(s.get("network", ""), []).append(s)
+
+    for network_sites in by_network.values():
+        if len(network_sites) < 2:
+            for s in network_sites:
+                s["suggest_diversion"] = False
+            continue
+        least = min(network_sites, key=lambda s: s["strain_index"])
+        for s in network_sites:
+            gap = s["strain_index"] - least["strain_index"]
+            if s is not least and gap >= DIVERSION_STRAIN_DELTA:
+                s["suggest_diversion"] = True
+                s["diversion_to"]      = least["site"]
+            else:
+                s["suggest_diversion"] = False
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────
