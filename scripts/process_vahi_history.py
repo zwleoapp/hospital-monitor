@@ -18,9 +18,13 @@ Output:
 """
 import re
 import pathlib
+import sys
 import pandas as pd
 from datetime import datetime
 from zoneinfo import ZoneInfo
+
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
+from config.hospitals import HOSPITAL_META, HOSPITAL_NETWORK
 
 BRONZE_DIR = pathlib.Path(__file__).resolve().parent.parent / "bronze"
 OUTPUT_FILE = BRONZE_DIR / "vahi_history_merged.csv"
@@ -28,19 +32,7 @@ OUTPUT_FILE = BRONZE_DIR / "vahi_history_merged.csv"
 MELBOURNE = ZoneInfo("Australia/Melbourne")
 UTC = ZoneInfo("UTC")
 
-TARGETS = {
-    "Box Hill Hospital", "Angliss Hospital", "Maroondah Hospital",
-    "Casey Hospital", "Dandenong Hospital", "Monash Medical Centre - Clayton",
-}
-
-HOSPITAL_NETWORK = {
-    "Box Hill Hospital":              "Eastern Health",
-    "Angliss Hospital":               "Eastern Health",
-    "Maroondah Hospital":             "Eastern Health",
-    "Casey Hospital":                 "Monash Health",
-    "Dandenong Hospital":             "Monash Health",
-    "Monash Medical Centre - Clayton":"Monash Health",
-}
+TARGETS = set(HOSPITAL_META)
 
 # quarter_end is the midnight start of the *next* quarter (exclusive boundary)
 QUARTER_BOUNDS: dict[str, tuple[str, str]] = {
@@ -168,9 +160,31 @@ def main() -> None:
     if len(unmapped):
         raise ValueError(f"Hospitals missing from HOSPITAL_NETWORK: {unmapped}")
 
+    # ── Forward-fill proxy quarters to cover today ────────────────────────────
+    # VAHI publishes quarterly with a ~3-month lag. Rows beyond the last real
+    # quarter_end_utc would otherwise match nothing in transform_silver.
+    # We forward-fill the most-recent real quarter for each hospital until the
+    # end of the current calendar quarter, tagging them source=VAHI_PROXY.
+    from datetime import date
+    today = date.today()
+    # End of current calendar quarter (exclusive)
+    q_end_month = ((today.month - 1) // 3 + 1) * 3 + 1
+    q_end_year  = today.year + (1 if q_end_month > 12 else 0)
+    q_end_month = q_end_month if q_end_month <= 12 else q_end_month - 12
+    proxy_end = local_midnight_to_utc(f"{q_end_year:04d}-{q_end_month:02d}-01")
+
+    last_real_end = merged["quarter_end_utc"].max()
+    if proxy_end > last_real_end:
+        latest = merged[merged["quarter_end_utc"] == last_real_end].copy()
+        latest["quarter_start_utc"] = last_real_end
+        latest["quarter_end_utc"]   = proxy_end
+        latest["quarter"]           = "PROXY"
+        latest["source"]            = "VAHI_PROXY"
+        merged = pd.concat([merged, latest], ignore_index=True)
+        print(f"  Proxy quarter appended: {last_real_end} → {proxy_end}")
+
     merged.to_csv(OUTPUT_FILE, index=False)
     print(f"\nWritten {len(merged)} rows → {OUTPUT_FILE}")
-    print(merged.to_string(index=False))
 
 
 if __name__ == "__main__":
