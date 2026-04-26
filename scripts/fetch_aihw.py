@@ -26,20 +26,8 @@ from datetime import datetime, timezone
 import pandas as pd
 import requests
 
-# ── Target hospitals ──────────────────────────────────────────────────────────
-# Keys are the canonical names used in vahi_history_merged.csv.
-# Values are the AIHW MyHospitals facility codes (H-codes).
-# Run with --list-only first to confirm codes if the API schema has changed.
-HOSPITAL_CODES = {
-    # Eastern Health — already in existing file; included so --append is idempotent
-    "Box Hill Hospital":               "H0330",
-    "Maroondah Hospital":              "H0332",   # stored as "Maroondah Hospital [East Ringwood]" in AIHW
-    "Angliss Hospital":                "H0333",
-    # Monash Health — new
-    "Monash Medical Centre - Clayton": "H0326",
-    "Dandenong Hospital":              "H0329",
-    "Casey Hospital":                  "H0345",
-}
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
+from config.hospitals import HOSPITAL_CODES  # canonical name → H-code
 
 # Display name overrides: AIHW returns its own name; we normalise to our canonical names.
 # Keys = AIHW facility name (lowercased, stripped); values = our canonical name.

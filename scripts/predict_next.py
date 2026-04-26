@@ -42,6 +42,9 @@ from datetime import datetime, timezone
 
 import pandas as pd
 
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
+from config.hospitals import ALL_HOSPITALS
+
 # ── Paths ─────────────────────────────────────────────────────────────────────
 _SSD = pathlib.Path("/mnt/router_ssd/Data_Hub/Waiting_Live_time")
 DEFAULT_SILVER = _SSD / "eastern_hospital_silver.csv"
@@ -53,11 +56,6 @@ MOMENTUM_DAMPING  = 0.50   # trends don't compound: half-weight beyond one step
 MOMENTUM_CEILING  = 30.0   # momentum beyond this (min/cadence) = max uncertainty
 MAX_WAIT_MIN      = 480    # hard upper clamp on projected wait (8 hours)
 LOS_TARGET_PCT    = 70.0   # Australian national 4-hour ED target
-
-HOSPITALS = [
-    "Angliss Hospital", "Box Hill Hospital", "Maroondah Hospital",
-    "Casey Hospital", "Dandenong Hospital", "Monash Medical Centre - Clayton",
-]
 
 
 # ── Core functions ────────────────────────────────────────────────────────────
@@ -120,7 +118,7 @@ def load_latest_silver(path: pathlib.Path) -> pd.DataFrame:
           .last()
           .reset_index()
     )
-    return latest[latest["hospital"].isin(HOSPITALS)]
+    return latest[latest["hospital"].isin(ALL_HOSPITALS)]
 
 
 def build_outlook(silver_row: pd.Series) -> dict:
