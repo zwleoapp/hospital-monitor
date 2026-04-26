@@ -35,10 +35,12 @@ SOURCES = {
     "monash_health": {
         "parser": "powerbi",
 
-        # ── Fill from DevTools Network Inspector ──────────────────────────────
-        "endpoint":     None,   # POST URL  e.g. "https://wabi-australia-east-b-api.analysis.windows.net/..."
-        "model_id":     None,   # integer   from "modelId" in the POST request body
-        "resource_key": None,   # string    from "X-PowerBI-ResourceKey" request header
+        # ── Set from DevTools Network Inspector ───────────────────────────────
+        # endpoint: POST URL — still needed, paste from network trace
+        #   e.g. "https://wabi-australia-east-b-api.analysis.windows.net/public/reports/querydata?synchronous=true"
+        "endpoint":     None,
+        "model_id":     "70ffff0b-d2c6-456d-9c2e-b0f259d3b30d",  # Dataset ID
+        "resource_key": "da2bf0d9-bd8a-41b5-a572-ad5c35acdf7e",
 
         # ── Data-model names — verify from the Commands array in the POST body ─
         "entity":       "CurrentPatients",  # table / entity name in the semantic model
