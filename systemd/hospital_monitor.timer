@@ -1,9 +1,9 @@
 [Unit]
-Description=Run Hospital Monitor every 30 minutes
+Description=Run Hospital Monitor every 15 minutes
 
 [Timer]
-# Runs at :00 and :05 of every hour
-OnCalendar=*:0/05
+# Runs at :00 and :15 of every hour
+OnCalendar=*:0/15
 Persistent=true
 
 [Install]

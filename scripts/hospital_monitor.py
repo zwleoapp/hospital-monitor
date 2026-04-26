@@ -1,9 +1,11 @@
+# data-class: public-aggregate
 from curl_cffi import requests
 import csv
 import os
 import re
 import json
-from datetime import datetime
+from datetime import datetime, timezone
+from status import update_status
 
 URL = "https://waittime.easternhealth.org.au/"
 CSV_PATH = "/mnt/router_ssd/Data_Hub/Waiting_Live_time/eastern_hospital.csv"
@@ -31,7 +33,7 @@ def scrape_hospital():
             return
 
         html = response.text
-        timestamp = datetime.now().strftime("%d/%m/%Y %H:%M")
+        timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
         # 2. Extract the exact JSON dictionaries using Regular Expressions
         # We look for "const variableName =" and capture everything inside the { }
@@ -79,9 +81,11 @@ def scrape_hospital():
         print(f"[{timestamp}] Success! CSV updated.")
         for row in rows:
             print(f" -> {row[1]}: {row[2]} waiting, {row[3]} treating. Est wait: {row[4]}")
+        update_status("hospital_monitor", "PASS")
 
     except Exception as e:
         print(f"Extraction failed: {e}")
+        update_status("hospital_monitor", "FAIL")
 
 if __name__ == "__main__":
     scrape_hospital()
