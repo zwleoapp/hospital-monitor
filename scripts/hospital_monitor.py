@@ -87,106 +87,139 @@ def _extract_dsr_value(result_obj: dict):
         return None
 
 
-def _build_pbi_query(job_id: str, entity: str, hospital_col: str,
-                     hospital_filter: str, prop: str, fn: int) -> dict:
+def _build_pbi_grouped_query(job_id: str, entity: str, hospital_col: str,
+                              hospital_filter: str, group_col: str,
+                              col_waiting: str, col_treating: str,
+                              col_wait_str: str) -> dict:
     """
-    Build one SemanticQueryDataShapeCommand query for the batch payload.
+    Build a grouped SemanticQueryDataShapeCommand query for one campus.
 
-    job_id          — unique string returned verbatim in the response
-    entity          — Power BI table name (e.g. "CurrentPatients")
-    hospital_col    — column used to filter by site (e.g. "Hospital")
-    hospital_filter — literal value for the WHERE clause
-    prop            — measure/column property name (e.g. "TotalWaiting")
-    fn              — PBI aggregation function: 0=Sum 1=Avg 4=Min 5=Max
+    Groups by group_col (AdultPaed) and selects col_waiting, col_treating,
+    col_wait_str columns. The response DSR contains one row per group value.
+    We pick the target group row in _scrape_powerbi_source.
     """
+    def _col(prop):
+        return {"Column": {"Expression": {"SourceRef": {"Source": "t"}}, "Property": prop}}
+
     return {
         "Query": {
-            "Commands": [
-                {
-                    "SemanticQueryDataShapeCommand": {
-                        "Query": {
-                            "Version": 2,
-                            "From": [{"Name": "t", "Entity": entity, "Type": 0}],
-                            "Select": [
-                                {
-                                    "Aggregation": {
-                                        "Expression": {
-                                            "Column": {
-                                                "Expression": {"SourceRef": {"Source": "t"}},
-                                                "Property": prop,
-                                            }
-                                        },
-                                        "Function": fn,
-                                    },
-                                    "Name": f"Agg({entity}.{prop})",
-                                }
-                            ],
-                            "Where": [
-                                {
-                                    "Condition": {
-                                        "Comparison": {
-                                            "ComparisonKind": 0,
-                                            "Left": {
-                                                "Column": {
-                                                    "Expression": {"SourceRef": {"Source": "t"}},
-                                                    "Property": hospital_col,
-                                                }
-                                            },
-                                            "Right": {
-                                                "Literal": {"Value": f"'{hospital_filter}'"}
-                                            },
-                                        }
-                                    }
-                                }
-                            ],
-                        },
-                        "Binding": {
-                            "Primary": {"Groupings": [{"Projections": [0]}]},
-                            "Version": 1,
-                        },
-                    }
+            "Commands": [{
+                "SemanticQueryDataShapeCommand": {
+                    "Query": {
+                        "Version": 2,
+                        "From": [{"Name": "t", "Entity": entity, "Type": 0}],
+                        "Select": [
+                            {**_col(group_col),   "Name": "G0"},
+                            {**_col(col_waiting),  "Name": "G1"},
+                            {**_col(col_treating), "Name": "G2"},
+                            {**_col(col_wait_str), "Name": "G3"},
+                        ],
+                        "Where": [{"Condition": {"Comparison": {
+                            "ComparisonKind": 0,
+                            "Left":  _col(hospital_col),
+                            "Right": {"Literal": {"Value": f"'{hospital_filter}'"}},
+                        }}}],
+                    },
+                    "Binding": {
+                        "Primary": {"Groupings": [{"Projections": [0, 1, 2, 3]}]},
+                        "DataReduction": {"DataVolume": 4, "Primary": {"Top": {}}},
+                        "Version": 1,
+                    },
                 }
-            ]
+            }]
         },
         "QueryId": job_id,
     }
 
 
+def _parse_grouped_dsr(result_obj: dict, group_target: str) -> dict | None:
+    """
+    Extract the target group row from a Power BI grouped DSR response.
+
+    DSR structure:
+      DS[0].PH[0].DM0[i].C  — column values for row i
+      DS[0].ValueDicts       — {dictName: [values]} for string columns
+    Schema S[j] with DN field means C[j] is an index into ValueDicts[DN].
+
+    Returns {G0, G1, G2, G3} as decoded values for the matching row, or None.
+    """
+    try:
+        ds0       = result_obj["result"]["data"]["dsr"]["DS"][0]
+        rows      = ds0["PH"][0]["DM0"]
+        vdicts    = ds0.get("ValueDicts", {})
+        schema    = rows[0]["S"]          # schema defined on first row
+    except (KeyError, IndexError, TypeError):
+        return None
+
+    def _decode(c_val, col_idx):
+        s = schema[col_idx]
+        if "DN" in s and isinstance(c_val, int):
+            return vdicts.get(s["DN"], [])[c_val]
+        return c_val
+
+    first_valid = None
+    for row in rows:
+        c = row.get("C", [])
+        if len(c) < 4:
+            continue
+        g0_raw = _decode(c[0], 0)
+        decoded = {
+            "group":    g0_raw,
+            "waiting":  c[1],
+            "treating": c[2],
+            "wait_str": str(_decode(c[3], 3) or "").strip(),
+        }
+        if first_valid is None:
+            first_valid = decoded
+        if str(g0_raw) == group_target:
+            return decoded
+    # Campus has no Adult/Paeds split — return the single row
+    return first_valid
+
+
 def _scrape_powerbi_source(source_key: str, cfg: dict, timestamp: str) -> list:
     """
-    Single POST to the Power BI batch API covering all hospitals × all measures.
+    Single POST to the Power BI batch API: one grouped query per campus.
 
-    Response shape (per result):
-      result.data.dsr.DS[0].PH[0].DM0[0].M0  →  the scalar value
+    Each query groups by group_col (AdultPaed) so we can pick the Adult row.
+    The 'Estimated Time' column returns "X hr Y min - X hr Y min" which the
+    Silver transform parses identically to Eastern Health's wait_time strings.
     """
     endpoint     = cfg.get("endpoint")
     model_id     = cfg.get("model_id")
     resource_key = cfg.get("resource_key")
-    entity       = cfg.get("entity",       "CurrentPatients")
-    hospital_col = cfg.get("hospital_col", "Hospital")
-    measures     = cfg.get("measures",     {})
-    hospitals    = cfg["hospitals"]
-
     if not all([endpoint, model_id, resource_key]):
-        missing = [k for k, v in {"endpoint": endpoint, "model_id": model_id,
+        missing = [k for k, v in {"endpoint": endpoint,
+                                   "model_id": model_id,
                                    "resource_key": resource_key}.items() if not v]
         print(f"  [{source_key}] Power BI not configured — set {missing} in config/hospitals.py")
         return []
 
-    # Build batch payload: one query per (hospital × measure)
-    queries  = []
-    job_map  = {}   # job_id → (formal_name, measure_key)
+    entity       = cfg.get("entity",       "CurrentPatients")
+    hospital_col = cfg.get("hospital_col", "Campus")
+    group_col    = cfg.get("group_col",    "AdultPaed")
+    group_target = cfg.get("group_target", "Adult")
+    col_waiting  = cfg.get("col_waiting",  "TotalWaiting")
+    col_treating = cfg.get("col_treating", "TotalBeingTreated")
+    col_wait_str = cfg.get("col_wait_str", "Estimated Time")
+    hospitals    = cfg["hospitals"]
 
-    for hospital_filter, formal_name in hospitals.items():
-        for measure_key, m_cfg in measures.items():
-            job_id = f"{formal_name}__{measure_key}"
-            job_map[job_id] = (formal_name, measure_key)
-            queries.append(
-                _build_pbi_query(
-                    job_id, entity, hospital_col,
-                    hospital_filter, m_cfg["property"], m_cfg["function"],
-                )
-            )
+    # One grouped query per campus — responses come back in the same order
+    queries      = []
+    campus_order = []   # preserves (filter, formal_name) order for result mapping
+
+    for campus_filter, formal_name in hospitals.items():
+        queries.append(_build_pbi_grouped_query(
+            job_id        = campus_filter,
+            entity        = entity,
+            hospital_col  = hospital_col,
+            hospital_filter = campus_filter,
+            group_col     = group_col,
+            col_waiting   = col_waiting,
+            col_treating  = col_treating,
+            col_wait_str  = col_wait_str,
+        ))
+        campus_order.append((campus_filter, formal_name))
 
     payload = {
         "version": "1.0.0",
@@ -194,49 +227,38 @@ def _scrape_powerbi_source(source_key: str, cfg: dict, timestamp: str) -> list:
         "cancelQueries": [],
         "modelId": model_id,
     }
-    headers = {
-        "Content-Type":           "application/json",
-        "X-PowerBI-ResourceKey":  resource_key,
-    }
-
-    resp = requests.post(endpoint, json=payload, headers=headers,
-                         impersonate="chrome120", timeout=30)
+    resp = requests.post(
+        endpoint, json=payload,
+        headers={"Content-Type": "application/json",
+                 "X-PowerBI-ResourceKey": resource_key},
+        impersonate="chrome120", timeout=30,
+    )
     if resp.status_code != 200:
         print(f"  [{source_key}] Power BI API HTTP {resp.status_code}: {resp.text[:200]}")
         return []
 
-    # Parse: collect all (hospital, measure) values
-    collected = {}   # formal_name → {measure_key: raw_value}
-    for result in resp.json().get("results", []):
-        job_id  = result.get("jobId") or result.get("QueryId", "")
-        mapping = job_map.get(job_id)
-        if not mapping:
-            continue
-        formal_name, measure_key = mapping
-        value = _extract_dsr_value(result)
-        collected.setdefault(formal_name, {})[measure_key] = value
-
-    # Build Bronze rows
+    results = resp.json().get("results", [])
     rows = []
-    for formal_name, vals in collected.items():
-        waiting  = int(vals.get("waiting")  or 0)
-        treating = int(vals.get("treating") or 0)
+    for i, (campus_filter, formal_name) in enumerate(campus_order):
+        if i >= len(results):
+            print(f"  [{source_key}] Missing result for {formal_name}")
+            continue
 
-        # Wait time: Power BI may return int minutes, float, or a formatted string
-        wait_raw = vals.get("wait")
-        if wait_raw is None:
-            min_mins = max_mins = 0
-        else:
-            wait_mins = _parse_wait_str(wait_raw)
-            min_mins  = max_mins = wait_mins   # single estimate; no range from PBI
+        row = _parse_grouped_dsr(results[i], group_target)
+        if row is None:
+            print(f"  [{source_key}] No '{group_target}' row found for {formal_name}")
+            continue
 
-        min_fmt  = format_time(min_mins)
-        wait_str = min_fmt if min_mins == max_mins else f"{min_fmt} - {format_time(max_mins)}"
+        waiting  = int(row["waiting"]  or 0)
+        treating = int(row["treating"] or 0)
+        wait_str = row["wait_str"]                  # e.g. "2 hr 46 min - 6 hr 50 min"
+        min_mins = _parse_wait_str(wait_str.split(" - ")[0]) if " - " in wait_str else _parse_wait_str(wait_str)
+        max_mins = _parse_wait_str(wait_str.split(" - ")[1]) if " - " in wait_str else min_mins
 
         rows.append([timestamp, formal_name, waiting, treating,
                      wait_str, min_mins, max_mins])
+        print(f"   {formal_name}: {waiting} waiting, {treating} treating. Wait: {wait_str}")
 
-    print(f"  [{source_key}] {len(rows)} hospitals parsed from Power BI response.")
     return rows
 
 

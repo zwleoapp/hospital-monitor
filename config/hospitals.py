@@ -33,34 +33,28 @@ SOURCES = {
     },
 
     "monash_health": {
-        "parser": "powerbi",
-
-        # ── Set from DevTools Network Inspector ───────────────────────────────
+        "parser":       "powerbi",
         "endpoint":     "https://wabi-australia-southeast-api.analysis.windows.net/public/reports/querydata?synchronous=true",
-        # Dataset GUID (for reference): 70ffff0b-d2c6-456d-9c2e-b0f259d3b30d
-        # modelId must be the INTEGER from the POST body in the network trace —
-        # open DevTools → Network → POST /querydata → Payload tab → "modelId"
-        "model_id":     None,  # TODO: replace with integer from network trace
+        "model_id":     2556929,           # integer confirmed from /conceptualschema
         "resource_key": "da2bf0d9-bd8a-41b5-a572-ad5c35acdf7e",
 
-        # ── Data-model names — verify from the Commands array in the POST body ─
-        "entity":       "CurrentPatients",  # table / entity name in the semantic model
-        "hospital_col": "Hospital",         # column used to filter by hospital
+        # ── Data model (confirmed from /conceptualschema + live probe) ────────
+        "entity":       "CurrentPatients",
+        "hospital_col": "Campus",          # WHERE Campus = '{filter_key}'
+        # Each campus has two rows (Adult / Paeds). We want Adult only.
+        "group_col":    "AdultPaed",
+        "group_target": "Adult",
+        # Columns to SELECT in the grouped query (order defines C array indices):
+        # [group_col, col_waiting, col_treating, col_wait_str]
+        "col_waiting":  "TotalWaiting",
+        "col_treating": "TotalBeingTreated",
+        "col_wait_str": "Estimated Time",  # returns "X hr Y min - X hr Y min" string
 
-        # measures: key used internally → {"property": column/measure name, "function": PBI agg code}
-        # PBI aggregation function codes: 0=Sum  1=Avg  4=Min  5=Max
-        "measures": {
-            "waiting":  {"property": "TotalWaiting",      "function": 0},
-            "treating": {"property": "TotalBeingTreated", "function": 0},
-            "wait":     {"property": "EstimatedWaitMins", "function": 4},
-        },
-
-        # key = literal value used in the WHERE filter (may differ from formal name)
-        # value = canonical hospital name matching HOSPITAL_META
+        # key = Campus filter value  →  value = canonical hospital name
         "hospitals": {
-            "Casey Hospital":                  "Casey Hospital",
-            "Dandenong Hospital":              "Dandenong Hospital",
-            "Monash Medical Centre - Clayton": "Monash Medical Centre - Clayton",
+            "Casey":     "Casey Hospital",
+            "Clayton":   "Monash Medical Centre - Clayton",
+            "Dandenong": "Dandenong Hospital",
         },
     },
 }
