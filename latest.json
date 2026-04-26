@@ -1,25 +1,28 @@
 {
-  "generated_utc": "2026-04-26T11:45:17Z",
+  "generated_utc": "2026-04-26T12:00:07Z",
   "horizon_min": 60,
   "sites": [
     {
       "site": "Angliss Hospital",
-      "latest_obs_utc": "2026-04-26T11:45:13Z",
+      "network": "Eastern Health",
+      "latest_obs_utc": "2026-04-26T12:00:03Z",
       "current_wait_min": 42.0,
-      "max_wait_min": 229,
-      "predicted_wait_min": 30.0,
-      "wait_momentum": -6.0,
-      "confidence": 0.822,
+      "max_wait_min": 226,
+      "predicted_wait_min": 42.0,
+      "wait_momentum": 0.0,
+      "confidence": 0.882,
       "confidence_label": "High",
       "ctx_source": "VAHI",
-      "color": "green",
+      "color": "amber",
       "heartbeat_age_mins": 0.1,
-      "strain_index": 0.577,
-      "suggest_diversion": false
+      "strain_index": 0.808,
+      "suggest_diversion": true,
+      "diversion_to": "Maroondah Hospital"
     },
     {
       "site": "Maroondah Hospital",
-      "latest_obs_utc": "2026-04-26T11:45:13Z",
+      "network": "Eastern Health",
+      "latest_obs_utc": "2026-04-26T12:00:03Z",
       "current_wait_min": 21.0,
       "max_wait_min": 248,
       "predicted_wait_min": 21.0,
@@ -34,18 +37,20 @@
     },
     {
       "site": "Box Hill Hospital",
-      "latest_obs_utc": "2026-04-26T11:45:13Z",
-      "current_wait_min": 30.0,
-      "max_wait_min": 223,
-      "predicted_wait_min": 30.0,
-      "wait_momentum": 0.0,
-      "confidence": 0.775,
-      "confidence_label": "High",
+      "network": "Eastern Health",
+      "latest_obs_utc": "2026-04-26T12:00:03Z",
+      "current_wait_min": 43.0,
+      "max_wait_min": 228,
+      "predicted_wait_min": 69.2,
+      "wait_momentum": 13.1,
+      "confidence": 0.644,
+      "confidence_label": "Moderate",
       "ctx_source": "VAHI",
-      "color": "green",
+      "color": "red",
       "heartbeat_age_mins": 0.1,
-      "strain_index": 0.337,
-      "suggest_diversion": false
+      "strain_index": 0.778,
+      "suggest_diversion": true,
+      "diversion_to": "Maroondah Hospital"
     }
   ]
 }
