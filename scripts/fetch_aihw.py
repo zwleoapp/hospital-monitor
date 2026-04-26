@@ -2,16 +2,17 @@
 """
 fetch_aihw.py — Fetch ED measures from the AIHW MyHospitals public API.
 
+⚠  RUN FROM LAPTOP — myhospitals.gov.au does not resolve from the Pi.
+
 Outputs a CSV in the same schema as bronze/eastern_hospital_historical_context.csv
 so the two files can be concatenated directly.
 
-Usage (run from repo root, requires internet access):
+Usage (run from repo root on a laptop with internet access):
+  python3 scripts/fetch_aihw.py --list-only         # verify H-codes first
   python3 scripts/fetch_aihw.py --out bronze/monash_aihw_context.csv
-  python3 scripts/fetch_aihw.py --list-only        # just print matched facility codes
-  python3 scripts/fetch_aihw.py --append            # append directly to existing file
+  python3 scripts/fetch_aihw.py --append            # merge into main file
 
-After running:
-  python3 scripts/fetch_aihw.py --append
+After --append, copy the updated bronze/ file to the Pi and run:
   python3 scripts/transform_silver.py               # rebuild Silver with full context
 """
 
@@ -60,7 +61,7 @@ MEASURES = {
 }
 
 # ── API ───────────────────────────────────────────────────────────────────────
-BASE = "https://www.myhospitals.gov.au/api/v1"
+BASE = "https://myhospitals.gov.au/api/v1"   # no www — Pi can't resolve www. prefix
 SESSION = requests.Session()
 SESSION.headers.update({"Accept": "application/json", "User-Agent": "hospital-monitor/1.0"})
 
