@@ -121,10 +121,59 @@
   Phase 1 heuristic baseline &mdash; accuracy improves as the ML model trains.
   &nbsp;&middot;&nbsp; Raspberry Pi &middot;
   <a href="https://github.com/zwleoapp/hospital-monitor">github.com/zwleoapp/hospital-monitor</a>
+  <br><span style="font-size:.63rem;opacity:.7">Note: Dashboard updates may trail real-time hospital data by up to 5 minutes due to network caching.</span>
 </footer>
 
 <script>
-const DATA_URL   = "https://raw.githubusercontent.com/zwleoapp/hospital-monitor/data/latest.json";
+const OUTLOOK    = {
+  "generated_utc": "2026-04-26T10:45:17Z",
+  "horizon_min": 60,
+  "sites": [
+    {
+      "site": "Angliss Hospital",
+      "latest_obs_utc": "2026-04-26T10:45:13Z",
+      "current_wait_min": 16.0,
+      "predicted_wait_min": 0.0,
+      "wait_momentum": -48.5,
+      "confidence": 0.582,
+      "confidence_label": "Moderate",
+      "ctx_source": "VAHI",
+      "color": "green",
+      "heartbeat_age_mins": 0.1,
+      "strain_index": 0.0,
+      "suggest_diversion": false
+    },
+    {
+      "site": "Maroondah Hospital",
+      "latest_obs_utc": "2026-04-26T10:45:13Z",
+      "current_wait_min": 47.0,
+      "predicted_wait_min": 74.6,
+      "wait_momentum": 13.8,
+      "confidence": 0.665,
+      "confidence_label": "Moderate",
+      "ctx_source": "VAHI",
+      "color": "red",
+      "heartbeat_age_mins": 0.1,
+      "strain_index": 1.203,
+      "suggest_diversion": true,
+      "diversion_to": "Angliss Hospital"
+    },
+    {
+      "site": "Box Hill Hospital",
+      "latest_obs_utc": "2026-04-26T10:45:13Z",
+      "current_wait_min": 16.0,
+      "predicted_wait_min": 16.0,
+      "wait_momentum": 0.0,
+      "confidence": 0.775,
+      "confidence_label": "High",
+      "ctx_source": "VAHI",
+      "color": "green",
+      "heartbeat_age_mins": 0.1,
+      "strain_index": 0.18,
+      "suggest_diversion": false
+    }
+  ]
+};
 const STALE_MINS = 30;
 
 function light(p, m) {
@@ -219,10 +268,17 @@ function renderCard(s) {
     </div>`;
 }
 
-function checkStale(outlook) {
-  const genMs            = new Date(outlook.generated_utc).getTime();
+document.getElementById("gt").textContent =
+  new Date(OUTLOOK.generated_utc).toLocaleString("en-AU",
+    {timeZone:"Australia/Melbourne"});
+
+document.getElementById("grid").innerHTML =
+  OUTLOOK.sites.map(renderCard).join("");
+
+function checkStale() {
+  const genMs            = new Date(OUTLOOK.generated_utc).getTime();
   const minsSincePublish = (Date.now() - genMs) / 60000;
-  const dataAge          = Math.max(...outlook.sites.map(s => s.heartbeat_age_mins ?? 0));
+  const dataAge          = Math.max(...OUTLOOK.sites.map(s => s.heartbeat_age_mins ?? 0));
   const totalAge         = dataAge + minsSincePublish;
   const isStale          = totalAge > STALE_MINS;
 
@@ -239,31 +295,8 @@ function checkStale(outlook) {
   }
 }
 
-async function load() {
-  try {
-    const res     = await fetch(DATA_URL + '?t=' + Date.now(), { cache: 'no-store' });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const outlook = await res.json();
-
-    document.getElementById("gt").textContent =
-      new Date(outlook.generated_utc).toLocaleString("en-AU",
-        {timeZone:"Australia/Melbourne"});
-
-    document.getElementById("grid").innerHTML =
-      outlook.sites.map(renderCard).join("");
-
-    checkStale(outlook);
-    setInterval(() => checkStale(outlook), 60_000);
-  } catch (err) {
-    document.getElementById("grid").innerHTML =
-      `<div style="text-align:center;padding:3rem;color:#e53935;grid-column:1/-1">
-         Could not load wait times &mdash; ${err.message}.<br>
-         The Pi may be offline or the data branch not yet populated.
-       </div>`;
-  }
-}
-
-load();
+checkStale();
+setInterval(checkStale, 60_000);
 setTimeout(() => location.reload(), 5 * 60 * 1000);
 </script>
 </body>
