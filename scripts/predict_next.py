@@ -124,6 +124,8 @@ def build_outlook(silver_row: pd.Series) -> dict:
     """Produce a single-site outlook dict from the most-recent Silver row."""
     hospital     = silver_row["hospital"]
     current_wait = float(silver_row["min_wait_mins"])
+    raw_max      = silver_row.get("max_wait_mins", float("nan"))
+    max_wait     = None if pd.isna(raw_max) else int(raw_max)
     raw_momentum = silver_row.get("wait_momentum", float("nan"))
     momentum     = 0.0 if pd.isna(raw_momentum) else float(raw_momentum)
     los_pct      = float(silver_row["ctx_los_pct_under_4hr"])
@@ -140,6 +142,7 @@ def build_outlook(silver_row: pd.Series) -> dict:
         "site":               hospital,
         "latest_obs_utc":     obs_utc,
         "current_wait_min":   round(current_wait, 1),
+        "max_wait_min":       max_wait,
         "predicted_wait_min": projected,
         "wait_momentum":      round(momentum, 1),
         "confidence":         confidence,

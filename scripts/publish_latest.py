@@ -148,6 +148,7 @@ _HTML = """\
     .strain-low{{color:var(--green)}}
     .strain-mid{{color:var(--amber)}}
     .strain-high{{color:var(--red)}}
+    .max-wait{{font-size:.72rem;color:#aaa;margin-top:.1rem;margin-bottom:.55rem}}
     footer{{text-align:center;font-size:.67rem;color:#ccc;margin-top:1.5rem}}
     footer a{{color:#ccc}}
   </style>
@@ -211,6 +212,13 @@ function localTime(utc) {{
   return new Date(utc).toLocaleTimeString("en-AU",
     {{timeZone:"Australia/Melbourne", hour:"2-digit", minute:"2-digit"}});
 }}
+function fmtMins(m) {{
+  if (!m || m <= 0) return null;
+  const h = Math.floor(m / 60), r = m % 60;
+  if (h === 0) return r + " min";
+  if (r === 0) return h + " hr";
+  return h + " hr " + r + " min";
+}}
 
 function renderCard(s) {{
   const c    = light(s.predicted_wait_min, s.wait_momentum);
@@ -252,6 +260,7 @@ function renderCard(s) {{
             <span class="wu">min</span>
           </div>
         </div>
+        ${{fmtMins(s.max_wait_min) ? `<div class="max-wait">Maximum expected wait: ${{fmtMins(s.max_wait_min)}}</div>` : ""}}
         <div class="trend">
           <span class="${{a.cls}}">${{a.sym}}</span>
           ${{a.lbl}} &nbsp;&middot;&nbsp; ${{sign}}${{s.wait_momentum.toFixed(1)}} min / 15 min
