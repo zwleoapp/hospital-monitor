@@ -60,7 +60,7 @@ Everything runs on the Raspberry Pi. No cloud spend.
 - Weather ingester (new, small): `weather_monitor.py` — pulls Open-Meteo on the Pi.
 - Publisher (new, small): `publish_latest.py` — writes `latest.json`, force-pushes to `data` branch via SSH key.
 - Trainer (new, small): `train_local.py` — pickles a model weekly into `/models/v<n>.pkl`.
-- Static page: `site/index.html` — vanilla JS, fetches `latest.json`, renders three pins.
+- Static page: `docs/index.html` — vanilla JS, fetches `latest.json`, renders three pins.
 
 ### Phase 2 — Cloud uplift (when justified)
 
@@ -127,9 +127,9 @@ Phase 1 is deliberately small, but the lifecycle shape is set now so Phase 2 is 
 **Phase 1 (zero-cost path):**
 
 - Pi runs `publish_latest.py` after each Silver rebuild.
-- Script writes a small JSON with one record per site: `{site, latest_obs_utc, current_wait_min, predicted_wait_min, confidence}`.
+- Script writes a small JSON with one record per site: `{site, latest_obs_utc, current_wait_min, predicted_wait_min, confidence, heartbeat_age_mins}`.
 - Force-pushes that single file to the `data` branch of the repo via deploy-key SSH. Force-push keeps git history small.
-- A static `site/index.html` (vanilla JS + Leaflet or just an HTML table) is served from GitHub Pages on `main`. It fetches `https://raw.githubusercontent.com/zwleoapp/hospital-monitor/data/latest.json` and renders.
+- A static `docs/index.html` (vanilla JS + Leaflet or just an HTML table) is served from GitHub Pages on `main`. It fetches `https://raw.githubusercontent.com/zwleoapp/hospital-monitor/data/latest.json` and renders.
 - Cache-busting via `?t=<timestamp>` query string.
 
 This is the simplest possible public surface: no servers, no DNS, no inbound on the Pi, no spend. Petrol Spy Australia is a useful reference for *what* (live, public-good, map-driven) but the implementation here is far smaller — we don't need accounts, comments, or a backend.

@@ -24,7 +24,7 @@ hospital-monitor/
 │   ├── DESIGN.md       ← architecture, phases, decisions log
 │   └── QC.md           ← QC guardrail: per-layer gates, runbook, change-control
 ├── data/               ← (Phase 1) `latest.json` published to `data` branch only
-└── site/               ← (Phase 1) optional static GitHub Pages map UI
+└── docs/               ← (Phase 1) static GitHub Pages UI (served from /docs on main)
 ```
 
 ## Quick links
