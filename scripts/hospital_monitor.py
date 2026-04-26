@@ -63,11 +63,14 @@ def scrape_hospital():
 
             # Get wait times safely and format them
             w_data = predicted_waits.get(key, {})
-            min_wait = format_time(w_data.get("min", 0))
-            max_wait = format_time(w_data.get("max", 0))
-            wait_time_str = f"{min_wait} - {max_wait}" if min_wait != "N/A" else "N/A"
+            min_raw = int(w_data.get("min", 0))
+            max_raw = int(w_data.get("max", 0))
+            min_fmt = format_time(min_raw)
+            max_fmt = format_time(max_raw)
+            wait_time_str = f"{min_fmt} - {max_fmt}" if min_fmt != "N/A" else "N/A"
 
-            rows.append([timestamp, formal_name, waiting, treating, wait_time_str])
+            rows.append([timestamp, formal_name, waiting, treating,
+                         wait_time_str, min_raw, max_raw])
 
         # 4. Write data to the SSD
         os.makedirs(os.path.dirname(CSV_PATH), exist_ok=True)
@@ -75,7 +78,8 @@ def scrape_hospital():
         with open(CSV_PATH, 'a', newline='') as f:
             writer = csv.writer(f)
             if not file_exists:
-                writer.writerow(['timestamp', 'hospital', 'waiting', 'treating', 'wait_time'])
+                writer.writerow(['timestamp', 'hospital', 'waiting', 'treating',
+                                 'wait_time', 'min_wait_mins', 'max_wait_mins'])
             writer.writerows(rows)
             
         print(f"[{timestamp}] Success! CSV updated.")
