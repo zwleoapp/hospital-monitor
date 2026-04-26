@@ -38,7 +38,7 @@ DEFAULT_SITE_DIR = _BASE / "docs"
 PUBLISHER_TMPDIR = pathlib.Path("/tmp/publisher")   # staging clone for data branch
 
 _MELB                  = ZoneInfo("Australia/Melbourne")
-OPERATIONAL_START_H    = 7     # 07:00 Melbourne — before this, skip and exit
+OPERATIONAL_START_H    = 6     # 06:00 Melbourne — before this, skip and exit
 OPERATIONAL_END_H      = 23    # 23:00 Melbourne — after this, skip and exit
 DIVERSION_STRAIN_DELTA = 0.40  # strain_index gap that triggers a diversion suggestion
 
@@ -148,7 +148,7 @@ _HTML = """\
     .strain-low{{color:var(--green)}}
     .strain-mid{{color:var(--amber)}}
     .strain-high{{color:var(--red)}}
-    .max-exp .wv{{font-size:2rem;color:#bbb}}
+    .wait-range{{font-size:.72rem;color:#aaa;margin-top:.2rem}}
     footer{{text-align:center;font-size:.67rem;color:#ccc;margin-top:1.5rem}}
     footer a{{color:#ccc}}
   </style>
@@ -219,6 +219,12 @@ function fmtMins(m) {{
   if (r === 0) return h + " hr";
   return h + " hr " + r + " min";
 }}
+function fmtShort(m) {{
+  if (m == null || m <= 0) return null;
+  const h = Math.floor(m / 60), r = m % 60;
+  if (h === 0) return r + "m";
+  return r === 0 ? h + "h" : h + "h " + r + "m";
+}}
 
 function renderCard(s) {{
   const c    = light(s.predicted_wait_min, s.wait_momentum);
@@ -253,17 +259,13 @@ function renderCard(s) {{
             <label>Now</label>
             <span class="wv">${{Math.round(s.current_wait_min)}}</span>
             <span class="wu">min</span>
+            ${{fmtShort(s.max_wait_min) ? `<div class="wait-range">&ndash;&nbsp;${{fmtShort(s.max_wait_min)}}</div>` : ""}}
           </div>
           <div class="wb predicted">
             <label>In 60 min</label>
             <span class="wv">${{Math.round(s.predicted_wait_min)}}</span>
             <span class="wu">min</span>
           </div>
-          ${{fmtMins(s.max_wait_min) ? `
-          <div class="wb max-exp">
-            <label>Max wait</label>
-            <span class="wv">${{fmtMins(s.max_wait_min)}}</span>
-          </div>` : ""}}
         </div>
         <div class="trend">
           <span class="${{a.cls}}">${{a.sym}}</span>
@@ -429,7 +431,7 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    # ── 0. Operational-hours gate (07:00–23:00 Melbourne) ─────────────────────
+    # ── 0. Operational-hours gate (06:00–23:00 Melbourne) ─────────────────────
     now_melb = datetime.now(_MELB)
     if not (OPERATIONAL_START_H <= now_melb.hour < OPERATIONAL_END_H):
         print(

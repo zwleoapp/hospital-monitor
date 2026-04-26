@@ -86,7 +86,7 @@
     .strain-low{color:var(--green)}
     .strain-mid{color:var(--amber)}
     .strain-high{color:var(--red)}
-    .max-exp .wv{font-size:2rem;color:#bbb}
+    .wait-range{font-size:.72rem;color:#aaa;margin-top:.2rem}
     footer{text-align:center;font-size:.67rem;color:#ccc;margin-top:1.5rem}
     footer a{color:#ccc}
   </style>
@@ -126,54 +126,57 @@
 
 <script>
 const OUTLOOK    = {
-  "generated_utc": "2026-04-26T11:30:17Z",
+  "generated_utc": "2026-04-26T21:15:17Z",
   "horizon_min": 60,
   "sites": [
     {
       "site": "Angliss Hospital",
-      "latest_obs_utc": "2026-04-26T11:30:13Z",
-      "current_wait_min": 48.0,
-      "max_wait_min": 223,
-      "predicted_wait_min": 105.4,
-      "wait_momentum": 28.7,
-      "confidence": 0.595,
-      "confidence_label": "Moderate",
-      "ctx_source": "VAHI",
-      "color": "red",
-      "heartbeat_age_mins": 0.1,
-      "strain_index": 2.027,
-      "suggest_diversion": true,
-      "diversion_to": "Maroondah Hospital"
-    },
-    {
-      "site": "Maroondah Hospital",
-      "latest_obs_utc": "2026-04-26T11:30:13Z",
-      "current_wait_min": 21.0,
-      "max_wait_min": 250,
-      "predicted_wait_min": 21.0,
-      "wait_momentum": 0.0,
-      "confidence": 0.803,
+      "network": "Eastern Health",
+      "latest_obs_utc": "2026-04-26T21:00:13Z",
+      "current_wait_min": 15.0,
+      "max_wait_min": 94,
+      "predicted_wait_min": 0.0,
+      "wait_momentum": -10.0,
+      "confidence": 0.782,
       "confidence_label": "High",
       "ctx_source": "VAHI",
       "color": "green",
-      "heartbeat_age_mins": 0.1,
-      "strain_index": 0.339,
+      "heartbeat_age_mins": 15.1,
+      "strain_index": 0.0,
       "suggest_diversion": false
     },
     {
       "site": "Box Hill Hospital",
-      "latest_obs_utc": "2026-04-26T11:30:13Z",
-      "current_wait_min": 30.0,
-      "max_wait_min": 224,
-      "predicted_wait_min": 38.0,
-      "wait_momentum": 4.0,
-      "confidence": 0.735,
+      "network": "Eastern Health",
+      "latest_obs_utc": "2026-04-26T21:00:13Z",
+      "current_wait_min": 21.0,
+      "max_wait_min": 147,
+      "predicted_wait_min": 21.0,
+      "wait_momentum": 0.0,
+      "confidence": 0.775,
       "confidence_label": "High",
       "ctx_source": "VAHI",
-      "color": "amber",
-      "heartbeat_age_mins": 0.1,
-      "strain_index": 0.427,
+      "color": "green",
+      "heartbeat_age_mins": 15.1,
+      "strain_index": 0.236,
       "suggest_diversion": false
+    },
+    {
+      "site": "Maroondah Hospital",
+      "network": "Eastern Health",
+      "latest_obs_utc": "2026-04-26T21:15:13Z",
+      "current_wait_min": 103.0,
+      "max_wait_min": 114,
+      "predicted_wait_min": 153.0,
+      "wait_momentum": 25.0,
+      "confidence": 0.421,
+      "confidence_label": "Moderate",
+      "ctx_source": "VAHI",
+      "color": "red",
+      "heartbeat_age_mins": 0.1,
+      "strain_index": 2.468,
+      "suggest_diversion": true,
+      "diversion_to": "Angliss Hospital"
     }
   ]
 };
@@ -207,6 +210,12 @@ function fmtMins(m) {
   if (h === 0) return r + " min";
   if (r === 0) return h + " hr";
   return h + " hr " + r + " min";
+}
+function fmtShort(m) {
+  if (m == null || m <= 0) return null;
+  const h = Math.floor(m / 60), r = m % 60;
+  if (h === 0) return r + "m";
+  return r === 0 ? h + "h" : h + "h " + r + "m";
 }
 
 function renderCard(s) {
@@ -242,17 +251,13 @@ function renderCard(s) {
             <label>Now</label>
             <span class="wv">${Math.round(s.current_wait_min)}</span>
             <span class="wu">min</span>
+            ${fmtShort(s.max_wait_min) ? `<div class="wait-range">&ndash;&nbsp;${fmtShort(s.max_wait_min)}</div>` : ""}
           </div>
           <div class="wb predicted">
             <label>In 60 min</label>
             <span class="wv">${Math.round(s.predicted_wait_min)}</span>
             <span class="wu">min</span>
           </div>
-          ${fmtMins(s.max_wait_min) ? `
-          <div class="wb max-exp">
-            <label>Max wait</label>
-            <span class="wv">${fmtMins(s.max_wait_min)}</span>
-          </div>` : ""}
         </div>
         <div class="trend">
           <span class="${a.cls}">${a.sym}</span>
