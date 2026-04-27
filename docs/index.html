@@ -10,6 +10,7 @@
       --amber:#fb8c00; --amber-bg:#fff3e0;
       --red:#e53935;   --red-bg:#ffebee;
       --indigo:#3949ab; --indigo-bg:#e8eaf6; --indigo-dim:#c5cae9;
+      --stale-border:#ef9a9a; --stale-bg:#fff5f5;
     }
     *{box-sizing:border-box;margin:0;padding:0}
     .disclaimer-bar{
@@ -43,18 +44,35 @@
       color:#aaa;font-weight:700;margin-bottom:.7rem;padding-left:2px;
     }
     .network-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));gap:1rem}
+
+    /* ── Card base ───────────────────────────────────────────────────────────── */
     .card{background:#fff;border-radius:14px;
            box-shadow:0 2px 12px rgba(0,0,0,.07);
-           border-left:5px solid #ddd;overflow:hidden}
+           border-left:5px solid #ddd;overflow:hidden;
+           transition:opacity .3s,border-color .3s}
     .card.green{border-color:var(--green)}
     .card.amber{border-color:var(--amber)}
     .card.red{border-color:var(--red)}
+
+    /* ── Stale card overrides ────────────────────────────────────────────────── */
+    .card.stale-card{
+      opacity:.7;
+      border-left-color:var(--stale-border) !important;
+      background:var(--stale-bg);
+    }
+    .stale-badge{
+      display:inline-flex;align-items:center;gap:.3rem;
+      font-size:.67rem;font-weight:700;padding:.18rem .55rem;border-radius:99px;
+      background:#ffebee;color:#c62828;border:1px solid #ef9a9a;
+    }
+
     .patient-headline{padding:1.2rem 1.3rem .9rem}
     .card-header{display:flex;align-items:center;gap:.5rem;margin-bottom:.85rem}
     .dot{width:11px;height:11px;border-radius:50%;flex-shrink:0}
     .green .dot{background:var(--green);box-shadow:0 0 7px var(--green)}
     .amber .dot{background:var(--amber);box-shadow:0 0 7px var(--amber)}
     .red   .dot{background:var(--red);  box-shadow:0 0 7px var(--red)}
+    .stale-card .dot{background:#e0e0e0;box-shadow:none}
     .hosp{font-weight:700;font-size:.96rem}
     .waits{display:flex;gap:1.8rem;align-items:flex-end;margin-bottom:.7rem}
     .wb label{font-size:.65rem;text-transform:uppercase;letter-spacing:.06em;
@@ -71,6 +89,16 @@
     .bh{background:var(--green-bg);color:var(--green)}
     .bm{background:var(--amber-bg);color:var(--amber)}
     .bl{background:var(--red-bg);  color:var(--red)}
+
+    /* ── Per-hospital observation timestamp footer ───────────────────────────── */
+    .obs-footer{
+      padding:.5rem 1.3rem .65rem;
+      border-top:1px solid #f0f0f0;
+      font-size:.63rem;color:#bbb;
+      display:flex;align-items:center;gap:.4rem;flex-wrap:wrap;
+    }
+    .stale-card .obs-footer{border-top-color:#f5c6c6;color:#c09090}
+
     .diversion-banner{
       margin:0 1.3rem .85rem;
       background:var(--indigo-bg);border:1px solid var(--indigo-dim);
@@ -86,6 +114,7 @@
       background:#f7f9fc;border-top:1px solid #eef0f4;
       padding:.65rem 1.3rem .75rem;
     }
+    .stale-card .system-insights{background:#fdf0f0;border-top-color:#f5c6c6}
     .insights-label{
       font-size:.6rem;text-transform:uppercase;letter-spacing:.08em;
       color:#bbb;font-weight:600;margin-bottom:.45rem;
@@ -100,6 +129,15 @@
     .wait-range{font-size:.9rem;font-weight:700;color:#444;margin-top:.25rem}
     footer{text-align:center;font-size:.67rem;color:#ccc;margin-top:1.5rem}
     footer a{color:#ccc}
+
+    @media(max-width:480px){
+      body{padding:.8rem}
+      .patient-headline{padding:1rem 1rem .75rem}
+      .obs-footer{padding:.4rem 1rem .5rem}
+      .system-insights{padding:.55rem 1rem .65rem}
+      .diversion-banner{margin:0 1rem .75rem}
+      .wv{font-size:1.7rem}
+    }
   </style>
 </head>
 <body>
@@ -113,16 +151,15 @@
 <header>
   <h1>Melbourne ED &mdash; 60-min Wait Outlook</h1>
   <div class="subtitle">
-    Updated <span id="gt">—</span> &nbsp;&middot;&nbsp;
+    Pi last checked: <span id="gt">—</span> &nbsp;&middot;&nbsp;
     Public-aggregate data only &nbsp;&middot;&nbsp; Auto-refreshes every 5 min
   </div>
 </header>
 
 <div id="stale-banner">
-  <strong>&#9888; DATA STALE</strong> &mdash;
-  Last update was <span id="stale-age">?</span> minutes ago.
+  <strong>&#9888; ALL DATA STALE</strong> &mdash;
+  Pi may be offline. Last update was <span id="stale-age">?</span> minutes ago.
   <div style="font-weight:400;font-size:.78rem;margin-top:.25rem;color:#b71c1c;">
-    The Pi may be offline or the scraper may have failed.
     Do not rely on these predictions &mdash; verify directly with the hospital.
   </div>
 </div>
@@ -136,8 +173,9 @@
 </footer>
 
 <script>
-const DATA_URL   = "/latest.json";   // served from same Vercel deployment as this page
-const STALE_MINS = 30;
+const DATA_URL          = "/latest.json";   // served from same Vercel deployment as this page
+const HOSPITAL_STALE_MINS = 60;             // per-hospital stale threshold
+const NETWORK_ORDER     = ["Monash Health", "Eastern Health"];  // fixed display order
 let _lastOutlook = null;
 
 function light(p, m) {
@@ -170,11 +208,23 @@ function localTime(utc) {
       {timeZone:"Australia/Melbourne", hour:"2-digit", minute:"2-digit"});
   } catch(e) { return "—"; }
 }
+function localDateTime(utc) {
+  const d = safeDate(utc);
+  if (!d) return "—";
+  try {
+    return d.toLocaleString("en-AU", {timeZone:"Australia/Melbourne"});
+  } catch(e) { return "—"; }
+}
 function fmtShort(m) {
   if (m == null || m <= 0) return null;
   const h = Math.floor(m / 60), r = m % 60;
   if (h === 0) return r + "m";
   return r === 0 ? h + "h" : h + "h " + r + "m";
+}
+function minsAgo(utc) {
+  const d = safeDate(utc);
+  if (!d) return null;
+  return Math.round((Date.now() - d.getTime()) / 60000);
 }
 
 function renderCard(s) {
@@ -183,15 +233,30 @@ function renderCard(s) {
     const predicted = s.predicted_wait_min ?? 0;
     const current   = s.current_wait_min   ?? 0;
     const conf      = s.confidence         ?? 0;
+    const ageMin    = s.heartbeat_age_mins  ?? 0;
 
+    const isStale = ageMin > HOSPITAL_STALE_MINS;
     const c    = light(predicted, momentum);
     const a    = arrow(momentum);
     const sign = momentum >= 0 ? "+" : "";
 
-    const maxWait    = s.max_wait_min != null ? s.max_wait_min : null;
-    const rangeHtml  = maxWait != null
+    const maxWait   = s.max_wait_min != null ? s.max_wait_min : null;
+    const rangeHtml = maxWait != null
       ? `<div class="wait-range">up to ${maxWait} min</div>`
       : "";
+
+    const staleBadge = isStale
+      ? `<span class="stale-badge">&#9888;&#xFE0F; STALE</span>`
+      : "";
+
+    // Per-hospital observation timestamp footer
+    const obsAgo  = minsAgo(s.latest_obs_utc);
+    const obsTime = localTime(s.latest_obs_utc);
+    const obsFooter = `
+      <div class="obs-footer">
+        ${staleBadge}
+        <span>Last update: ${obsAgo != null ? obsAgo + "m ago" : "—"} (as at ${obsTime} AEST)</span>
+      </div>`;
 
     const diversionHtml = s.suggest_diversion ? `
       <div class="diversion-banner">
@@ -210,7 +275,7 @@ function renderCard(s) {
       </div>` : "";
 
     const html = `
-      <div class="card ${c}">
+      <div class="card ${c}${isStale ? " stale-card" : ""}">
         <div class="patient-headline">
           <div class="card-header">
             <div class="dot"></div>
@@ -237,7 +302,6 @@ function renderCard(s) {
             <span class="badge ${confCls(s.confidence_label)}">
               ${s.confidence_label} confidence &nbsp;${(conf * 100).toFixed(0)}%
             </span>
-            <span>Last obs: ${localTime(s.latest_obs_utc)} AEST</span>
           </div>
         </div>
         ${diversionHtml}
@@ -255,12 +319,13 @@ function renderCard(s) {
             </div>
           </div>
         </div>
+        ${obsFooter}
       </div>`;
     console.log('Successfully parsed data for', s.site);
     return html;
   } catch(e) {
     console.error('Failed to render card for', s?.site, e);
-    return `<div class="card"><div class="patient-headline">
+    return `<div class="card stale-card"><div class="patient-headline">
       <div class="card-header"><div class="dot"></div><div class="hosp">${s?.site ?? 'Unknown'}</div></div>
       <div class="trend" style="color:#e53935;font-size:.78rem;margin-top:.5rem">Data temporarily unavailable</div>
     </div></div>`;
@@ -269,18 +334,27 @@ function renderCard(s) {
 
 function renderDashboard(outlook) {
   _lastOutlook = outlook;
+
+  // Pi heartbeat timestamp in header
   const genDate = safeDate(outlook.generated_utc);
   document.getElementById("gt").textContent = genDate
-    ? genDate.toLocaleString("en-AU", {timeZone:"Australia/Melbourne"})
-    : "Recently";
+    ? localDateTime(outlook.generated_utc)
+    : "—";
 
+  // Group sites by network, then sort groups by NETWORK_ORDER
   const groups = {};
   outlook.sites.forEach(s => { (groups[s.network] = groups[s.network] || []).push(s); });
-  document.getElementById("grid").innerHTML = Object.entries(groups)
-    .map(([net, sites]) => `
+
+  const orderedNetworks = [
+    ...NETWORK_ORDER.filter(n => groups[n]),
+    ...Object.keys(groups).filter(n => !NETWORK_ORDER.includes(n))
+  ];
+
+  document.getElementById("grid").innerHTML = orderedNetworks
+    .map(net => `
       <div class="network-block">
         <div class="network-label">${net}</div>
-        <div class="network-grid">${sites.map(renderCard).join("")}</div>
+        <div class="network-grid">${groups[net].map(renderCard).join("")}</div>
       </div>
     `).join("");
 
@@ -288,18 +362,24 @@ function renderDashboard(outlook) {
 }
 
 function checkStale(outlook) {
-  const _gen             = safeDate(outlook.generated_utc);
-  const genMs            = _gen ? _gen.getTime() : Date.now();
+  // Global banner fires only when ALL hospitals are stale (Pi offline signal)
+  const allStale = outlook.sites.every(s => (s.heartbeat_age_mins ?? 0) > HOSPITAL_STALE_MINS);
+
+  // Age of the oldest observation + time since publish, for banner copy
+  const maxObsAge        = Math.max(...outlook.sites.map(s => s.heartbeat_age_mins ?? 0));
+  const genMs            = safeDate(outlook.generated_utc)?.getTime() ?? Date.now();
   const minsSincePublish = (Date.now() - genMs) / 60000;
-  const dataAge          = Math.max(...outlook.sites.map(s => s.heartbeat_age_mins ?? 0));
-  const totalAge         = dataAge + minsSincePublish;
-  const isStale          = totalAge > STALE_MINS;
+  const totalAge         = Math.round(maxObsAge + minsSincePublish);
 
   const banner = document.getElementById("stale-banner");
-  const grid   = document.getElementById("grid");
-  banner.style.display = isStale ? "block" : "none";
-  if (isStale) {
-    document.getElementById("stale-age").textContent = Math.round(totalAge);
+  banner.style.display = allStale ? "block" : "none";
+  if (allStale) {
+    document.getElementById("stale-age").textContent = totalAge;
+  }
+
+  // Dim the entire grid only if all stale
+  const grid = document.getElementById("grid");
+  if (allStale) {
     grid.style.opacity       = "0.3";
     grid.style.filter        = "grayscale(1)";
     grid.style.pointerEvents = "none";
@@ -310,7 +390,6 @@ function checkStale(outlook) {
 
 async function loadOutlook() {
   try {
-    // Cache-bust: raw.githubusercontent.com has ~5 min CDN cache
     const resp = await fetch(DATA_URL + "?t=" + Date.now());
     if (!resp.ok) throw new Error("HTTP " + resp.status);
     const outlook = await resp.json();
