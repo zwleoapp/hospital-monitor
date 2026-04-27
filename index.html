@@ -139,7 +139,7 @@
     .strain-low{color:var(--green)}
     .strain-mid{color:var(--amber)}
     .strain-high{color:var(--red)}
-    .wait-range{font-size:.9rem;font-weight:700;color:#444;margin-top:.25rem}
+    .wait-sub{font-size:.72rem;color:#888;margin-top:.25rem}
     footer{text-align:center;font-size:.67rem;color:#ccc;margin-top:1.5rem}
     footer a{color:#ccc}
 
@@ -263,21 +263,22 @@ function minsAgo(utc) {
 
 function renderCard(s) {
   try {
-    const momentum  = s.wait_momentum      ?? 0;
-    const predicted = s.predicted_wait_min ?? 0;
-    const current   = s.current_wait_min   ?? 0;
-    const conf      = s.confidence         ?? 0;
-    const ageMin    = s.heartbeat_age_mins  ?? 0;
+    const momentum     = s.wait_momentum      ?? 0;
+    const predicted    = s.predicted_wait_min ?? 0;
+    const current      = s.current_wait_min   ?? 0;
+    const conf         = s.confidence         ?? 0;
+    const ageMin       = s.heartbeat_age_mins  ?? 0;
+    const waitingCount = s.waiting_count       ?? 0;
 
     const isStale = ageMin > HOSPITAL_STALE_MINS;
     const c    = light(predicted, momentum);
     const a    = arrow(momentum);
     const sign = momentum >= 0 ? "+" : "";
 
-    const maxWait   = s.max_wait_min != null ? s.max_wait_min : null;
-    const rangeHtml = maxWait != null
-      ? `<div class="wait-range">up to ${maxWait} min</div>`
-      : "";
+    const maxWait    = s.max_wait_min != null ? s.max_wait_min : null;
+    const waitSubTxt = maxWait != null
+      ? `~${Math.round(current)}&ndash;${maxWait} min wait`
+      : `~${Math.round(current)} min wait`;
 
     const staleBadge = isStale
       ? `<span class="stale-badge">&#9888;&#xFE0F; STALE</span>`
@@ -307,14 +308,14 @@ function renderCard(s) {
           <div class="waits">
             <div class="wb current">
               <label>Now</label>
-              <span class="wv">${Math.round(current)}</span>
-              <span class="wu">min</span>
-              ${rangeHtml}
+              <span class="wv">${waitingCount}</span>
+              <span class="wu">waiting</span>
+              <div class="wait-sub">${waitSubTxt}</div>
             </div>
             <div class="wb predicted">
               <label>In 60 min</label>
               <span class="wv">${Math.round(predicted)}</span>
-              <span class="wu">min</span>
+              <span class="wu">min wait</span>
             </div>
           </div>
           <div class="trend">
@@ -375,7 +376,7 @@ function renderLeaderboard(sites) {
         <div class="lb-hosp">${s.site}</div>
         <div class="lb-net">${s.network ?? ""}</div>
         <div class="lb-momentum">${m} <small>min/15m</small></div>
-        <div class="lb-wait">${Math.round(s.current_wait_min ?? 0)} min now</div>
+        <div class="lb-wait">${s.waiting_count ?? 0} waiting &middot; ~${Math.round(s.current_wait_min ?? 0)} min</div>
       </div>`;
   }).join("");
 }
