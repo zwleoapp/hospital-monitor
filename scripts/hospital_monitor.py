@@ -61,15 +61,10 @@ def _scrape_html_source(source_key: str, cfg: dict, timestamp: str) -> list:
     counts = json.loads(counts_m.group(1))
     waits  = json.loads(waits_m.group(1))
 
-    # DEBUG — remove after Maroondah '0m' audit
-    print(f"  DEBUG EASTERN keys in waits: {list(waits.keys())}")
-
     rows = []
     for js_key, formal_name in cfg["hospitals"].items():
         c = counts.get(js_key, {})
         w = waits.get(js_key, {})
-        # DEBUG — remove after Maroondah '0m' audit
-        print(f"  DEBUG EASTERN [{js_key}]: counts={c}, waits={w}")
         waiting  = c.get("waiting",      0)
         treating = c.get("beingTreated", 0)
         min_raw  = int(w.get("min", 0))
@@ -283,22 +278,7 @@ def _scrape_powerbi_source(source_key: str, cfg: dict, timestamp: str) -> list:
             print(f"  [{source_key}] Missing result for {formal_name}")
             continue
 
-        # DEBUG — remove after field-mapping audit
-        try:
-            dm0    = results[i]["result"]["data"]["dsr"]["DS"][0]["PH"][0]["DM0"]
-            vd     = results[i]["result"]["data"]["dsr"]["DS"][0].get("ValueDicts", {})
-            schema = dm0[0].get("S", [])
-            print(f"\n  === DEBUG RAW DSR [{campus_filter}] ===")
-            print(f"  schema cols: {[s.get('DN', s.get('N', '?')) for s in schema]}")
-            for j, r in enumerate(dm0):
-                print(f"  row[{j}]: C={r.get('C')}, R={r.get('R', 0)}")
-            print(f"  ValueDicts: {vd}")
-        except Exception as _dbg_ex:
-            print(f"  DEBUG [{campus_filter}] parse failed: {_dbg_ex}")
-
         row = _parse_grouped_dsr(results[i], group_target)
-        # DEBUG — remove after field-mapping audit
-        print(f"  DEBUG PARSED [{campus_filter}]: {row}")
         if row is None:
             print(f"  [{source_key}] No '{group_target}' row found for {formal_name}")
             continue
