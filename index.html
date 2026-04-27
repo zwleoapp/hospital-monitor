@@ -139,7 +139,7 @@
     .strain-low{color:var(--green)}
     .strain-mid{color:var(--amber)}
     .strain-high{color:var(--red)}
-    .wait-sub{font-size:.72rem;color:#888;margin-top:.25rem}
+    .wait-sub{font-size:1rem;font-weight:700;color:#444;margin-top:.3rem}
     footer{text-align:center;font-size:.67rem;color:#ccc;margin-top:1.5rem}
     footer a{color:#ccc}
 
@@ -212,6 +212,10 @@ const HOSPITAL_STALE_MINS = 60;             // per-hospital stale threshold
 const NETWORK_ORDER     = ["Monash Health", "Eastern Health"];  // fixed display order
 let _lastOutlook = null;
 
+function parseHospDataTime(display) {
+  const m = (display || "").match(/(\d{1,2}:\d{2})\s*$/);
+  return m ? m[1] : null;
+}
 function light(p, m) {
   if (p <= 30 && m <= 2) return "green";
   if (p <= 60)           return "amber";
@@ -264,8 +268,9 @@ function minsAgo(utc) {
 function renderCard(s) {
   try {
     const momentum     = s.wait_momentum      ?? 0;
-    const predicted    = s.predicted_wait_min ?? 0;
     const current      = s.current_wait_min   ?? 0;
+    // Floor predicted at 50% of current — matches backend predict_next.py guard
+    const predicted    = Math.max(s.predicted_wait_min ?? 0, current * 0.5);
     const conf         = s.confidence         ?? 0;
     const ageMin       = s.heartbeat_age_mins  ?? 0;
     const waitingCount = s.waiting_count       ?? 0;
@@ -284,12 +289,17 @@ function renderCard(s) {
       ? `<span class="stale-badge">&#9888;&#xFE0F; STALE</span>`
       : "";
 
-    const obsAgo  = minsAgo(s.latest_obs_utc);
-    const obsTime = localTime(s.latest_obs_utc);
+    const obsAgo      = minsAgo(s.latest_obs_utc);
+    const obsTime     = localTime(s.latest_obs_utc);
+    const hospTime    = parseHospDataTime(s.last_updated_display);
+    const hospTimeHtml = hospTime
+      ? `<span>&#128197; Hospital data as at: ${hospTime}</span>`
+      : "";
     const obsFooter = `
       <div class="obs-footer">
         ${staleBadge}
-        <span>Last update: ${obsAgo != null ? obsAgo + "m ago" : "—"} (as at ${obsTime} AEST)</span>
+        <span>Pi check-in: ${obsAgo != null ? obsAgo + "m ago" : "—"} (${obsTime} AEST)</span>
+        ${hospTimeHtml}
       </div>`;
 
     const strainHtml = s.strain_index != null ? `
@@ -307,7 +317,7 @@ function renderCard(s) {
           </div>
           <div class="waits">
             <div class="wb current">
-              <label>Now</label>
+              <label>Waiting</label>
               <span class="wv">${waitingCount}</span>
               <span class="wu">waiting</span>
               <div class="wait-sub">${waitSubTxt}</div>
