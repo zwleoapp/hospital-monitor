@@ -139,18 +139,22 @@
     /* Patient count is a secondary signal — smaller and muted */
     .count-hero{font-size:1.45rem;font-weight:700;color:#6b7280}
 
-    /* ── VAHI benchmark annotation ───────────────────────────────────────────── */
-    .vahi-bench{
-      font-size:.67rem;color:#bbb;margin-bottom:.55rem;
-      display:flex;gap:.3rem;align-items:center;flex-wrap:wrap;
+    /* ── Triage benchmark chips (VAHI quarterly) ─────────────────────────────── */
+    .triage-bench{display:flex;gap:.45rem;margin-bottom:.65rem}
+    .tb-chip{
+      flex:1;border-radius:6px;padding:.38rem .55rem;
+      display:flex;flex-direction:column;gap:.06rem;
     }
-    .vahi-bench .vb-tag{
-      display:inline-block;background:#f0f4ff;color:#7b93cc;
-      font-size:.62rem;font-weight:700;border-radius:4px;
-      padding:.08rem .35rem;
+    .tb-cat{
+      font-size:.52rem;text-transform:uppercase;letter-spacing:.07em;
+      opacity:.6;font-weight:700;line-height:1;
     }
-    .vahi-above .vb-tag{background:#fff3e0;color:#c47d15}
-    .vahi-below .vb-tag{background:#e8f7f5;color:#2e9e90}
+    .tb-usual{font-size:.76rem;font-weight:700;line-height:1.25}
+    .tb-tag{font-size:.6rem;font-weight:700;margin-top:.06rem}
+    /* Calm palette: ochre (above usual), slate teal (below), neutral blue-gray (near) */
+    .tb-above{background:#fff7ed;color:#b36b10}
+    .tb-below{background:#eaf6f4;color:#2a8a7e}
+    .tb-near{background:#f1f4fc;color:#6a82b0}
 
     .trend{font-size:.8rem;color:#666;margin-bottom:.65rem}
     .up{color:var(--red)} .dn{color:var(--green)} .fl{color:#bbb}
@@ -479,6 +483,12 @@ function renderCard(s) {
         <span class="iv ${strainCls(s.strain_index)}">${s.strain_index.toFixed(2)}&times;</span>
       </div>` : "";
 
+    const maxWaitHtml = s.max_wait_min != null ? `
+      <div class="insight">
+        <span class="il">Max Wait (all pts)</span>
+        <span class="iv">${fmtShort(s.max_wait_min) ?? "—"}</span>
+      </div>` : "";
+
     const accuracy = getForecastAccuracy(s.site, current);
     const accuracyHtml = accuracy != null ? `
       <div class="insight">
@@ -486,19 +496,33 @@ function renderCard(s) {
         <span class="iv"><span class="badge forecast-badge">${accuracy}%</span></span>
       </div>` : "";
 
-    // VAHI benchmark: show the most relevant median (cat 4-5 for general context)
-    let vahiBenchHtml = "";
-    if (medCat45 != null) {
-      const isAbove = current > medCat45 * 1.5;
-      const isBelow = current <= medCat45;
-      const cls = isAbove ? "vahi-above" : isBelow ? "vahi-below" : "";
-      const tag  = isAbove ? "Above usual" : isBelow ? "Below usual" : "Near usual";
-      vahiBenchHtml = `
-        <div class="vahi-bench ${cls}">
-          <span class="vb-tag">${tag}</span>
-          Usual minor wait: ${medCat45}m
-          ${medCat123 != null ? `&middot; Usual urgent: ${medCat123}m` : ""}
-          <small style="opacity:.6">(VAHI quarterly)</small>
+    // Triage-aware VAHI benchmark: dual chips for Minor (Cat 4-5) and Urgent (Cat 1-3)
+    let triageBenchHtml = "";
+    if (medCat45 != null || medCat123 != null) {
+      function triageCls(usual, live) {
+        if (usual == null) return "tb-near";
+        if (live > usual * 1.5) return "tb-above";
+        if (live <= usual)      return "tb-below";
+        return "tb-near";
+      }
+      function triageTag(usual, live) {
+        if (usual == null) return "—";
+        if (live > usual * 1.5) return "▲ Above usual";
+        if (live <= usual)      return "▼ Below usual";
+        return "→ Near usual";
+      }
+      triageBenchHtml = `
+        <div class="triage-bench">
+          <div class="tb-chip ${triageCls(medCat45, current)}">
+            <span class="tb-cat">Minor (Cat 4&ndash;5)</span>
+            <span class="tb-usual">${medCat45 != null ? "usual " + medCat45 + "m" : "—"}</span>
+            <span class="tb-tag">${triageTag(medCat45, current)}</span>
+          </div>
+          <div class="tb-chip ${triageCls(medCat123, current)}">
+            <span class="tb-cat">Urgent (Cat 1&ndash;3)</span>
+            <span class="tb-usual">${medCat123 != null ? "usual " + medCat123 + "m" : "—"}</span>
+            <span class="tb-tag">${triageTag(medCat123, current)}</span>
+          </div>
         </div>`;
     }
 
@@ -525,7 +549,7 @@ function renderCard(s) {
             <span class="${a.cls}">${a.sym}</span>
             ${a.lbl} &nbsp;&middot;&nbsp; ${sign}${momentum.toFixed(1)} min / 15 min
           </div>
-          ${vahiBenchHtml}
+          ${triageBenchHtml}
           <div class="obs-meta">
             <span class="badge ${confCls(s.confidence_label)}">
               ${s.confidence_label} confidence &nbsp;${(conf * 100).toFixed(0)}%
@@ -541,6 +565,7 @@ function renderCard(s) {
                 <span class="il">60-min Forecast</span>
                 <span class="iv">${Math.round(predicted)} min</span>
               </div>
+              ${maxWaitHtml}
               ${strainHtml}
               <div class="insight">
                 <span class="il">Clearing Speed</span>
