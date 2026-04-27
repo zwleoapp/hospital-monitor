@@ -52,8 +52,8 @@ def _scrape_html_source(source_key: str, cfg: dict, timestamp: str) -> list:
         return []
 
     html = resp.text
-    counts_m = re.search(r'const patientCounts\s*=\s*(\{.*?\});', html)
-    waits_m  = re.search(r'const predictedWaitMinutes\s*=\s*(\{.*?\});', html)
+    counts_m = re.search(r'const patientCounts\s*=\s*(\{.*?\});', html, re.DOTALL)
+    waits_m  = re.search(r'const predictedWaitMinutes\s*=\s*(\{.*?\});', html, re.DOTALL)
     if not counts_m or not waits_m:
         print(f"  [{source_key}] Data variables not found in HTML.")
         return []
@@ -61,10 +61,15 @@ def _scrape_html_source(source_key: str, cfg: dict, timestamp: str) -> list:
     counts = json.loads(counts_m.group(1))
     waits  = json.loads(waits_m.group(1))
 
+    # DEBUG — remove after Maroondah '0m' audit
+    print(f"  DEBUG EASTERN keys in waits: {list(waits.keys())}")
+
     rows = []
     for js_key, formal_name in cfg["hospitals"].items():
         c = counts.get(js_key, {})
         w = waits.get(js_key, {})
+        # DEBUG — remove after Maroondah '0m' audit
+        print(f"  DEBUG EASTERN [{js_key}]: counts={c}, waits={w}")
         waiting  = c.get("waiting",      0)
         treating = c.get("beingTreated", 0)
         min_raw  = int(w.get("min", 0))
@@ -137,43 +142,71 @@ def _parse_grouped_dsr(result_obj: dict, group_target: str) -> dict | None:
     """
     Extract the target group row from a Power BI grouped DSR response.
 
-    DSR structure:
-      DS[0].PH[0].DM0[i].C  — column values for row i
-      DS[0].ValueDicts       — {dictName: [values]} for string columns
-    Schema S[j] with DN field means C[j] is an index into ValueDicts[DN].
+    DSR format:
+      DS[0].PH[0].DM0[i]  — row i, containing:
+        S  — column schema (only on first row; entry has optional DN for dict-encoding)
+        C  — values for non-repeated columns only
+        R  — repeat bitmask: bit i set means col i is unchanged from the previous row
+      DS[0].ValueDicts     — {dictName: [values]} for DN-encoded string columns
 
-    Returns {G0, G1, G2, G3} as decoded values for the matching row, or None.
+    Power BI uses delta/repeat compression: a row's C array may be shorter than
+    n_cols because unchanged columns are omitted and flagged via R.  The old
+    'if len(c) < 4: continue' check silently dropped these rows, causing the
+    wrong group (e.g. Paed instead of Adult) to be returned.  We now reconstruct
+    the full column vector before matching.
     """
     try:
-        ds0       = result_obj["result"]["data"]["dsr"]["DS"][0]
-        rows      = ds0["PH"][0]["DM0"]
-        vdicts    = ds0.get("ValueDicts", {})
-        schema    = rows[0]["S"]          # schema defined on first row
+        ds0    = result_obj["result"]["data"]["dsr"]["DS"][0]
+        rows   = ds0["PH"][0]["DM0"]
+        vdicts = ds0.get("ValueDicts", {})
+        schema = rows[0]["S"]
     except (KeyError, IndexError, TypeError):
         return None
 
+    n_cols = len(schema)
+
     def _decode(c_val, col_idx):
+        if col_idx >= n_cols or c_val is None:
+            return c_val
         s = schema[col_idx]
         if "DN" in s and isinstance(c_val, int):
             return vdicts.get(s["DN"], [])[c_val]
         return c_val
 
+    prev_c      = [None] * n_cols
     first_valid = None
+
     for row in rows:
-        c = row.get("C", [])
-        if len(c) < 4:
+        c_raw  = row.get("C", [])
+        r_mask = row.get("R", 0)   # bit i set → col i repeats from previous row
+
+        # Reconstruct the full n_cols vector honouring the repeat bitmask
+        full_c  = list(prev_c)
+        raw_idx = 0
+        for col_idx in range(n_cols):
+            if r_mask & (1 << col_idx):
+                pass  # keep prev_c[col_idx]
+            else:
+                if raw_idx < len(c_raw):
+                    full_c[col_idx] = c_raw[raw_idx]
+                raw_idx += 1
+        prev_c = list(full_c)
+
+        if full_c[0] is None:
             continue
-        g0_raw = _decode(c[0], 0)
+
+        g0_raw = _decode(full_c[0], 0)
         decoded = {
             "group":    g0_raw,
-            "waiting":  c[1],
-            "treating": c[2],
-            "wait_str": str(_decode(c[3], 3) or "").strip(),
+            "waiting":  _decode(full_c[1], 1),
+            "treating": _decode(full_c[2], 2),
+            "wait_str": str(_decode(full_c[3], 3) or "").strip(),
         }
         if first_valid is None:
             first_valid = decoded
         if str(g0_raw) == group_target:
             return decoded
+
     # Campus has no Adult/Paeds split — return the single row
     return first_valid
 
@@ -250,7 +283,22 @@ def _scrape_powerbi_source(source_key: str, cfg: dict, timestamp: str) -> list:
             print(f"  [{source_key}] Missing result for {formal_name}")
             continue
 
+        # DEBUG — remove after field-mapping audit
+        try:
+            dm0    = results[i]["result"]["data"]["dsr"]["DS"][0]["PH"][0]["DM0"]
+            vd     = results[i]["result"]["data"]["dsr"]["DS"][0].get("ValueDicts", {})
+            schema = dm0[0].get("S", [])
+            print(f"\n  === DEBUG RAW DSR [{campus_filter}] ===")
+            print(f"  schema cols: {[s.get('DN', s.get('N', '?')) for s in schema]}")
+            for j, r in enumerate(dm0):
+                print(f"  row[{j}]: C={r.get('C')}, R={r.get('R', 0)}")
+            print(f"  ValueDicts: {vd}")
+        except Exception as _dbg_ex:
+            print(f"  DEBUG [{campus_filter}] parse failed: {_dbg_ex}")
+
         row = _parse_grouped_dsr(results[i], group_target)
+        # DEBUG — remove after field-mapping audit
+        print(f"  DEBUG PARSED [{campus_filter}]: {row}")
         if row is None:
             print(f"  [{source_key}] No '{group_target}' row found for {formal_name}")
             continue
