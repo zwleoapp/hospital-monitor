@@ -71,9 +71,10 @@ _SOURCES_RAW: dict = {
         "group_target": "Adult",
         # Columns to SELECT in the grouped query (order defines C array indices):
         # [group_col, col_waiting, col_treating, col_wait_str]
-        "col_waiting":  "TotalWaiting",
-        "col_treating": "TotalBeingTreated",
-        "col_wait_str": "Estimated Time",  # returns "X hr Y min - X hr Y min"
+        "col_waiting":     "TotalWaiting",
+        "col_treating":    "TotalBeingTreated",
+        "col_wait_str":    "Estimated Time",     # returns "X hr Y min - X hr Y min"
+        "col_last_updated":"LastUpdatedDisplay", # returns "Last Updated: DD Mmm YY HH:MM"
 
         # key = Campus filter value  →  value = canonical hospital name
         "hospitals": {

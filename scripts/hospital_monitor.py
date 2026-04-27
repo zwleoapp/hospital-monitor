@@ -16,6 +16,7 @@ from config.hospitals import SOURCES
 CSV_PATH = "/mnt/router_ssd/Data_Hub/Waiting_Live_time/eastern_hospital.csv"
 CSV_HEADER = ["timestamp", "hospital", "waiting", "treating",
               "wait_time", "min_wait_mins", "max_wait_mins"]
+LAST_UPDATED_SIDECAR = "/mnt/router_ssd/Data_Hub/Waiting_Live_time/monash_last_updated.json"
 
 
 # ── Shared helpers ────────────────────────────────────────────────────────────
@@ -91,16 +92,27 @@ def _extract_dsr_value(result_obj: dict):
 def _build_pbi_grouped_query(job_id: str, entity: str, hospital_col: str,
                               hospital_filter: str, group_col: str,
                               col_waiting: str, col_treating: str,
-                              col_wait_str: str) -> dict:
+                              col_wait_str: str,
+                              col_last_updated: str | None = None) -> dict:
     """
     Build a grouped SemanticQueryDataShapeCommand query for one campus.
 
     Groups by group_col (AdultPaed) and selects col_waiting, col_treating,
-    col_wait_str columns. The response DSR contains one row per group value.
+    col_wait_str columns, and optionally col_last_updated (G4) for native
+    hospital data freshness. The response DSR contains one row per group value.
     We pick the target group row in _scrape_powerbi_source.
     """
     def _col(prop):
         return {"Column": {"Expression": {"SourceRef": {"Source": "t"}}, "Property": prop}}
+
+    select = [
+        {**_col(group_col),    "Name": "G0"},
+        {**_col(col_waiting),  "Name": "G1"},
+        {**_col(col_treating), "Name": "G2"},
+        {**_col(col_wait_str), "Name": "G3"},
+    ]
+    if col_last_updated:
+        select.append({**_col(col_last_updated), "Name": "G4"})
 
     return {
         "Query": {
@@ -109,12 +121,7 @@ def _build_pbi_grouped_query(job_id: str, entity: str, hospital_col: str,
                     "Query": {
                         "Version": 2,
                         "From": [{"Name": "t", "Entity": entity, "Type": 0}],
-                        "Select": [
-                            {**_col(group_col),   "Name": "G0"},
-                            {**_col(col_waiting),  "Name": "G1"},
-                            {**_col(col_treating), "Name": "G2"},
-                            {**_col(col_wait_str), "Name": "G3"},
-                        ],
+                        "Select": select,
                         "Where": [{"Condition": {"Comparison": {
                             "ComparisonKind": 0,
                             "Left":  _col(hospital_col),
@@ -122,7 +129,7 @@ def _build_pbi_grouped_query(job_id: str, entity: str, hospital_col: str,
                         }}}],
                     },
                     "Binding": {
-                        "Primary": {"Groupings": [{"Projections": [0, 1, 2, 3]}]},
+                        "Primary": {"Groupings": [{"Projections": list(range(len(select)))}]},
                         "DataReduction": {"DataVolume": 4, "Primary": {"Top": {}}},
                         "Version": 1,
                     },
@@ -192,10 +199,11 @@ def _parse_grouped_dsr(result_obj: dict, group_target: str) -> dict | None:
 
         g0_raw = _decode(full_c[0], 0)
         decoded = {
-            "group":    g0_raw,
-            "waiting":  _decode(full_c[1], 1),
-            "treating": _decode(full_c[2], 2),
-            "wait_str": str(_decode(full_c[3], 3) or "").strip(),
+            "group":        g0_raw,
+            "waiting":      _decode(full_c[1], 1),
+            "treating":     _decode(full_c[2], 2),
+            "wait_str":     str(_decode(full_c[3], 3) or "").strip(),
+            "last_updated": str(_decode(full_c[4], 4) or "").strip() if n_cols > 4 else "",
         }
         if first_valid is None:
             first_valid = decoded
@@ -224,14 +232,15 @@ def _scrape_powerbi_source(source_key: str, cfg: dict, timestamp: str) -> list:
         print(f"  [{source_key}] Power BI not configured — set {missing} in config/hospitals.py")
         return []
 
-    entity       = cfg.get("entity",       "CurrentPatients")
-    hospital_col = cfg.get("hospital_col", "Campus")
-    group_col    = cfg.get("group_col",    "AdultPaed")
-    group_target = cfg.get("group_target", "Adult")
-    col_waiting  = cfg.get("col_waiting",  "TotalWaiting")
-    col_treating = cfg.get("col_treating", "TotalBeingTreated")
-    col_wait_str = cfg.get("col_wait_str", "Estimated Time")
-    hospitals    = cfg["hospitals"]
+    entity           = cfg.get("entity",           "CurrentPatients")
+    hospital_col     = cfg.get("hospital_col",     "Campus")
+    group_col        = cfg.get("group_col",        "AdultPaed")
+    group_target     = cfg.get("group_target",     "Adult")
+    col_waiting      = cfg.get("col_waiting",      "TotalWaiting")
+    col_treating     = cfg.get("col_treating",     "TotalBeingTreated")
+    col_wait_str     = cfg.get("col_wait_str",     "Estimated Time")
+    col_last_updated = cfg.get("col_last_updated")   # optional; None for non-PBI sources
+    hospitals        = cfg["hospitals"]
 
     # One grouped query per campus — responses come back in the same order
     queries      = []
@@ -243,14 +252,15 @@ def _scrape_powerbi_source(source_key: str, cfg: dict, timestamp: str) -> list:
 
     for campus_filter, formal_name in hospitals.items():
         queries.append(_build_pbi_grouped_query(
-            job_id        = f"{campus_filter}_{bust_id}",
-            entity        = entity,
-            hospital_col  = hospital_col,
-            hospital_filter = campus_filter,
-            group_col     = group_col,
-            col_waiting   = col_waiting,
-            col_treating  = col_treating,
-            col_wait_str  = col_wait_str,
+            job_id           = f"{campus_filter}_{bust_id}",
+            entity           = entity,
+            hospital_col     = hospital_col,
+            hospital_filter  = campus_filter,
+            group_col        = group_col,
+            col_waiting      = col_waiting,
+            col_treating     = col_treating,
+            col_wait_str     = col_wait_str,
+            col_last_updated = col_last_updated,
         ))
         campus_order.append((campus_filter, formal_name))
 
@@ -273,6 +283,8 @@ def _scrape_powerbi_source(source_key: str, cfg: dict, timestamp: str) -> list:
 
     results = resp.json().get("results", [])
     rows = []
+    last_updated_map: dict[str, str] = {}
+
     for i, (campus_filter, formal_name) in enumerate(campus_order):
         if i >= len(results):
             print(f"  [{source_key}] Missing result for {formal_name}")
@@ -289,9 +301,22 @@ def _scrape_powerbi_source(source_key: str, cfg: dict, timestamp: str) -> list:
         min_mins = _parse_wait_str(wait_str.split(" - ")[0]) if " - " in wait_str else _parse_wait_str(wait_str)
         max_mins = _parse_wait_str(wait_str.split(" - ")[1]) if " - " in wait_str else min_mins
 
+        last_upd = row.get("last_updated", "")
+        if last_upd:
+            last_updated_map[formal_name] = last_upd
+
         rows.append([timestamp, formal_name, waiting, treating,
                      wait_str, min_mins, max_mins])
-        print(f"   [SCRAPED] {formal_name}: waiting={waiting}, treating={treating}, wait={wait_str}")
+        print(f"   [SCRAPED] {formal_name}: waiting={waiting}, treating={treating}, wait={wait_str}"
+              + (f", updated={last_upd}" if last_upd else ""))
+
+    if last_updated_map:
+        try:
+            os.makedirs(os.path.dirname(LAST_UPDATED_SIDECAR), exist_ok=True)
+            with open(LAST_UPDATED_SIDECAR, "w") as _f:
+                json.dump(last_updated_map, _f)
+        except Exception as _e:
+            print(f"  [{source_key}] Sidecar write failed: {_e}")
 
     return rows
 
