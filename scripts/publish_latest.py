@@ -33,9 +33,10 @@ from predict_next import load_latest_silver, build_outlook   # noqa: E402
 _BASE = pathlib.Path(__file__).resolve().parent.parent
 _SSD  = pathlib.Path("/mnt/router_ssd/Data_Hub/Waiting_Live_time")
 
-DEFAULT_SILVER   = _SSD / "eastern_hospital_silver.csv"
-DEFAULT_JSON_OUT = pathlib.Path("/tmp/hospital_monitor_latest.json")
-PUBLISHER_TMPDIR = pathlib.Path("/tmp/publisher")   # staging clone for data branch
+DEFAULT_SILVER        = _SSD / "eastern_hospital_silver.csv"
+DEFAULT_JSON_OUT      = pathlib.Path("/tmp/hospital_monitor_latest.json")
+PUBLISHER_TMPDIR      = pathlib.Path("/tmp/publisher")   # staging clone for data branch
+LAST_UPDATED_SIDECAR  = _SSD / "monash_last_updated.json"  # written by hospital_monitor.py
 
 _MELB                  = ZoneInfo("Australia/Melbourne")
 OPERATIONAL_START_H    = 6     # 06:00 Melbourne — before this, skip and exit
@@ -168,6 +169,14 @@ def main() -> None:
     generated_utc_dt  = datetime.now(timezone.utc)
     generated_utc_str = generated_utc_dt.strftime("%Y-%m-%dT%H:%M:%SZ")
 
+    # Hospital-native freshness timestamps from the PBI scrape sidecar
+    last_updated_map: dict = {}
+    if LAST_UPDATED_SIDECAR.exists():
+        try:
+            last_updated_map = json.loads(LAST_UPDATED_SIDECAR.read_text())
+        except Exception:
+            pass
+
     sites = []
     for _, row in silver.iterrows():
         outlook = build_outlook(row)
@@ -181,6 +190,7 @@ def main() -> None:
         outlook["strain_index"] = compute_strain_index(
             outlook["predicted_wait_min"], float(row["ctx_wait_p90_mins"])
         )
+        outlook["last_updated_display"] = last_updated_map.get(outlook["site"], "")
         sites.append(outlook)
 
     payload = {
