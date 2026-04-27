@@ -8,6 +8,7 @@ import csv
 import os
 import re
 import json
+import uuid
 from datetime import datetime, timezone
 from status import update_status
 from config.hospitals import SOURCES
@@ -208,9 +209,13 @@ def _scrape_powerbi_source(source_key: str, cfg: dict, timestamp: str) -> list:
     queries      = []
     campus_order = []   # preserves (filter, formal_name) order for result mapping
 
+    # Unique suffix per scrape cycle — Power BI uses QueryId for server-side
+    # result caching; a different value each call forces a fresh execution.
+    bust_id = uuid.uuid4().hex
+
     for campus_filter, formal_name in hospitals.items():
         queries.append(_build_pbi_grouped_query(
-            job_id        = campus_filter,
+            job_id        = f"{campus_filter}_{bust_id}",
             entity        = entity,
             hospital_col  = hospital_col,
             hospital_filter = campus_filter,
@@ -226,10 +231,10 @@ def _scrape_powerbi_source(source_key: str, cfg: dict, timestamp: str) -> list:
         "queries": queries,
         "cancelQueries": [],
         "modelId": model_id,
+        "clientRequestId": bust_id,   # top-level UID — additional PBI dedup key
     }
-    ts = int(datetime.now(timezone.utc).timestamp())
     resp = requests.post(
-        f"{endpoint}&t={ts}", json=payload,
+        endpoint, json=payload,
         headers={"Content-Type": "application/json",
                  "X-PowerBI-ResourceKey": resource_key},
         impersonate="chrome120", timeout=30,
@@ -258,7 +263,7 @@ def _scrape_powerbi_source(source_key: str, cfg: dict, timestamp: str) -> list:
 
         rows.append([timestamp, formal_name, waiting, treating,
                      wait_str, min_mins, max_mins])
-        print(f"   {formal_name}: {waiting} waiting, {treating} treating. Wait: {wait_str}")
+        print(f"   [SCRAPED] {formal_name}: waiting={waiting}, treating={treating}, wait={wait_str}")
 
     return rows
 
