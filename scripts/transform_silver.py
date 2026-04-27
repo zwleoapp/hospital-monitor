@@ -294,15 +294,21 @@ def _join_aihw_fallback(
 
 def dedup_consecutive(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Drop consecutive rows per hospital where both min_wait_mins and load_ratio
-    are unchanged — i.e., scraper ran but the website hadn't updated.
+    Drop consecutive rows per hospital where min_wait_mins, max_wait_mins, and
+    load_ratio are all unchanged — i.e., scraper ran but the website hadn't updated.
+    max_wait_mins is included so rows where only the upper bound shifts are kept.
     Context columns are not considered: a VAHI quarter boundary alone does not
     constitute a meaningful change worth keeping.
     """
     df = df.sort_values(["hospital", "timestamp"]).reset_index(drop=True)
-    prev_wait = df.groupby("hospital")["min_wait_mins"].shift(1)
+    prev_min  = df.groupby("hospital")["min_wait_mins"].shift(1)
+    prev_max  = df.groupby("hospital")["max_wait_mins"].shift(1)
     prev_load = df.groupby("hospital")["load_ratio"].shift(1)
-    mask = (df["min_wait_mins"] == prev_wait) & (df["load_ratio"] == prev_load)
+    mask = (
+        (df["min_wait_mins"] == prev_min) &
+        (df["max_wait_mins"] == prev_max) &
+        (df["load_ratio"]    == prev_load)
+    )
     return df[~mask].reset_index(drop=True)
 
 # ── Wait momentum ────────────────────────────────────────────────────────────
