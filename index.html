@@ -122,19 +122,35 @@
     .stale-card .dot{background:#e0e0e0;box-shadow:none}
     .hosp{font-weight:700;font-size:.96rem}
 
-    /* ── Split hero: Wait Time | Patient Count ───────────────────────────────── */
-    .hero-split{display:flex;gap:0;margin-bottom:.75rem}
-    .hero-col{flex:1;display:flex;flex-direction:column}
+    /* ── Split hero: Wait Time (primary) | Patient Count (secondary) ────────── */
+    .hero-split{display:flex;gap:0;margin-bottom:.75rem;align-items:flex-end}
+    .hero-col{display:flex;flex-direction:column}
     .hero-col:first-child{
+      flex:0 0 auto;
       border-right:1px solid #ebebeb;padding-right:1.1rem;margin-right:1.1rem
     }
+    .hero-col:last-child{flex:1}
     .hero-sub{
       font-size:.62rem;text-transform:uppercase;letter-spacing:.07em;
       color:#aaa;font-weight:600;margin-bottom:.12rem
     }
     .hero-val{font-size:2.2rem;font-weight:800;line-height:1}
     .wait-hero{color:#1a1a2e}
-    .count-hero{color:#4a5568}
+    /* Patient count is a secondary signal — smaller and muted */
+    .count-hero{font-size:1.45rem;font-weight:700;color:#6b7280}
+
+    /* ── VAHI benchmark annotation ───────────────────────────────────────────── */
+    .vahi-bench{
+      font-size:.67rem;color:#bbb;margin-bottom:.55rem;
+      display:flex;gap:.3rem;align-items:center;flex-wrap:wrap;
+    }
+    .vahi-bench .vb-tag{
+      display:inline-block;background:#f0f4ff;color:#7b93cc;
+      font-size:.62rem;font-weight:700;border-radius:4px;
+      padding:.08rem .35rem;
+    }
+    .vahi-above .vb-tag{background:#fff3e0;color:#c47d15}
+    .vahi-below .vb-tag{background:#e8f7f5;color:#2e9e90}
 
     .trend{font-size:.8rem;color:#666;margin-bottom:.65rem}
     .up{color:var(--red)} .dn{color:var(--green)} .fl{color:#bbb}
@@ -426,12 +442,14 @@ function getForecastAccuracy(siteName, actual) {
 // ── Card renderer ─────────────────────────────────────────────────────────────
 function renderCard(s) {
   try {
-    const momentum     = s.wait_momentum      ?? 0;
-    const current      = s.current_wait_min   ?? 0;
+    const momentum     = s.wait_momentum          ?? 0;
+    const current      = s.current_wait_min       ?? 0;
     const predicted    = Math.max(s.predicted_wait_min ?? 0, current * 0.5);
-    const conf         = s.confidence         ?? 0;
-    const ageMin       = s.heartbeat_age_mins  ?? 0;
-    const waitingCount = s.waiting_count       ?? 0;
+    const conf         = s.confidence             ?? 0;
+    const ageMin       = s.heartbeat_age_mins     ?? 0;
+    const waitingCount = s.waiting_count          ?? 0;
+    const medCat45     = s.vahi_median_cat45_mins ?? null;
+    const medCat123    = s.vahi_median_cat123_mins ?? null;
 
     const isStale = ageMin > HOSPITAL_STALE_MINS;
     const c    = light(predicted, momentum);
@@ -468,6 +486,22 @@ function renderCard(s) {
         <span class="iv"><span class="badge forecast-badge">${accuracy}%</span></span>
       </div>` : "";
 
+    // VAHI benchmark: show the most relevant median (cat 4-5 for general context)
+    let vahiBenchHtml = "";
+    if (medCat45 != null) {
+      const isAbove = current > medCat45 * 1.5;
+      const isBelow = current <= medCat45;
+      const cls = isAbove ? "vahi-above" : isBelow ? "vahi-below" : "";
+      const tag  = isAbove ? "Above usual" : isBelow ? "Below usual" : "Near usual";
+      vahiBenchHtml = `
+        <div class="vahi-bench ${cls}">
+          <span class="vb-tag">${tag}</span>
+          Usual minor wait: ${medCat45}m
+          ${medCat123 != null ? `&middot; Usual urgent: ${medCat123}m` : ""}
+          <small style="opacity:.6">(VAHI quarterly)</small>
+        </div>`;
+    }
+
     return `
       <div class="card ${c}${isStale ? " stale-card" : ""}">
         <div class="patient-headline">
@@ -491,6 +525,7 @@ function renderCard(s) {
             <span class="${a.cls}">${a.sym}</span>
             ${a.lbl} &nbsp;&middot;&nbsp; ${sign}${momentum.toFixed(1)} min / 15 min
           </div>
+          ${vahiBenchHtml}
           <div class="obs-meta">
             <span class="badge ${confCls(s.confidence_label)}">
               ${s.confidence_label} confidence &nbsp;${(conf * 100).toFixed(0)}%
@@ -598,10 +633,14 @@ function renderLeaderboard(sites) {
   lbMinor.innerHTML = minor.length
     ? minor.map((s, i) => {
         const c = light(s.current_wait_min ?? 0, s.wait_momentum ?? 0);
+        const vahi45 = s.vahi_median_cat45_mins;
+        const subText = vahi45 != null
+          ? `~${Math.round(s.current_wait_min ?? 0)} min now &middot; usual ${vahi45}m`
+          : `~${Math.round(s.current_wait_min ?? 0)} min typical`;
         return lbCard(
           s, i + 1,
-          `Max ${s.max_wait_min} min`,
-          `~${Math.round(s.current_wait_min ?? 0)} min typical`,
+          `Max ${fmtShort(s.max_wait_min) ?? s.max_wait_min + " min"}`,
+          subText,
           colorVar(c)
         );
       }).join("")
