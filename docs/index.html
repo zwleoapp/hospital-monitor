@@ -97,7 +97,7 @@
     .strain-low{color:var(--green)}
     .strain-mid{color:var(--amber)}
     .strain-high{color:var(--red)}
-    .wait-range{font-size:.72rem;color:#aaa;margin-top:.2rem}
+    .wait-range{font-size:.9rem;font-weight:700;color:#444;margin-top:.25rem}
     footer{text-align:center;font-size:.67rem;color:#ccc;margin-top:1.5rem}
     footer a{color:#ccc}
   </style>
@@ -138,6 +138,7 @@
 <script>
 const DATA_URL   = "https://raw.githubusercontent.com/zwleoapp/hospital-monitor/data/latest.json";
 const STALE_MINS = 30;
+let _lastOutlook = null;
 
 function light(p, m) {
   if (p <= 30 && m <= 2) return "green";
@@ -158,7 +159,10 @@ function strainCls(v) {
   return "strain-high";
 }
 function localTime(utc) {
-  return new Date(utc).toLocaleTimeString("en-AU",
+  if (!utc) return "—";
+  const d = new Date(utc);
+  if (isNaN(d.getTime())) return "—";
+  return d.toLocaleTimeString("en-AU",
     {timeZone:"Australia/Melbourne", hour:"2-digit", minute:"2-digit"});
 }
 function fmtShort(m) {
@@ -173,8 +177,9 @@ function renderCard(s) {
   const a    = arrow(s.wait_momentum);
   const sign = s.wait_momentum >= 0 ? "+" : "";
 
-  const rangeHtml = fmtShort(s.max_wait_min)
-    ? `<div class="wait-range">up to&nbsp;${fmtShort(s.max_wait_min)}</div>`
+  const maxWait = s.max_wait_min != null ? s.max_wait_min : null;
+  const rangeHtml = maxWait != null
+    ? `<div class="wait-range">up to ${maxWait} min</div>`
     : "";
 
   const diversionHtml = s.suggest_diversion ? `
@@ -243,9 +248,11 @@ function renderCard(s) {
 }
 
 function renderDashboard(outlook) {
-  document.getElementById("gt").textContent =
-    new Date(outlook.generated_utc).toLocaleString("en-AU",
-      {timeZone:"Australia/Melbourne"});
+  _lastOutlook = outlook;
+  const genDate = new Date(outlook.generated_utc);
+  document.getElementById("gt").textContent = isNaN(genDate.getTime())
+    ? "—"
+    : genDate.toLocaleString("en-AU", {timeZone:"Australia/Melbourne"});
 
   const groups = {};
   outlook.sites.forEach(s => { (groups[s.network] = groups[s.network] || []).push(s); });
@@ -299,15 +306,7 @@ async function loadOutlook() {
 loadOutlook();
 setInterval(loadOutlook, 5 * 60 * 1000);
 setInterval(() => {
-  // Re-check stale state between fetches (staleness grows with time)
-  const gt = document.getElementById("gt").textContent;
-  if (gt && gt !== "—") {
-    const fakeOutlook = {
-      generated_utc: new Date(gt).toISOString(),
-      sites: Array.from(document.querySelectorAll(".card")).map(() => ({heartbeat_age_mins: 0}))
-    };
-    checkStale(fakeOutlook);
-  }
+  if (_lastOutlook) checkStale(_lastOutlook);
 }, 60_000);
 </script>
 </body>
