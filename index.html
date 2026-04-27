@@ -122,22 +122,22 @@
     .stale-card .dot{background:#e0e0e0;box-shadow:none}
     .hosp{font-weight:700;font-size:.96rem}
 
-    /* ── Split hero: Wait Time (primary) | Patient Count (secondary) ────────── */
-    .hero-split{display:flex;gap:0;margin-bottom:.75rem;align-items:flex-end}
-    .hero-col{display:flex;flex-direction:column}
-    .hero-col:first-child{
-      flex:0 0 auto;
-      border-right:1px solid #ebebeb;padding-right:1.1rem;margin-right:1.1rem
-    }
-    .hero-col:last-child{flex:1}
-    .hero-sub{
-      font-size:.62rem;text-transform:uppercase;letter-spacing:.07em;
-      color:#aaa;font-weight:600;margin-bottom:.12rem
-    }
-    .hero-val{font-size:2.2rem;font-weight:800;line-height:1}
-    .wait-hero{color:#1a1a2e}
-    /* Patient count is a secondary signal — smaller and muted */
-    .count-hero{font-size:1.45rem;font-weight:700;color:#6b7280}
+    /* ── Split hero: Urgent | Minor (primary) | Patient Count ─────────────── */
+    .hero-split{display:flex;gap:0;margin-bottom:.5rem;align-items:flex-end}
+    .hero-col{display:flex;flex-direction:column;flex:0 0 auto}
+    .hc-divider{border-right:1px solid #ebebeb;padding-right:1.1rem;margin-right:1.1rem}
+    .hc-minor-col{flex:1 1 auto}
+    .hero-sub{font-size:.6rem;text-transform:uppercase;letter-spacing:.07em;
+              color:#aaa;font-weight:600;margin-bottom:.1rem}
+    .hero-sub-primary{color:#1a1a2e;font-weight:700}
+    /* Minor is largest (most likely patient type); urgent is bold but smaller */
+    .hero-val{font-size:1.75rem;font-weight:800;line-height:1;color:#1a1a2e}
+    .hero-val-primary{font-size:2.2rem}
+    /* Patient count — 20% smaller than original (1.45rem → 1.16rem) */
+    .count-hero{font-size:1.16rem;font-weight:700;color:#6b7280}
+    /* 90th-percentile "realistic worst case" */
+    .p90-line{font-size:.63rem;color:#aaa;margin-bottom:.6rem}
+    .p90-line strong{font-weight:700;color:#888}
 
     /* ── Triage benchmark chips (VAHI quarterly) ─────────────────────────────── */
     .triage-bench{display:flex;gap:.45rem;margin-bottom:.65rem}
@@ -231,6 +231,18 @@
     }
     .footer-bottom strong{color:#888}
 
+    /* ── Triage category glossary ────────────────────────────────────────────── */
+    .footer-glossary{
+      background:#f7f9fc;border-radius:10px;
+      padding:1rem 1.3rem;margin-bottom:1.2rem;
+      font-size:.72rem;color:#888;line-height:1.8;
+    }
+    .footer-glossary h4{
+      font-size:.62rem;text-transform:uppercase;letter-spacing:.1em;
+      color:#aaa;font-weight:700;margin-bottom:.55rem;
+    }
+    .footer-glossary strong{color:#666;font-weight:700}
+
     /* ── Mobile: sidebar becomes top strip ───────────────────────────────────── */
     @media(max-width:640px){
       #main-layout{flex-direction:column}
@@ -255,8 +267,9 @@
       .patient-headline{padding:1rem 1rem .75rem}
       .obs-footer{padding:.4rem 1rem .5rem}
       .insights-body{padding:.4rem 1rem .65rem}
-      .hero-val{font-size:1.8rem}
-      .hero-col:first-child{padding-right:.85rem;margin-right:.85rem}
+      .hero-val{font-size:1.5rem}
+      .hero-val-primary{font-size:1.8rem}
+      .hc-divider{padding-right:.75rem;margin-right:.75rem}
     }
   </style>
 </head>
@@ -330,6 +343,12 @@
       <p>Predictions are statistical estimates derived from public-aggregate data.</p>
       <p>Always verify wait times directly with hospital staff.</p>
     </div>
+  </div>
+  <div class="footer-glossary">
+    <h4>General Understanding of Triage Categories</h4>
+    <p><strong>Urgent (Categories 1&ndash;3):</strong> Life-threatening emergencies, severe chest pain, major trauma, or difficulty breathing. These cases are always prioritised by clinical staff first.</p>
+    <p><strong>Minor (Categories 4&ndash;5):</strong> Non-life-threatening conditions such as sprains, minor cuts, or viral symptoms. Waiting times are typically longer as resources are directed to more critical patients.</p>
+    <p style="margin-top:.4rem;font-style:italic">Note: These estimates are statistical models and do not replace professional medical triage. Actual wait times may vary.</p>
   </div>
   <div class="footer-bottom">
     <strong>NOT CLINICAL ADVICE</strong> &mdash;
@@ -443,17 +462,43 @@ function getForecastAccuracy(siteName, actual) {
   } catch(e) { return null; }
 }
 
+// ── Triage split-estimate helpers ─────────────────────────────────────────────
+function calcSplitEstimates(live, cat123, cat45) {
+  if (cat123 == null && cat45 == null) return null;
+  const avg = ((cat123 ?? cat45) + (cat45 ?? cat123)) / 2;
+  return {
+    urgent: cat123 != null ? Math.max(1, Math.round(live * cat123 / avg)) : null,
+    minor:  cat45  != null ? Math.max(1, Math.round(live * cat45  / avg)) : null,
+  };
+}
+function triageCls(usual, estimate) {
+  if (usual == null) return "tb-near";
+  if (estimate > usual * 1.5) return "tb-above";
+  if (estimate <= usual)      return "tb-below";
+  return "tb-near";
+}
+function triageTag(usual, estimate) {
+  if (usual == null) return "—";
+  if (estimate > usual * 1.5) return "▲ Above usual";
+  if (estimate <= usual)      return "▼ Below usual";
+  return "→ Near usual";
+}
+
 // ── Card renderer ─────────────────────────────────────────────────────────────
 function renderCard(s) {
   try {
-    const momentum     = s.wait_momentum          ?? 0;
-    const current      = s.current_wait_min       ?? 0;
+    const momentum     = s.wait_momentum           ?? 0;
+    const current      = s.current_wait_min        ?? 0;
     const predicted    = Math.max(s.predicted_wait_min ?? 0, current * 0.5);
-    const conf         = s.confidence             ?? 0;
-    const ageMin       = s.heartbeat_age_mins     ?? 0;
-    const waitingCount = s.waiting_count          ?? 0;
-    const medCat45     = s.vahi_median_cat45_mins ?? null;
+    const conf         = s.confidence              ?? 0;
+    const ageMin       = s.heartbeat_age_mins      ?? 0;
+    const waitingCount = s.waiting_count           ?? 0;
+    const medCat45     = s.vahi_median_cat45_mins  ?? null;
     const medCat123    = s.vahi_median_cat123_mins ?? null;
+    const p90Mins      = s.vahi_p90_mins           ?? null;
+    const splits       = calcSplitEstimates(current, medCat123, medCat45);
+    const urgentEst    = splits?.urgent ?? null;
+    const minorEst     = splits?.minor  ?? null;
 
     const isStale = ageMin > HOSPITAL_STALE_MINS;
     const c    = light(predicted, momentum);
@@ -496,32 +541,22 @@ function renderCard(s) {
         <span class="iv"><span class="badge forecast-badge">${accuracy}%</span></span>
       </div>` : "";
 
-    // Triage-aware VAHI benchmark: dual chips for Minor (Cat 4-5) and Urgent (Cat 1-3)
+    // Triage benchmark chips — compare split estimates against VAHI historical medians
     let triageBenchHtml = "";
     if (medCat45 != null || medCat123 != null) {
-      function triageCls(usual, live) {
-        if (usual == null) return "tb-near";
-        if (live > usual * 1.5) return "tb-above";
-        if (live <= usual)      return "tb-below";
-        return "tb-near";
-      }
-      function triageTag(usual, live) {
-        if (usual == null) return "—";
-        if (live > usual * 1.5) return "▲ Above usual";
-        if (live <= usual)      return "▼ Below usual";
-        return "→ Near usual";
-      }
+      const minorCmp  = minorEst  ?? current;
+      const urgentCmp = urgentEst ?? current;
       triageBenchHtml = `
         <div class="triage-bench">
-          <div class="tb-chip ${triageCls(medCat45, current)}">
+          <div class="tb-chip ${triageCls(medCat45, minorCmp)}">
             <span class="tb-cat">Minor (Cat 4&ndash;5)</span>
             <span class="tb-usual">${medCat45 != null ? "usual " + medCat45 + "m" : "—"}</span>
-            <span class="tb-tag">${triageTag(medCat45, current)}</span>
+            <span class="tb-tag">${triageTag(medCat45, minorCmp)}</span>
           </div>
-          <div class="tb-chip ${triageCls(medCat123, current)}">
+          <div class="tb-chip ${triageCls(medCat123, urgentCmp)}">
             <span class="tb-cat">Urgent (Cat 1&ndash;3)</span>
             <span class="tb-usual">${medCat123 != null ? "usual " + medCat123 + "m" : "—"}</span>
-            <span class="tb-tag">${triageTag(medCat123, current)}</span>
+            <span class="tb-tag">${triageTag(medCat123, urgentCmp)}</span>
           </div>
         </div>`;
     }
@@ -535,15 +570,20 @@ function renderCard(s) {
           </div>
 
           <div class="hero-split">
-            <div class="hero-col">
-              <div class="hero-sub">Est. Wait</div>
-              <div class="hero-val wait-hero">${fmtShort(current) ?? "—"}</div>
+            <div class="hero-col hc-divider">
+              <div class="hero-sub">Urgent &bull; Cat 1&ndash;3</div>
+              <div class="hero-val">${urgentEst != null ? fmtShort(urgentEst) ?? "—" : fmtShort(current) ?? "—"}</div>
+            </div>
+            <div class="hero-col hc-divider hc-minor-col">
+              <div class="hero-sub hero-sub-primary">Minor &bull; Cat 4&ndash;5</div>
+              <div class="hero-val hero-val-primary">${minorEst != null ? fmtShort(minorEst) ?? "—" : fmtShort(current) ?? "—"}</div>
             </div>
             <div class="hero-col">
-              <div class="hero-sub">&#128100; Patients Waiting</div>
-              <div class="hero-val count-hero">${waitingCount}</div>
+              <div class="hero-sub" style="font-size:.5rem">&#128100; Patients Waiting</div>
+              <div class="count-hero">${waitingCount}</div>
             </div>
           </div>
+          ${p90Mins != null ? `<div class="p90-line">9/10 patients seen by <strong>${fmtShort(p90Mins) ?? p90Mins + "m"}</strong></div>` : ""}
 
           <div class="trend">
             <span class="${a.cls}">${a.sym}</span>
@@ -649,27 +689,31 @@ function renderLeaderboard(sites) {
       }).join("")
     : '<div class="lb-empty">No improving trends right now</div>';
 
-  // Best for Minor Injuries — ranked by lowest max_wait_min
-  const minor = [...sites]
-    .filter(s => s.max_wait_min != null && s.max_wait_min > 0)
-    .sort((a, b) => (a.max_wait_min ?? 999) - (b.max_wait_min ?? 999))
+  // Best for Minor Injuries — ranked by minor (Cat 4-5) split estimate, fallback to current
+  const minorSorted = [...sites]
+    .filter(s => (s._minor_est ?? s.current_wait_min ?? 0) > 0)
+    .sort((a, b) =>
+      (a._minor_est ?? a.current_wait_min ?? 999) -
+      (b._minor_est ?? b.current_wait_min ?? 999)
+    )
     .slice(0, 2);
 
-  lbMinor.innerHTML = minor.length
-    ? minor.map((s, i) => {
-        const c = light(s.current_wait_min ?? 0, s.wait_momentum ?? 0);
+  lbMinor.innerHTML = minorSorted.length
+    ? minorSorted.map((s, i) => {
+        const est    = s._minor_est ?? s.current_wait_min ?? 0;
+        const c      = light(est, s.wait_momentum ?? 0);
         const vahi45 = s.vahi_median_cat45_mins;
         const subText = vahi45 != null
-          ? `~${Math.round(s.current_wait_min ?? 0)} min now &middot; usual ${vahi45}m`
-          : `~${Math.round(s.current_wait_min ?? 0)} min typical`;
+          ? `usual ${vahi45}m &middot; ${s.waiting_count ?? 0} waiting`
+          : `${s.waiting_count ?? 0} waiting`;
         return lbCard(
           s, i + 1,
-          `Max ${fmtShort(s.max_wait_min) ?? s.max_wait_min + " min"}`,
+          `${fmtShort(Math.round(est)) ?? est + " min"} <small>minor est.</small>`,
           subText,
           colorVar(c)
         );
       }).join("")
-    : '<div class="lb-empty">No max wait data</div>';
+    : '<div class="lb-empty">No data</div>';
 }
 
 // ── Dashboard orchestrator ────────────────────────────────────────────────────
@@ -680,6 +724,17 @@ function renderDashboard(outlook) {
   document.getElementById("gt").textContent = genDate
     ? localDateTime(outlook.generated_utc)
     : "—";
+
+  // Pre-compute split estimates so sidebar and cards share the same values
+  outlook.sites.forEach(s => {
+    const sp = calcSplitEstimates(
+      s.current_wait_min ?? 0,
+      s.vahi_median_cat123_mins ?? null,
+      s.vahi_median_cat45_mins  ?? null
+    );
+    s._urgent_est = sp?.urgent ?? null;
+    s._minor_est  = sp?.minor  ?? null;
+  });
 
   const groups = {};
   outlook.sites.forEach(s => { (groups[s.network] = groups[s.network] || []).push(s); });
