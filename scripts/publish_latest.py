@@ -91,7 +91,10 @@ def push_to_data_branch(json_path: pathlib.Path) -> None:
     import shutil
     shutil.copy(json_path, PUBLISHER_TMPDIR / "latest.json")
 
-    # Vercel: no-cache so the browser always gets the freshest file
+    # Co-deploy index.html so Vercel serves the full dashboard from the data branch
+    shutil.copy(_BASE / "docs" / "index.html", PUBLISHER_TMPDIR / "index.html")
+
+    # Vercel: no-cache on latest.json so the browser always gets the freshest data
     vercel_config = {
         "headers": [
             {
@@ -104,7 +107,7 @@ def push_to_data_branch(json_path: pathlib.Path) -> None:
 
     stamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     try:
-        _git("git add latest.json vercel.json", PUBLISHER_TMPDIR)
+        _git("git add latest.json index.html vercel.json", PUBLISHER_TMPDIR)
         _git(f'git commit -m "data: outlook {stamp}"', PUBLISHER_TMPDIR)
     except RuntimeError as e:
         if "nothing to commit" in str(e):
