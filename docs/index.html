@@ -6,10 +6,10 @@
   <title>Melbourne ED Monitor &mdash; Live Trends &amp; Forecast</title>
   <style>
     :root {
-      --green:#43a047; --green-bg:#e8f5e9; --green-dim:#c8e6c9;
-      --amber:#fb8c00; --amber-bg:#fff3e0;
-      --red:#e53935;   --red-bg:#ffebee;
-      --stale-border:#ef9a9a; --stale-bg:#fff5f5;
+      --green:#2e9e90; --green-bg:#e8f7f5; --green-dim:#a8d8d3;
+      --amber:#c47d15; --amber-bg:#fdf5e2;
+      --red:#c05a4a;   --red-bg:#fdf1ee;
+      --stale-border:#d9a89f; --stale-bg:#fdf6f5;
     }
     *{box-sizing:border-box;margin:0;padding:0}
     .disclaimer-bar{
@@ -91,20 +91,32 @@
     }
 
     .patient-headline{padding:1.2rem 1.3rem .9rem}
-    .card-header{display:flex;align-items:center;gap:.5rem;margin-bottom:.85rem}
+    .card-header{display:flex;align-items:center;gap:.5rem;margin-bottom:.9rem}
     .dot{width:11px;height:11px;border-radius:50%;flex-shrink:0}
     .green .dot{background:var(--green);box-shadow:0 0 7px var(--green)}
     .amber .dot{background:var(--amber);box-shadow:0 0 7px var(--amber)}
     .red   .dot{background:var(--red);  box-shadow:0 0 7px var(--red)}
     .stale-card .dot{background:#e0e0e0;box-shadow:none}
     .hosp{font-weight:700;font-size:.96rem}
-    .waits{display:flex;gap:1.8rem;align-items:flex-end;margin-bottom:.7rem}
-    .wb label{font-size:.65rem;text-transform:uppercase;letter-spacing:.06em;
-               color:#aaa;display:block;margin-bottom:.15rem}
-    .wv{font-size:2rem;font-weight:800;line-height:1}
-    .wu{font-size:.7rem;color:#bbb;margin-left:1px}
-    .current .wv{color:#1a1a2e}
-    .predicted .wv{color:#777}
+
+    /* ── Split hero: Wait Time | Patient Count ───────────────────────────────── */
+    .hero-split{display:flex;gap:0;margin-bottom:.75rem}
+    .hero-col{flex:1;display:flex;flex-direction:column}
+    .hero-col:first-child{
+      border-right:1px solid #ebebeb;padding-right:1.1rem;margin-right:1.1rem
+    }
+    .hero-sub{
+      font-size:.62rem;text-transform:uppercase;letter-spacing:.07em;
+      color:#aaa;font-weight:600;margin-bottom:.12rem
+    }
+    .hero-val{font-size:2.2rem;font-weight:800;line-height:1}
+    .wait-hero{color:#1a1a2e}
+    .count-hero{color:#4a5568}
+    .wait-range{
+      font-size:.85rem;font-weight:700;color:#555;
+      margin-top:.3rem;line-height:1.35
+    }
+
     .trend{font-size:.8rem;color:#666;margin-bottom:.65rem}
     .up{color:var(--red)} .dn{color:var(--green)} .fl{color:#bbb}
     .obs-meta{display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;
@@ -121,13 +133,14 @@
       font-size:.63rem;color:#bbb;
       display:flex;align-items:center;gap:.4rem;flex-wrap:wrap;
     }
-    .stale-card .obs-footer{border-top-color:#f5c6c6;color:#c09090}
+    .stale-card .obs-footer{border-top-color:#ecd6d3;color:#b09090}
 
+    /* ── System Insights (pro / paramedic row) ───────────────────────────────── */
     .system-insights{
       background:#f7f9fc;border-top:1px solid #eef0f4;
       padding:.65rem 1.3rem .75rem;
     }
-    .stale-card .system-insights{background:#fdf0f0;border-top-color:#f5c6c6}
+    .stale-card .system-insights{background:#fdf3f1;border-top-color:#ecd6d3}
     .insights-label{
       font-size:.6rem;text-transform:uppercase;letter-spacing:.08em;
       color:#bbb;font-weight:600;margin-bottom:.45rem;
@@ -139,7 +152,6 @@
     .strain-low{color:var(--green)}
     .strain-mid{color:var(--amber)}
     .strain-high{color:var(--red)}
-    .wait-sub{font-size:1rem;font-weight:700;color:#444;margin-top:.3rem}
     footer{text-align:center;font-size:.67rem;color:#ccc;margin-top:1.5rem}
     footer a{color:#ccc}
 
@@ -164,7 +176,8 @@
       .patient-headline{padding:1rem 1rem .75rem}
       .obs-footer{padding:.4rem 1rem .5rem}
       .system-insights{padding:.55rem 1rem .65rem}
-      .wv{font-size:1.7rem}
+      .hero-val{font-size:1.8rem}
+      .hero-col:first-child{padding-right:.85rem;margin-right:.85rem}
     }
   </style>
 </head>
@@ -281,9 +294,9 @@ function renderCard(s) {
     const sign = momentum >= 0 ? "+" : "";
 
     const maxWait    = s.max_wait_min != null ? s.max_wait_min : null;
-    const waitSubTxt = maxWait != null
-      ? `~${Math.round(current)}&ndash;${maxWait} min wait`
-      : `~${Math.round(current)} min wait`;
+    const waitRangeTxt = maxWait != null
+      ? `${Math.round(current)}&ndash;${maxWait} min`
+      : `${Math.round(current)} min`;
 
     const staleBadge = isStale
       ? `<span class="stale-badge">&#9888;&#xFE0F; STALE</span>`
@@ -315,19 +328,19 @@ function renderCard(s) {
             <div class="dot"></div>
             <div class="hosp">${s.site}</div>
           </div>
-          <div class="waits">
-            <div class="wb current">
-              <label>Waiting</label>
-              <span class="wv">${waitingCount}</span>
-              <span class="wu">waiting</span>
-              <div class="wait-sub">${waitSubTxt}</div>
+
+          <div class="hero-split">
+            <div class="hero-col">
+              <div class="hero-sub">Est. Wait</div>
+              <div class="hero-val wait-hero">${fmtShort(current) ?? "—"}</div>
+              <div class="wait-range">${waitRangeTxt} range</div>
             </div>
-            <div class="wb predicted">
-              <label>In 60 min</label>
-              <span class="wv">${Math.round(predicted)}</span>
-              <span class="wu">min wait</span>
+            <div class="hero-col">
+              <div class="hero-sub">Patients Waiting</div>
+              <div class="hero-val count-hero">${waitingCount}</div>
             </div>
           </div>
+
           <div class="trend">
             <span class="${a.cls}">${a.sym}</span>
             ${a.lbl} &nbsp;&middot;&nbsp; ${sign}${momentum.toFixed(1)} min / 15 min
@@ -339,12 +352,16 @@ function renderCard(s) {
           </div>
         </div>
         <div class="system-insights">
-          <div class="insights-label">System Insights</div>
+          <div class="insights-label">Pro / Paramedic View</div>
           <div class="insights-row">
+            <div class="insight">
+              <span class="il">60 min forecast</span>
+              <span class="iv">${Math.round(predicted)} min</span>
+            </div>
             ${strainHtml}
             <div class="insight">
               <span class="il">Momentum</span>
-              <span class="iv ${a.cls}">${sign}${momentum.toFixed(1)}<small style="font-weight:400;font-size:.65rem"> min/15m</small></span>
+              <span class="iv ${a.cls}">${sign}${momentum.toFixed(1)}<small style="font-weight:400;font-size:.65rem"> /15m</small></span>
             </div>
             <div class="insight">
               <span class="il">Source</span>
