@@ -1,11 +1,11 @@
 {
-  "generated_utc": "2026-04-27T04:53:41Z",
+  "generated_utc": "2026-04-27T05:00:07Z",
   "horizon_min": 60,
   "sites": [
     {
       "site": "Angliss Hospital",
       "network": "Eastern Health",
-      "latest_obs_utc": "2026-04-27T04:45:13Z",
+      "latest_obs_utc": "2026-04-27T05:00:03Z",
       "current_wait_min": 26.0,
       "max_wait_min": 152,
       "predicted_wait_min": 26.0,
@@ -14,27 +14,26 @@
       "confidence_label": "High",
       "ctx_source": "VAHI",
       "color": "green",
-      "heartbeat_age_mins": 8.5,
+      "heartbeat_age_mins": 0.1,
       "strain_index": 0.5,
       "suggest_diversion": true,
-      "diversion_to": "Maroondah Hospital"
+      "diversion_to": "Box Hill Hospital"
     },
     {
       "site": "Box Hill Hospital",
       "network": "Eastern Health",
-      "latest_obs_utc": "2026-04-27T04:45:13Z",
-      "current_wait_min": 28.0,
-      "max_wait_min": 147,
-      "predicted_wait_min": 57.6,
-      "wait_momentum": 14.8,
-      "confidence": 0.627,
+      "latest_obs_utc": "2026-04-27T05:00:03Z",
+      "current_wait_min": 6.0,
+      "max_wait_min": 170,
+      "predicted_wait_min": 0.0,
+      "wait_momentum": -22.2,
+      "confidence": 0.553,
       "confidence_label": "Moderate",
       "ctx_source": "VAHI",
-      "color": "amber",
-      "heartbeat_age_mins": 8.5,
-      "strain_index": 0.647,
-      "suggest_diversion": true,
-      "diversion_to": "Maroondah Hospital"
+      "color": "green",
+      "heartbeat_age_mins": 0.1,
+      "strain_index": 0.0,
+      "suggest_diversion": false
     },
     {
       "site": "Maroondah Hospital",
@@ -48,7 +47,7 @@
       "confidence_label": "High",
       "ctx_source": "VAHI",
       "color": "green",
-      "heartbeat_age_mins": 8.5,
+      "heartbeat_age_mins": 14.9,
       "strain_index": 0.081,
       "suggest_diversion": false
     },
@@ -64,7 +63,7 @@
       "confidence_label": "High",
       "ctx_source": "VAHI",
       "color": "amber",
-      "heartbeat_age_mins": 53.5,
+      "heartbeat_age_mins": 59.9,
       "strain_index": 1.69,
       "suggest_diversion": false
     },
@@ -80,7 +79,7 @@
       "confidence_label": "Moderate",
       "ctx_source": "VAHI",
       "color": "amber",
-      "heartbeat_age_mins": 53.5,
+      "heartbeat_age_mins": 59.9,
       "strain_index": 1.7,
       "suggest_diversion": false
     },
@@ -96,7 +95,7 @@
       "confidence_label": "High",
       "ctx_source": "VAHI",
       "color": "amber",
-      "heartbeat_age_mins": 53.5,
+      "heartbeat_age_mins": 59.9,
       "strain_index": 1.67,
       "suggest_diversion": false
     }
