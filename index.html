@@ -135,9 +135,12 @@
     .hero-val-primary{font-size:2.2rem}
     /* Patient count — 20% smaller than original (1.45rem → 1.16rem) */
     .count-hero{font-size:1.16rem;font-weight:700;color:#6b7280}
-    /* 90th-percentile "realistic worst case" */
-    .p90-line{font-size:.63rem;color:#aaa;margin-bottom:.6rem}
+    /* 90th-percentile lines */
+    .p90-line{font-size:.63rem;color:#aaa;margin-bottom:.18rem}
     .p90-line strong{font-weight:700;color:#888}
+    /* System-wide safety net — last of the p90 lines, adds bottom gap */
+    .p90-safety-net{color:#b8a87a;margin-bottom:.6rem}
+    .p90-safety-net strong{color:#9a8040}
 
     /* ── Triage benchmark chips (VAHI quarterly) ─────────────────────────────── */
     .triage-bench{display:flex;gap:.45rem;margin-bottom:.65rem}
@@ -369,7 +372,8 @@ const MAPS_QUERIES        = {
   "Dandenong Hospital":              "Dandenong+Hospital+Dandenong+VIC",
   "Casey Hospital":                  "Casey+Hospital+Berwick+VIC"
 };
-let _lastOutlook = null;
+let _lastOutlook   = null;
+let _p90AllMins    = null;  // system-wide VAHI 90th-pct safety net, set from outlook
 
 function parseHospDataTime(display) {
   const m = (display || "").match(/(\d{1,2}:\d{2})\s*$/);
@@ -583,7 +587,8 @@ function renderCard(s) {
               <div class="count-hero">${waitingCount}</div>
             </div>
           </div>
-          ${p90Mins != null ? `<div class="p90-line">9/10 patients seen by <strong>${fmtShort(p90Mins) ?? p90Mins + "m"}</strong></div>` : ""}
+          ${p90Mins != null ? `<div class="p90-line">9/10 seen by <strong>${fmtShort(p90Mins) ?? p90Mins + "m"}</strong> at this hospital</div>` : ""}
+          ${_p90AllMins != null ? `<div class="p90-line p90-safety-net">&#128737; Overall safety net: <strong>${fmtShort(_p90AllMins)}</strong> (VAHI 90th pct)</div>` : ""}
 
           <div class="trend">
             <span class="${a.cls}">${a.sym}</span>
@@ -719,6 +724,7 @@ function renderLeaderboard(sites) {
 // ── Dashboard orchestrator ────────────────────────────────────────────────────
 function renderDashboard(outlook) {
   _lastOutlook = outlook;
+  _p90AllMins  = outlook.vahi_p90_all_mins ?? null;
 
   const genDate = safeDate(outlook.generated_utc);
   document.getElementById("gt").textContent = genDate
