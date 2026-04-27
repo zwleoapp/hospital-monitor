@@ -1,12 +1,17 @@
 # data-class: public-aggregate
 """
-transform_silver.py — Phase 1 Silver transform with VAHI / AIHW contextual enrichment.
+transform_silver.py — Silver transform with VAHI / AIHW contextual enrichment.
+
+Hospital-agnostic: processes every hospital present in the Bronze CSV.
+Registry-driven: active hospitals are defined in config/hospitals.csv.
 
 Reads:
-  --bronze   Live Eastern Health Bronze CSV  (default: SSD path)
-  --out      Output Silver CSV               (default: SSD path)
-  VAHI_FILE  bronze/vahi_history_merged.csv  (quarterly benchmarks, Oct 2024–)
-  AIHW_FILE  bronze/eastern_hospital_historical_context.csv (annual, 2011–2025)
+  --bronze   Bronze CSV (all networks, default: SSD path)
+  --out      Output Silver CSV (default: SSD path)
+  VAHI_FILE  bronze/vahi_history_merged.csv (quarterly benchmarks, Oct 2024–)
+  AIHW_FILE  bronze/eastern_hospital_historical_context.csv
+             (annual AIHW backfill, 2011–2025; run fetch_aihw.py --append to
+             extend coverage to all hospitals)
 
 Join logic (LEFT — every Bronze row is preserved):
   1. VAHI quarterly match: quarter_start_utc ≤ ts < quarter_end_utc, same hospital.

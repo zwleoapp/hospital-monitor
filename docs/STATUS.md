@@ -2,7 +2,8 @@
 
 | Service | Last Check-in (UTC) | Status |
 |---|---|---|
-| hospital_monitor | 2026-04-26T01:32:33Z | FAIL |
-| transform_split_1 | 2026-04-26T01:32:22Z | PASS |
+| hospital_monitor | 2026-04-27T03:30:03Z | PASS |
+| transform_silver | 2026-04-27T03:30:05Z | PASS |
+| transform_split_1 | 2026-04-26T09:45:15Z | PASS |
 
 _Updated automatically by the pipeline._
