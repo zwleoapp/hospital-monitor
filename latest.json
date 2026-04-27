@@ -1,13 +1,13 @@
 {
-  "generated_utc": "2026-04-27T02:30:17Z",
+  "generated_utc": "2026-04-27T02:45:26Z",
   "horizon_min": 60,
   "sites": [
     {
       "site": "Angliss Hospital",
       "network": "Eastern Health",
-      "latest_obs_utc": "2026-04-27T02:30:13Z",
+      "latest_obs_utc": "2026-04-27T02:45:23Z",
       "current_wait_min": 25.0,
-      "max_wait_min": 157,
+      "max_wait_min": 162,
       "predicted_wait_min": 25.0,
       "wait_momentum": 0.0,
       "confidence": 0.882,
@@ -17,22 +17,22 @@
       "heartbeat_age_mins": 0.1,
       "strain_index": 0.481,
       "suggest_diversion": true,
-      "diversion_to": "Maroondah Hospital"
+      "diversion_to": "Box Hill Hospital"
     },
     {
       "site": "Box Hill Hospital",
       "network": "Eastern Health",
-      "latest_obs_utc": "2026-04-27T02:30:13Z",
-      "current_wait_min": 21.0,
-      "max_wait_min": 135,
-      "predicted_wait_min": 13.0,
-      "wait_momentum": -4.0,
-      "confidence": 0.735,
-      "confidence_label": "High",
+      "latest_obs_utc": "2026-04-27T02:45:23Z",
+      "current_wait_min": 13.0,
+      "max_wait_min": 130,
+      "predicted_wait_min": 0.0,
+      "wait_momentum": -7.9,
+      "confidence": 0.696,
+      "confidence_label": "Moderate",
       "ctx_source": "VAHI",
       "color": "green",
       "heartbeat_age_mins": 0.1,
-      "strain_index": 0.146,
+      "strain_index": 0.0,
       "suggest_diversion": false
     },
     {
@@ -47,24 +47,8 @@
       "confidence_label": "Moderate",
       "ctx_source": "VAHI",
       "color": "green",
-      "heartbeat_age_mins": 0.1,
+      "heartbeat_age_mins": 15.2,
       "strain_index": 0.0,
-      "suggest_diversion": false
-    },
-    {
-      "site": "Casey Hospital",
-      "network": "Monash Health",
-      "latest_obs_utc": "2026-04-27T02:00:03Z",
-      "current_wait_min": 23.0,
-      "max_wait_min": 57,
-      "predicted_wait_min": 22.2,
-      "wait_momentum": -0.4,
-      "confidence": 0.82,
-      "confidence_label": "High",
-      "ctx_source": "VAHI",
-      "color": "green",
-      "heartbeat_age_mins": 30.2,
-      "strain_index": 0.74,
       "suggest_diversion": false
     },
     {
@@ -79,10 +63,26 @@
       "confidence_label": "High",
       "ctx_source": "VAHI",
       "color": "amber",
-      "heartbeat_age_mins": 30.2,
+      "heartbeat_age_mins": 45.4,
       "strain_index": 1.09,
       "suggest_diversion": true,
       "diversion_to": "Dandenong Hospital"
+    },
+    {
+      "site": "Casey Hospital",
+      "network": "Monash Health",
+      "latest_obs_utc": "2026-04-27T02:00:03Z",
+      "current_wait_min": 23.0,
+      "max_wait_min": 57,
+      "predicted_wait_min": 22.2,
+      "wait_momentum": -0.4,
+      "confidence": 0.82,
+      "confidence_label": "High",
+      "ctx_source": "VAHI",
+      "color": "green",
+      "heartbeat_age_mins": 45.4,
+      "strain_index": 0.74,
+      "suggest_diversion": false
     },
     {
       "site": "Dandenong Hospital",
@@ -96,7 +96,7 @@
       "confidence_label": "High",
       "ctx_source": "VAHI",
       "color": "green",
-      "heartbeat_age_mins": 30.2,
+      "heartbeat_age_mins": 45.4,
       "strain_index": 0.68,
       "suggest_diversion": false
     }
