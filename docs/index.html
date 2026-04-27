@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Eastern Health ED — Wait Time Outlook</title>
+  <title>Melbourne ED &mdash; 60-min Wait Outlook</title>
   <style>
     :root {
       --green:#43a047; --green-bg:#e8f5e9; --green-dim:#c8e6c9;
@@ -28,10 +28,15 @@
     #stale-banner{
       display:none;background:#ffebee;border:2px solid #e53935;
       border-radius:10px;padding:.9rem 1.2rem;
-      text-align:center;max-width:920px;margin:0 auto 1.2rem;color:#c62828;
+      text-align:center;max-width:960px;margin:0 auto 1.2rem;color:#c62828;
     }
-    .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));
-           gap:1rem;max-width:920px;margin:0 auto}
+    #grid{max-width:960px;margin:0 auto}
+    .network-block{margin-bottom:1.6rem}
+    .network-label{
+      font-size:.7rem;text-transform:uppercase;letter-spacing:.1em;
+      color:#aaa;font-weight:700;margin-bottom:.7rem;padding-left:2px;
+    }
+    .network-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));gap:1rem}
     .card{background:#fff;border-radius:14px;
            box-shadow:0 2px 12px rgba(0,0,0,.07);
            border-left:5px solid #ddd;overflow:hidden}
@@ -100,7 +105,7 @@
 </div>
 
 <header>
-  <h1>Eastern Health Emergency &mdash; 60-min Wait Outlook</h1>
+  <h1>Melbourne ED &mdash; 60-min Wait Outlook</h1>
   <div class="subtitle">
     Updated <span id="gt"></span> &nbsp;&middot;&nbsp;
     Public-aggregate data only &nbsp;&middot;&nbsp; Auto-refreshes every 5 min
@@ -116,67 +121,116 @@
   </div>
 </div>
 
-<div class="grid" id="grid"></div>
+<div id="grid"></div>
 
 <footer>
   Phase 1 heuristic baseline &mdash; accuracy improves as the ML model trains.
-  &nbsp;&middot;&nbsp; Raspberry Pi &middot;
+  &nbsp;&middot;&nbsp; Raspberry Pi scraper &middot; Vercel dashboard &middot;
   <a href="https://github.com/zwleoapp/hospital-monitor">github.com/zwleoapp/hospital-monitor</a>
 </footer>
 
 <script>
 const OUTLOOK    = {
-  "generated_utc": "2026-04-26T21:15:17Z",
+  "generated_utc": "2026-04-27T03:30:07Z",
   "horizon_min": 60,
   "sites": [
     {
       "site": "Angliss Hospital",
       "network": "Eastern Health",
-      "latest_obs_utc": "2026-04-26T21:00:13Z",
-      "current_wait_min": 15.0,
-      "max_wait_min": 94,
-      "predicted_wait_min": 0.0,
-      "wait_momentum": -10.0,
-      "confidence": 0.782,
+      "latest_obs_utc": "2026-04-27T03:30:03Z",
+      "current_wait_min": 26.0,
+      "max_wait_min": 138,
+      "predicted_wait_min": 28.0,
+      "wait_momentum": 1.0,
+      "confidence": 0.872,
       "confidence_label": "High",
       "ctx_source": "VAHI",
       "color": "green",
-      "heartbeat_age_mins": 15.1,
-      "strain_index": 0.0,
+      "heartbeat_age_mins": 0.1,
+      "strain_index": 0.538,
       "suggest_diversion": false
     },
     {
       "site": "Box Hill Hospital",
       "network": "Eastern Health",
-      "latest_obs_utc": "2026-04-26T21:00:13Z",
-      "current_wait_min": 21.0,
-      "max_wait_min": 147,
-      "predicted_wait_min": 21.0,
-      "wait_momentum": 0.0,
-      "confidence": 0.775,
+      "latest_obs_utc": "2026-04-27T03:30:03Z",
+      "current_wait_min": 25.0,
+      "max_wait_min": 137,
+      "predicted_wait_min": 23.0,
+      "wait_momentum": -1.0,
+      "confidence": 0.765,
       "confidence_label": "High",
       "ctx_source": "VAHI",
       "color": "green",
-      "heartbeat_age_mins": 15.1,
-      "strain_index": 0.236,
+      "heartbeat_age_mins": 0.1,
+      "strain_index": 0.258,
       "suggest_diversion": false
     },
     {
       "site": "Maroondah Hospital",
       "network": "Eastern Health",
-      "latest_obs_utc": "2026-04-26T21:15:13Z",
-      "current_wait_min": 103.0,
-      "max_wait_min": 114,
-      "predicted_wait_min": 153.0,
-      "wait_momentum": 25.0,
-      "confidence": 0.421,
-      "confidence_label": "Moderate",
+      "latest_obs_utc": "2026-04-27T03:30:03Z",
+      "current_wait_min": 27.0,
+      "max_wait_min": 109,
+      "predicted_wait_min": 27.0,
+      "wait_momentum": 0.0,
+      "confidence": 0.803,
+      "confidence_label": "High",
       "ctx_source": "VAHI",
-      "color": "red",
+      "color": "green",
       "heartbeat_age_mins": 0.1,
-      "strain_index": 2.468,
+      "strain_index": 0.435,
+      "suggest_diversion": false
+    },
+    {
+      "site": "Monash Medical Centre - Clayton",
+      "network": "Monash Health",
+      "latest_obs_utc": "2026-04-27T03:00:01Z",
+      "current_wait_min": 39.0,
+      "max_wait_min": 156,
+      "predicted_wait_min": 41.0,
+      "wait_momentum": 1.0,
+      "confidence": 0.788,
+      "confidence_label": "High",
+      "ctx_source": "VAHI",
+      "color": "amber",
+      "heartbeat_age_mins": 30.1,
+      "strain_index": 1.323,
       "suggest_diversion": true,
-      "diversion_to": "Angliss Hospital"
+      "diversion_to": "Casey Hospital"
+    },
+    {
+      "site": "Casey Hospital",
+      "network": "Monash Health",
+      "latest_obs_utc": "2026-04-27T03:00:01Z",
+      "current_wait_min": 24.0,
+      "max_wait_min": 106,
+      "predicted_wait_min": 24.6,
+      "wait_momentum": 0.3,
+      "confidence": 0.821,
+      "confidence_label": "High",
+      "ctx_source": "VAHI",
+      "color": "green",
+      "heartbeat_age_mins": 30.1,
+      "strain_index": 0.82,
+      "suggest_diversion": false
+    },
+    {
+      "site": "Dandenong Hospital",
+      "network": "Monash Health",
+      "latest_obs_utc": "2026-04-27T03:00:01Z",
+      "current_wait_min": 29.0,
+      "max_wait_min": 86,
+      "predicted_wait_min": 36.6,
+      "wait_momentum": 3.8,
+      "confidence": 0.725,
+      "confidence_label": "High",
+      "ctx_source": "VAHI",
+      "color": "amber",
+      "heartbeat_age_mins": 30.1,
+      "strain_index": 1.83,
+      "suggest_diversion": true,
+      "diversion_to": "Casey Hospital"
     }
   ]
 };
@@ -204,13 +258,6 @@ function localTime(utc) {
   return new Date(utc).toLocaleTimeString("en-AU",
     {timeZone:"Australia/Melbourne", hour:"2-digit", minute:"2-digit"});
 }
-function fmtMins(m) {
-  if (!m || m <= 0) return null;
-  const h = Math.floor(m / 60), r = m % 60;
-  if (h === 0) return r + " min";
-  if (r === 0) return h + " hr";
-  return h + " hr " + r + " min";
-}
 function fmtShort(m) {
   if (m == null || m <= 0) return null;
   const h = Math.floor(m / 60), r = m % 60;
@@ -222,6 +269,10 @@ function renderCard(s) {
   const c    = light(s.predicted_wait_min, s.wait_momentum);
   const a    = arrow(s.wait_momentum);
   const sign = s.wait_momentum >= 0 ? "+" : "";
+
+  const rangeHtml = fmtShort(s.max_wait_min)
+    ? `<div class="wait-range">up to&nbsp;${fmtShort(s.max_wait_min)}</div>`
+    : "";
 
   const diversionHtml = s.suggest_diversion ? `
     <div class="diversion-banner">
@@ -251,7 +302,7 @@ function renderCard(s) {
             <label>Now</label>
             <span class="wv">${Math.round(s.current_wait_min)}</span>
             <span class="wu">min</span>
-            ${fmtShort(s.max_wait_min) ? `<div class="wait-range">&ndash;&nbsp;${fmtShort(s.max_wait_min)}</div>` : ""}
+            ${rangeHtml}
           </div>
           <div class="wb predicted">
             <label>In 60 min</label>
@@ -292,8 +343,16 @@ document.getElementById("gt").textContent =
   new Date(OUTLOOK.generated_utc).toLocaleString("en-AU",
     {timeZone:"Australia/Melbourne"});
 
-document.getElementById("grid").innerHTML =
-  OUTLOOK.sites.map(renderCard).join("");
+// Group sites by network and render with section headers
+const groups = {};
+OUTLOOK.sites.forEach(s => { (groups[s.network] = groups[s.network] || []).push(s); });
+document.getElementById("grid").innerHTML = Object.entries(groups)
+  .map(([net, sites]) => `
+    <div class="network-block">
+      <div class="network-label">${net}</div>
+      <div class="network-grid">${sites.map(renderCard).join("")}</div>
+    </div>
+  `).join("");
 
 function checkStale() {
   const genMs            = new Date(OUTLOOK.generated_utc).getTime();

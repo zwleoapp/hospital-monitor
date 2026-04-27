@@ -65,7 +65,7 @@ _HTML = """\
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Eastern Health ED — Wait Time Outlook</title>
+  <title>Melbourne ED &mdash; 60-min Wait Outlook</title>
   <style>
     :root {{
       --green:#43a047; --green-bg:#e8f5e9; --green-dim:#c8e6c9;
@@ -90,10 +90,15 @@ _HTML = """\
     #stale-banner{{
       display:none;background:#ffebee;border:2px solid #e53935;
       border-radius:10px;padding:.9rem 1.2rem;
-      text-align:center;max-width:920px;margin:0 auto 1.2rem;color:#c62828;
+      text-align:center;max-width:960px;margin:0 auto 1.2rem;color:#c62828;
     }}
-    .grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));
-           gap:1rem;max-width:920px;margin:0 auto}}
+    #grid{{max-width:960px;margin:0 auto}}
+    .network-block{{margin-bottom:1.6rem}}
+    .network-label{{
+      font-size:.7rem;text-transform:uppercase;letter-spacing:.1em;
+      color:#aaa;font-weight:700;margin-bottom:.7rem;padding-left:2px;
+    }}
+    .network-grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));gap:1rem}}
     .card{{background:#fff;border-radius:14px;
            box-shadow:0 2px 12px rgba(0,0,0,.07);
            border-left:5px solid #ddd;overflow:hidden}}
@@ -162,7 +167,7 @@ _HTML = """\
 </div>
 
 <header>
-  <h1>Eastern Health Emergency &mdash; 60-min Wait Outlook</h1>
+  <h1>Melbourne ED &mdash; 60-min Wait Outlook</h1>
   <div class="subtitle">
     Updated <span id="gt"></span> &nbsp;&middot;&nbsp;
     Public-aggregate data only &nbsp;&middot;&nbsp; Auto-refreshes every 5 min
@@ -178,11 +183,11 @@ _HTML = """\
   </div>
 </div>
 
-<div class="grid" id="grid"></div>
+<div id="grid"></div>
 
 <footer>
   Phase 1 heuristic baseline &mdash; accuracy improves as the ML model trains.
-  &nbsp;&middot;&nbsp; Raspberry Pi &middot;
+  &nbsp;&middot;&nbsp; Raspberry Pi scraper &middot; Vercel dashboard &middot;
   <a href="https://github.com/zwleoapp/hospital-monitor">github.com/zwleoapp/hospital-monitor</a>
 </footer>
 
@@ -212,13 +217,6 @@ function localTime(utc) {{
   return new Date(utc).toLocaleTimeString("en-AU",
     {{timeZone:"Australia/Melbourne", hour:"2-digit", minute:"2-digit"}});
 }}
-function fmtMins(m) {{
-  if (!m || m <= 0) return null;
-  const h = Math.floor(m / 60), r = m % 60;
-  if (h === 0) return r + " min";
-  if (r === 0) return h + " hr";
-  return h + " hr " + r + " min";
-}}
 function fmtShort(m) {{
   if (m == null || m <= 0) return null;
   const h = Math.floor(m / 60), r = m % 60;
@@ -230,6 +228,10 @@ function renderCard(s) {{
   const c    = light(s.predicted_wait_min, s.wait_momentum);
   const a    = arrow(s.wait_momentum);
   const sign = s.wait_momentum >= 0 ? "+" : "";
+
+  const rangeHtml = fmtShort(s.max_wait_min)
+    ? `<div class="wait-range">up to ${{fmtShort(s.max_wait_min)}}</div>`
+    : "";
 
   const diversionHtml = s.suggest_diversion ? `
     <div class="diversion-banner">
@@ -259,7 +261,7 @@ function renderCard(s) {{
             <label>Now</label>
             <span class="wv">${{Math.round(s.current_wait_min)}}</span>
             <span class="wu">min</span>
-            ${{fmtShort(s.max_wait_min) ? `<div class="wait-range">&ndash;&nbsp;${{fmtShort(s.max_wait_min)}}</div>` : ""}}
+            ${{rangeHtml}}
           </div>
           <div class="wb predicted">
             <label>In 60 min</label>
@@ -300,8 +302,15 @@ document.getElementById("gt").textContent =
   new Date(OUTLOOK.generated_utc).toLocaleString("en-AU",
     {{timeZone:"Australia/Melbourne"}});
 
-document.getElementById("grid").innerHTML =
-  OUTLOOK.sites.map(renderCard).join("");
+const groups = {{}};
+OUTLOOK.sites.forEach(s => {{ (groups[s.network] = groups[s.network] || []).push(s); }});
+document.getElementById("grid").innerHTML = Object.entries(groups)
+  .map(([net, sites]) => `
+    <div class="network-block">
+      <div class="network-label">${{net}}</div>
+      <div class="network-grid">${{sites.map(renderCard).join("")}}</div>
+    </div>
+  `).join("");
 
 function checkStale() {{
   const genMs            = new Date(OUTLOOK.generated_utc).getTime();
