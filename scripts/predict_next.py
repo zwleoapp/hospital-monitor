@@ -66,10 +66,13 @@ def project_wait(current_wait: float, momentum: float) -> float:
 
     steps = HORIZON_MIN / CADENCE_MIN = 4 cadence units.
     MOMENTUM_DAMPING prevents runaway compounding (mean-reverting assumption).
+    Floor at 50% of current_wait: a one-cycle momentum spike shouldn't predict
+    near-zero wait when the system is clearly still busy.
     """
     steps = HORIZON_MIN / CADENCE_MIN
     projected = current_wait + momentum * steps * MOMENTUM_DAMPING
-    return round(max(0.0, min(MAX_WAIT_MIN, projected)), 1)
+    floor = current_wait * 0.50
+    return round(max(floor, min(MAX_WAIT_MIN, projected)), 1)
 
 
 def confidence_score(
@@ -123,11 +126,12 @@ def load_latest_silver(path: pathlib.Path) -> pd.DataFrame:
 
 def build_outlook(silver_row: pd.Series) -> dict:
     """Produce a single-site outlook dict from the most-recent Silver row."""
-    hospital     = silver_row["hospital"]
-    network      = str(silver_row.get("ctx_network", ""))
-    current_wait = float(silver_row["min_wait_mins"])
-    raw_max      = silver_row.get("max_wait_mins", float("nan"))
-    max_wait     = None if pd.isna(raw_max) else int(raw_max)
+    hospital      = silver_row["hospital"]
+    network       = str(silver_row.get("ctx_network", ""))
+    current_wait  = float(silver_row["min_wait_mins"])
+    raw_max       = silver_row.get("max_wait_mins", float("nan"))
+    max_wait      = None if pd.isna(raw_max) else int(raw_max)
+    waiting_count = int(silver_row.get("waiting", 0) or 0)
     raw_momentum = silver_row.get("wait_momentum", float("nan"))
     momentum     = 0.0 if pd.isna(raw_momentum) else float(raw_momentum)
     los_pct      = float(silver_row["ctx_los_pct_under_4hr"])
@@ -144,6 +148,7 @@ def build_outlook(silver_row: pd.Series) -> dict:
         "site":               hospital,
         "network":            network,
         "latest_obs_utc":     obs_utc,
+        "waiting_count":      waiting_count,
         "current_wait_min":   round(current_wait, 1),
         "max_wait_min":       max_wait,
         "predicted_wait_min": projected,
