@@ -2,20 +2,22 @@
 """
 Single source of truth for hospital configuration.
 
-Hospitals are registered in config/hospitals.csv (columns: name, network_type,
-scraper_type, vahi_id, aihw_id, is_active). This module loads that CSV at
-import time and rebuilds all derived views — adding a new hospital requires
-only a new row in the CSV.
+Two config files combine here:
+  hospitals.csv  — per-hospital registry (name, network, codes, is_active).
+                   Adding a new hospital requires only a new row.
+  hospitals.json — per-source-group connection details (URLs, Power BI keys,
+                   entity/column names).  Edit to update credentials or add a
+                   new scraper type without touching Python.
 
-Scraper connection details (URLs, Power BI keys, entity/column names) live in
-SOURCES below: they are per-source-group, not per-hospital, and are too
-complex for a flat CSV row.
+SOURCES is the merged, active-filtered view consumed by hospital_monitor.py.
 """
 
 import csv
+import json
 import pathlib
 
-_CSV = pathlib.Path(__file__).resolve().parent / "hospitals.csv"
+_CSV  = pathlib.Path(__file__).resolve().parent / "hospitals.csv"
+_JSON = pathlib.Path(__file__).resolve().parent / "hospitals.json"
 
 # ── Registry (all hospitals, active and inactive) ─────────────────────────────
 with open(_CSV, newline="") as _f:
@@ -36,7 +38,7 @@ HOSPITAL_NETWORK = {h: m["network"]   for h, m in HOSPITAL_META.items()}
 HOSPITAL_CODES   = {h: m["aihw_code"] for h, m in HOSPITAL_META.items()}
 
 
-# ── Per-source scraper configuration ─────────────────────────────────────────
+# ── Per-source scraper configuration (loaded from hospitals.json) ─────────────
 # Parser types:
 #   "html_js"  — page embeds `const patientCounts` + `const predictedWaitMinutes`
 #               (Eastern Health pattern). Requires "url".
@@ -45,45 +47,14 @@ HOSPITAL_CODES   = {h: m["aihw_code"] for h, m in HOSPITAL_META.items()}
 #               filter for the POST to /querydata; copy the URL, modelId from
 #               the request body, and X-PowerBI-ResourceKey from request headers.
 #               Verify entity/column names from SemanticQueryDataShapeCommand.
-_SOURCES_RAW: dict = {
-    "eastern_health": {
-        "parser": "html_js",
-        "url": "https://waittime.easternhealth.org.au/",
-        # key = JS object key in patientCounts/predictedWaitMinutes
-        "hospitals": {
-            "BoxHill":   "Box Hill Hospital",
-            "Angliss":   "Angliss Hospital",
-            "Maroondah": "Maroondah Hospital",
-        },
-    },
-
-    "monash_health": {
-        "parser":       "powerbi",
-        "endpoint":     "https://wabi-australia-southeast-api.analysis.windows.net/public/reports/querydata?synchronous=true",
-        "model_id":     2556929,           # integer confirmed from /conceptualschema
-        "resource_key": "da2bf0d9-bd8a-41b5-a572-ad5c35acdf7e",
-
-        # ── Data model (confirmed from /conceptualschema + live probe) ────────
-        "entity":       "CurrentPatients",
-        "hospital_col": "Campus",          # WHERE Campus = '{filter_key}'
-        # Each campus has two rows (Adult / Paeds). We want Adult only.
-        "group_col":    "AdultPaed",
-        "group_target": "Adult",
-        # Columns to SELECT in the grouped query (order defines C array indices):
-        # [group_col, col_waiting, col_treating, col_wait_str]
-        "col_waiting":     "TotalWaiting",
-        "col_treating":    "TotalBeingTreated",
-        "col_wait_str":    "Estimated Time",     # returns "X hr Y min - X hr Y min"
-        "col_last_updated":"LastUpdatedDisplay", # returns "Last Updated: DD Mmm YY HH:MM"
-
-        # key = Campus filter value  →  value = canonical hospital name
-        "hospitals": {
-            "Casey":     "Casey Hospital",
-            "Clayton":   "Monash Medical Centre - Clayton",
-            "Dandenong": "Dandenong Hospital",
-        },
-    },
-}
+#
+# To add a new source: add an entry to hospitals.json and rows to hospitals.csv.
+# No Python changes required.
+with open(_JSON) as _jf:
+    _SOURCES_RAW: dict = {
+        k: v for k, v in json.load(_jf).items()
+        if not k.startswith("_")   # skip comment keys
+    }
 
 # Filter each source's hospital list to only active entries from the registry.
 # Disabling a hospital in hospitals.csv removes it from scraping automatically.
