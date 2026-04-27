@@ -158,12 +158,17 @@ function strainCls(v) {
   if (v < 1.00) return "strain-mid";
   return "strain-high";
 }
+function safeDate(utc) {
+  if (utc == null) return null;
+  try { const d = new Date(utc); return isNaN(d.getTime()) ? null : d; } catch(e) { return null; }
+}
 function localTime(utc) {
-  if (!utc) return "—";
-  const d = new Date(utc);
-  if (isNaN(d.getTime())) return "—";
-  return d.toLocaleTimeString("en-AU",
-    {timeZone:"Australia/Melbourne", hour:"2-digit", minute:"2-digit"});
+  const d = safeDate(utc);
+  if (!d) return "—";
+  try {
+    return d.toLocaleTimeString("en-AU",
+      {timeZone:"Australia/Melbourne", hour:"2-digit", minute:"2-digit"});
+  } catch(e) { return "—"; }
 }
 function fmtShort(m) {
   if (m == null || m <= 0) return null;
@@ -173,86 +178,101 @@ function fmtShort(m) {
 }
 
 function renderCard(s) {
-  const c    = light(s.predicted_wait_min, s.wait_momentum);
-  const a    = arrow(s.wait_momentum);
-  const sign = s.wait_momentum >= 0 ? "+" : "";
+  try {
+    const momentum  = s.wait_momentum      ?? 0;
+    const predicted = s.predicted_wait_min ?? 0;
+    const current   = s.current_wait_min   ?? 0;
+    const conf      = s.confidence         ?? 0;
 
-  const maxWait = s.max_wait_min != null ? s.max_wait_min : null;
-  const rangeHtml = maxWait != null
-    ? `<div class="wait-range">up to ${maxWait} min</div>`
-    : "";
+    const c    = light(predicted, momentum);
+    const a    = arrow(momentum);
+    const sign = momentum >= 0 ? "+" : "";
 
-  const diversionHtml = s.suggest_diversion ? `
-    <div class="diversion-banner">
-      <span class="diversion-icon">&#8644;</span>
-      <div class="diversion-body">
-        <strong>Consider directing to</strong>
-        <span class="divert-to">${s.diversion_to}</span>
-        <span class="divert-note">Lower current system strain</span>
-      </div>
-    </div>` : "";
+    const maxWait    = s.max_wait_min != null ? s.max_wait_min : null;
+    const rangeHtml  = maxWait != null
+      ? `<div class="wait-range">up to ${maxWait} min</div>`
+      : "";
 
-  const strainHtml = s.strain_index != null ? `
-    <div class="insight">
-      <span class="il">Strain Index</span>
-      <span class="iv ${strainCls(s.strain_index)}">${s.strain_index.toFixed(2)}&times;</span>
-    </div>` : "";
-
-  return `
-    <div class="card ${c}">
-      <div class="patient-headline">
-        <div class="card-header">
-          <div class="dot"></div>
-          <div class="hosp">${s.site}</div>
+    const diversionHtml = s.suggest_diversion ? `
+      <div class="diversion-banner">
+        <span class="diversion-icon">&#8644;</span>
+        <div class="diversion-body">
+          <strong>Consider directing to</strong>
+          <span class="divert-to">${s.diversion_to}</span>
+          <span class="divert-note">Lower current system strain</span>
         </div>
-        <div class="waits">
-          <div class="wb current">
-            <label>Now</label>
-            <span class="wv">${Math.round(s.current_wait_min)}</span>
-            <span class="wu">min</span>
-            ${rangeHtml}
+      </div>` : "";
+
+    const strainHtml = s.strain_index != null ? `
+      <div class="insight">
+        <span class="il">Strain Index</span>
+        <span class="iv ${strainCls(s.strain_index)}">${s.strain_index.toFixed(2)}&times;</span>
+      </div>` : "";
+
+    const html = `
+      <div class="card ${c}">
+        <div class="patient-headline">
+          <div class="card-header">
+            <div class="dot"></div>
+            <div class="hosp">${s.site}</div>
           </div>
-          <div class="wb predicted">
-            <label>In 60 min</label>
-            <span class="wv">${Math.round(s.predicted_wait_min)}</span>
-            <span class="wu">min</span>
+          <div class="waits">
+            <div class="wb current">
+              <label>Now</label>
+              <span class="wv">${Math.round(current)}</span>
+              <span class="wu">min</span>
+              ${rangeHtml}
+            </div>
+            <div class="wb predicted">
+              <label>In 60 min</label>
+              <span class="wv">${Math.round(predicted)}</span>
+              <span class="wu">min</span>
+            </div>
           </div>
-        </div>
-        <div class="trend">
-          <span class="${a.cls}">${a.sym}</span>
-          ${a.lbl} &nbsp;&middot;&nbsp; ${sign}${s.wait_momentum.toFixed(1)} min / 15 min
-        </div>
-        <div class="obs-meta">
-          <span class="badge ${confCls(s.confidence_label)}">
-            ${s.confidence_label} confidence &nbsp;${(s.confidence*100).toFixed(0)}%
-          </span>
-          <span>Last obs: ${localTime(s.latest_obs_utc)} AEST</span>
-        </div>
-      </div>
-      ${diversionHtml}
-      <div class="system-insights">
-        <div class="insights-label">System Insights</div>
-        <div class="insights-row">
-          ${strainHtml}
-          <div class="insight">
-            <span class="il">Momentum</span>
-            <span class="iv ${a.cls}">${sign}${s.wait_momentum.toFixed(1)}<small style="font-weight:400;font-size:.65rem"> min/15m</small></span>
+          <div class="trend">
+            <span class="${a.cls}">${a.sym}</span>
+            ${a.lbl} &nbsp;&middot;&nbsp; ${sign}${momentum.toFixed(1)} min / 15 min
           </div>
-          <div class="insight">
-            <span class="il">Source</span>
-            <span class="iv">${s.ctx_source}</span>
+          <div class="obs-meta">
+            <span class="badge ${confCls(s.confidence_label)}">
+              ${s.confidence_label} confidence &nbsp;${(conf * 100).toFixed(0)}%
+            </span>
+            <span>Last obs: ${localTime(s.latest_obs_utc)} AEST</span>
           </div>
         </div>
-      </div>
-    </div>`;
+        ${diversionHtml}
+        <div class="system-insights">
+          <div class="insights-label">System Insights</div>
+          <div class="insights-row">
+            ${strainHtml}
+            <div class="insight">
+              <span class="il">Momentum</span>
+              <span class="iv ${a.cls}">${sign}${momentum.toFixed(1)}<small style="font-weight:400;font-size:.65rem"> min/15m</small></span>
+            </div>
+            <div class="insight">
+              <span class="il">Source</span>
+              <span class="iv">${s.ctx_source ?? "—"}</span>
+            </div>
+          </div>
+        </div>
+      </div>`;
+    console.log('Successfully parsed data for', s.site);
+    return html;
+  } catch(e) {
+    console.error('Failed to render card for', s?.site, e);
+    return `<div class="card"><div class="patient-headline">
+      <div class="card-header"><div class="dot"></div><div class="hosp">${s?.site ?? 'Unknown'}</div></div>
+      <div class="trend" style="color:#e53935;font-size:.78rem;margin-top:.5rem">Data temporarily unavailable</div>
+    </div></div>`;
+  }
 }
 
 function renderDashboard(outlook) {
   _lastOutlook = outlook;
-  const genDate = new Date(outlook.generated_utc);
-  document.getElementById("gt").textContent = isNaN(genDate.getTime())
-    ? "—"
-    : genDate.toLocaleString("en-AU", {timeZone:"Australia/Melbourne"});
+  const genDate = safeDate(outlook.generated_utc);
+  document.getElementById("gt").textContent = genDate
+    ? genDate.toLocaleString("en-AU", {timeZone:"Australia/Melbourne"})
+    : "Recently";
 
   const groups = {};
   outlook.sites.forEach(s => { (groups[s.network] = groups[s.network] || []).push(s); });
@@ -268,7 +288,8 @@ function renderDashboard(outlook) {
 }
 
 function checkStale(outlook) {
-  const genMs            = new Date(outlook.generated_utc).getTime();
+  const _gen             = safeDate(outlook.generated_utc);
+  const genMs            = _gen ? _gen.getTime() : Date.now();
   const minsSincePublish = (Date.now() - genMs) / 60000;
   const dataAge          = Math.max(...outlook.sites.map(s => s.heartbeat_age_mins ?? 0));
   const totalAge         = dataAge + minsSincePublish;
