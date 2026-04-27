@@ -40,7 +40,6 @@ PUBLISHER_TMPDIR = pathlib.Path("/tmp/publisher")   # staging clone for data bra
 _MELB                  = ZoneInfo("Australia/Melbourne")
 OPERATIONAL_START_H    = 6     # 06:00 Melbourne — before this, skip and exit
 OPERATIONAL_END_H      = 23    # 23:00 Melbourne — after this, skip and exit
-DIVERSION_STRAIN_DELTA = 0.40  # strain_index gap that triggers a diversion suggestion
 
 # ── Traffic-light helper ──────────────────────────────────────────────────────
 
@@ -117,36 +116,11 @@ def push_to_data_branch(json_path: pathlib.Path) -> None:
     _git("git push --force origin HEAD:data", PUBLISHER_TMPDIR)
     print(f"  Force-pushed latest.json → data branch ({stamp})")
 
-# ── Strain index + diversion ──────────────────────────────────────────────────
+# ── Strain index ──────────────────────────────────────────────────────────────
 
 def compute_strain_index(predicted_wait: float, p90: float) -> float:
     """Predicted wait normalised against historical p90. >1.0 means above normal load."""
     return round(predicted_wait / max(1.0, p90), 3)
-
-
-def annotate_diversion(sites: list) -> None:
-    """
-    Mutates site dicts in place.
-    Diversion is only meaningful within the same health network — comparisons
-    are scoped per-network. Cross-network suggestions are never generated.
-    """
-    by_network: dict[str, list] = {}
-    for s in sites:
-        by_network.setdefault(s.get("network", ""), []).append(s)
-
-    for network_sites in by_network.values():
-        if len(network_sites) < 2:
-            for s in network_sites:
-                s["suggest_diversion"] = False
-            continue
-        least = min(network_sites, key=lambda s: s["strain_index"])
-        for s in network_sites:
-            gap = s["strain_index"] - least["strain_index"]
-            if s is not least and gap >= DIVERSION_STRAIN_DELTA:
-                s["suggest_diversion"] = True
-                s["diversion_to"]      = least["site"]
-            else:
-                s["suggest_diversion"] = False
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────
@@ -209,8 +183,6 @@ def main() -> None:
         )
         sites.append(outlook)
 
-    annotate_diversion(sites)
-
     payload = {
         "generated_utc": generated_utc_str,
         "horizon_min":   60,
@@ -227,15 +199,14 @@ def main() -> None:
     print(f"  {'Hospital':<26} {'Now':>5}  {'60min':>5}  {'Momentum':>9}  Conf   Color")
     print(f"  {'─'*26} {'─'*5}  {'─'*5}  {'─'*9}  {'─'*5}  {'─'*5}")
     for s in sites:
-        sign   = "+" if s["wait_momentum"] >= 0 else ""
-        divert = f"  → divert to {s['diversion_to']}" if s.get("suggest_diversion") else ""
+        sign = "+" if s["wait_momentum"] >= 0 else ""
         print(
             f"  {s['site']:<26} {s['current_wait_min']:>4.0f}m "
             f" {s['predicted_wait_min']:>4.0f}m "
             f" {sign}{s['wait_momentum']:>+6.1f}/15m "
             f" {s['confidence_label']:<8} "
             f" strain={s['strain_index']:.2f} "
-            f" {colour_icon.get(s['color'], s['color'])}{divert}"
+            f" {colour_icon.get(s['color'], s['color'])}"
         )
     print(f"\n  latest.json → {args.out}")
 

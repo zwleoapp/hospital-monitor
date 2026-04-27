@@ -166,3 +166,59 @@ This is the simplest possible public surface: no servers, no DNS, no inbound on 
 ## 9. Change log
 
 - **1.0 (2026-04-25)** — Restructured around Phase 1 / Phase 2. Added data-safety posture and ML lifecycle. Replaces SSOT v0.2.
+- **1.1 (2026-04-27)** — Merged dashboard design reference (Dual-Clock, Tiered Stale, Vercel). Removed diversion UI.
+
+---
+
+## 10. Dashboard & Operational Design
+
+### Dual-Clock Freshness System
+
+Two independent clocks govern data freshness. They measure different things and can fail independently.
+
+| Clock | Source field | What it measures |
+|---|---|---|
+| **Global Pi Heartbeat** | `generated_utc` (top-level) | When the Pi last ran `publish_latest.py` and pushed a new JSON |
+| **Per-Hospital Observation** | `heartbeat_age_mins` (per site) | How old each hospital's latest scraped observation is at publish time |
+
+**Why two clocks?** The Pi can publish a fresh JSON (heartbeat alive) but still carry stale observations if a single hospital's dashboard was temporarily unavailable, a per-hospital scraper failed, or the scraper ran but recorded no new value. Conversely, per-hospital observations can be recent while the Pi has not yet published (outside operational hours or mid-cycle). `heartbeat_age_mins` is always computed relative to `generated_utc`, not wall-clock time, so it stays stable once published.
+
+### Tiered Stale Thresholds
+
+| Tier | Condition | UI Effect |
+|---|---|---|
+| **Fresh** | `heartbeat_age_mins ≤ 60` | Normal card rendering |
+| **Hospital Stale** | `heartbeat_age_mins > 60` per site | `.stale-card`: 0.7 opacity, light-red border, ⚠️ STALE badge in footer |
+| **Network Stale (global)** | **All** hospitals `> 60 mins` | Top red banner: "ALL DATA STALE — Pi may be offline" |
+
+**Why 60 minutes?** The Pi scrapes every 15 min. A 60-min threshold tolerates up to 3 missed cycles before flagging. If the Pi is offline entirely, all hospitals cross 60 min together and the global banner fires. If only one hospital is stale, its card is individually marked but the dashboard stays usable.
+
+The global banner is a "Pi offline" signal, not a "some data is old" signal — individual stale cards handle the latter.
+
+### Network Layout
+
+Hospitals are grouped by network and rendered in fixed order:
+
+1. **Monash Health** — Casey Hospital, Dandenong Hospital, Monash Medical Centre - Clayton
+2. **Eastern Health** — Box Hill Hospital, Angliss Hospital, Maroondah Hospital
+
+### Trend Leaderboard
+
+A sidebar panel (desktop) / top horizontal slider (mobile) ranks the top 3 hospitals with the highest negative `wait_momentum` (fastest-improving waits). Hospitals with `wait_momentum ≥ −1` are excluded as noise. The panel is labelled **⚡ Quickest Improvements**.
+
+### Vercel Deployment
+
+- Production branch: `data`
+- Pi force-pushes `latest.json` + `index.html` + `vercel.json` to `data` on every publish cycle
+- `vercel.json` sets `Cache-Control: no-cache, no-store, must-revalidate` on `/latest.json`
+- Browser receives fresh JSON within ~30 s of Pi push, not the 5-min CDN lag of raw GitHub URLs
+- Dashboard auto-refreshes every 5 min; stale-check re-runs every 60 s against the in-memory object
+
+### Key UI Constants
+
+| Constant | File | Purpose |
+|---|---|---|
+| `HOSPITAL_STALE_MINS` | `docs/index.html` | Per-hospital stale threshold (60 min) |
+| `NETWORK_ORDER` | `docs/index.html` | Fixed network display order |
+| `OPERATIONAL_START_H / END_H` | `scripts/publish_latest.py` | Publish hours gate (06:00–23:00 Melbourne) |
+| `MOMENTUM_DAMPING` | `scripts/predict_next.py` | Dampens trend extrapolation |

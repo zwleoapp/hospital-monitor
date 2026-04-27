@@ -227,8 +227,9 @@ def _scrape_powerbi_source(source_key: str, cfg: dict, timestamp: str) -> list:
         "cancelQueries": [],
         "modelId": model_id,
     }
+    ts = int(datetime.now(timezone.utc).timestamp())
     resp = requests.post(
-        endpoint, json=payload,
+        f"{endpoint}&t={ts}", json=payload,
         headers={"Content-Type": "application/json",
                  "X-PowerBI-ResourceKey": resource_key},
         impersonate="chrome120", timeout=30,
