@@ -47,14 +47,14 @@
       border-left:4px solid var(--green);
       padding:.85rem 1rem;margin-bottom:.75rem;
     }
-    .lb-rank{font-size:.58rem;font-weight:700;color:var(--green);
+    .lb-rank{font-size:.7rem;font-weight:700;color:var(--green);
              text-transform:uppercase;letter-spacing:.07em;margin-bottom:.12rem}
-    .lb-hosp{font-size:.88rem;font-weight:700;color:#1a1a2e;line-height:1.3;margin-bottom:.08rem}
-    .lb-net{font-size:.62rem;color:#bbb;margin-bottom:.35rem}
-    .lb-momentum{font-size:1.05rem;font-weight:800;color:var(--green);line-height:1;margin-bottom:.15rem}
-    .lb-momentum small{font-size:.62rem;font-weight:400;color:#888}
-    .lb-wait{font-size:.68rem;color:#888}
-    .lb-empty,.lb-loading{font-size:.73rem;color:#ccc;text-align:center;padding:.8rem 0}
+    .lb-hosp{font-size:1.0rem;font-weight:600;color:#1a1a2e;line-height:1.3;margin-bottom:.08rem}
+    .lb-net{font-size:.74rem;color:#bbb;margin-bottom:.35rem}
+    .lb-momentum{font-size:1.2rem;font-weight:800;color:var(--green);line-height:1;margin-bottom:.15rem}
+    .lb-momentum small{font-size:.74rem;font-weight:400;color:#888}
+    .lb-wait{font-size:.82rem;color:#888}
+    .lb-empty,.lb-loading{font-size:.87rem;color:#ccc;text-align:center;padding:.8rem 0}
 
     .loading{text-align:center;color:#bbb;padding:3rem;font-size:.9rem}
     .fetch-error{
@@ -152,14 +152,18 @@
     .strain-low{color:var(--green)}
     .strain-mid{color:var(--amber)}
     .strain-high{color:var(--red)}
-    footer{text-align:center;font-size:.67rem;color:#ccc;margin-top:1.5rem}
-    footer a{color:#ccc}
+    footer{
+      text-align:center;font-size:.72rem;color:#999;margin-top:2rem;
+      padding:1.2rem 1rem;border-top:1px solid #e8e8e8;line-height:1.9;
+    }
+    .footer-disclaimer{font-weight:600;color:#777;margin-top:.2rem}
+    footer a{color:#999}
 
     /* ── Mobile: leaderboard becomes top slider ─────────────────────────────── */
     @media(max-width:640px){
       #main-layout{flex-direction:column}
       #leaderboard{width:100%;order:-1}
-      #lb-list{
+      #lb-shortest,#lb-clearing{
         display:flex;overflow-x:auto;gap:.7rem;
         padding-bottom:.5rem;
         scroll-snap-type:x mandatory;
@@ -208,15 +212,21 @@
 <div id="main-layout">
   <div id="grid"><div class="loading">Loading data&hellip;</div></div>
   <div id="leaderboard">
-    <div class="lb-title">&#9889; Quickest Improvements</div>
-    <div id="lb-list"><div class="lb-loading">—</div></div>
+    <div class="lb-title">Shortest Wait</div>
+    <div id="lb-shortest"><div class="lb-loading">—</div></div>
+    <div class="lb-title" style="margin-top:1.1rem">&#8595; Fastest Clearing</div>
+    <div id="lb-clearing"><div class="lb-loading">—</div></div>
   </div>
 </div>
 
 <footer>
-  Phase 1 heuristic baseline &mdash; accuracy improves as the ML model trains.
-  &nbsp;&middot;&nbsp; Raspberry Pi scraper &middot; Vercel dashboard &middot;
-  <a href="https://github.com/zwleoapp/hospital-monitor">github.com/zwleoapp/hospital-monitor</a>
+  <div>Raw data sourced via Monash Health &amp; Eastern Health public feeds.</div>
+  <div>Trends and predictions calculated by Melbourne ED Monitor Engine.</div>
+  <div class="footer-disclaimer">Not an official hospital tool. For informational use only.</div>
+  <div style="margin-top:.5rem;font-size:.66rem">
+    Raspberry Pi scraper &middot; Vercel dashboard &middot;
+    <a href="https://github.com/zwleoapp/hospital-monitor">github.com/zwleoapp/hospital-monitor</a>
+  </div>
 </footer>
 
 <script>
@@ -355,17 +365,13 @@ function renderCard(s) {
           <div class="insights-label">Pro / Paramedic View</div>
           <div class="insights-row">
             <div class="insight">
-              <span class="il">60 min forecast</span>
+              <span class="il">Arrival Prediction</span>
               <span class="iv">${Math.round(predicted)} min</span>
             </div>
             ${strainHtml}
             <div class="insight">
-              <span class="il">Momentum</span>
-              <span class="iv ${a.cls}">${sign}${momentum.toFixed(1)}<small style="font-weight:400;font-size:.65rem"> /15m</small></span>
-            </div>
-            <div class="insight">
-              <span class="il">Source</span>
-              <span class="iv">${s.ctx_source ?? "—"}</span>
+              <span class="il">Clearing Speed</span>
+              <span class="iv ${a.cls}">${a.sym} ${sign}${momentum.toFixed(1)}<small style="font-weight:400;font-size:.65rem"> /15m</small></span>
             </div>
           </div>
         </div>
@@ -382,30 +388,55 @@ function renderCard(s) {
 }
 
 function renderLeaderboard(sites) {
-  const improving = [...sites]
-    .filter(s => (s.wait_momentum ?? 0) < -1)
-    .sort((a, b) => (a.wait_momentum ?? 0) - (b.wait_momentum ?? 0))
+  const lbShortest = document.getElementById("lb-shortest");
+  const lbClearing = document.getElementById("lb-clearing");
+  if (!lbShortest || !lbClearing) return;
+
+  // Shortest Wait: top 3 by current_wait_min ascending
+  const shortest = [...sites]
+    .filter(s => (s.current_wait_min ?? 0) > 0)
+    .sort((a, b) => (a.current_wait_min ?? 0) - (b.current_wait_min ?? 0))
     .slice(0, 3);
 
-  const lbList = document.getElementById("lb-list");
-  if (!lbList) return;
-
-  if (improving.length === 0) {
-    lbList.innerHTML = '<div class="lb-empty">No improving trends right now</div>';
-    return;
+  if (shortest.length === 0) {
+    lbShortest.innerHTML = '<div class="lb-empty">No data</div>';
+  } else {
+    const colorVar = c => c === "green" ? "var(--green)" : c === "amber" ? "var(--amber)" : "var(--red)";
+    lbShortest.innerHTML = shortest.map((s, i) => {
+      const c = light(s.current_wait_min ?? 0, s.wait_momentum ?? 0);
+      const cv = colorVar(c);
+      return `
+        <div class="lb-card" style="border-left-color:${cv}">
+          <div class="lb-rank">#${i + 1}</div>
+          <div class="lb-hosp">${s.site}</div>
+          <div class="lb-net">${s.network ?? ""}</div>
+          <div class="lb-momentum" style="color:${cv}">${fmtShort(s.current_wait_min) ?? "—"}</div>
+          <div class="lb-wait">${s.waiting_count ?? 0} waiting</div>
+        </div>`;
+    }).join("");
   }
 
-  lbList.innerHTML = improving.map((s, i) => {
-    const m = (s.wait_momentum ?? 0).toFixed(1);
-    return `
-      <div class="lb-card">
-        <div class="lb-rank">#${i + 1}</div>
-        <div class="lb-hosp">${s.site}</div>
-        <div class="lb-net">${s.network ?? ""}</div>
-        <div class="lb-momentum">${m} <small>min/15m</small></div>
-        <div class="lb-wait">${s.waiting_count ?? 0} waiting &middot; ~${Math.round(s.current_wait_min ?? 0)} min</div>
-      </div>`;
-  }).join("");
+  // Fastest Clearing: top 2 by most negative momentum
+  const clearing = [...sites]
+    .filter(s => (s.wait_momentum ?? 0) < -1)
+    .sort((a, b) => (a.wait_momentum ?? 0) - (b.wait_momentum ?? 0))
+    .slice(0, 2);
+
+  if (clearing.length === 0) {
+    lbClearing.innerHTML = '<div class="lb-empty">No improving trends right now</div>';
+  } else {
+    lbClearing.innerHTML = clearing.map((s, i) => {
+      const m = (s.wait_momentum ?? 0).toFixed(1);
+      return `
+        <div class="lb-card">
+          <div class="lb-rank">#${i + 1}</div>
+          <div class="lb-hosp">${s.site}</div>
+          <div class="lb-net">${s.network ?? ""}</div>
+          <div class="lb-momentum">&#8595; ${m} <small>min/15m</small></div>
+          <div class="lb-wait">${s.waiting_count ?? 0} waiting &middot; ~${Math.round(s.current_wait_min ?? 0)} min</div>
+        </div>`;
+    }).join("");
+  }
 }
 
 function renderDashboard(outlook) {
