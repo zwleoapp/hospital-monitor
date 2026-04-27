@@ -91,9 +91,20 @@ def push_to_data_branch(json_path: pathlib.Path) -> None:
     import shutil
     shutil.copy(json_path, PUBLISHER_TMPDIR / "latest.json")
 
+    # Vercel: no-cache so the browser always gets the freshest file
+    vercel_config = {
+        "headers": [
+            {
+                "source": "/latest.json",
+                "headers": [{"key": "Cache-Control", "value": "no-cache, no-store, must-revalidate"}]
+            }
+        ]
+    }
+    (PUBLISHER_TMPDIR / "vercel.json").write_text(json.dumps(vercel_config, indent=2))
+
     stamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     try:
-        _git("git add latest.json", PUBLISHER_TMPDIR)
+        _git("git add latest.json vercel.json", PUBLISHER_TMPDIR)
         _git(f'git commit -m "data: outlook {stamp}"', PUBLISHER_TMPDIR)
     except RuntimeError as e:
         if "nothing to commit" in str(e):
