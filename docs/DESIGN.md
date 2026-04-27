@@ -1,6 +1,6 @@
 # DESIGN — Predictive ED Wait Time Engine
 
-**Version:** 1.0 · **Updated:** 2026-04-25 · **Owner:** G
+**Version:** 1.2 · **Updated:** 2026-04-27 · **Owner:** G
 
 > This document is the **Single Source of Truth (SSOT)**. Every architectural change updates this doc *before* the code is merged. Both Gemini (strategy) and Claude (DS co-design / tactical execution) read it on every session.
 
@@ -163,14 +163,58 @@ This is the simplest possible public surface: no servers, no DNS, no inbound on 
 
 ---
 
-## 9. Change log
+## 9. Config-Driven Architecture
 
-- **1.0 (2026-04-25)** — Restructured around Phase 1 / Phase 2. Added data-safety posture and ML lifecycle. Replaces SSOT v0.2.
-- **1.1 (2026-04-27)** — Merged dashboard design reference (Dual-Clock, Tiered Stale, Vercel). Removed diversion UI.
+### Principle: Separate Logic from Parameters
+
+The scraper engine is generic. Adding a new hospital network requires no Python changes — only config and registry edits.
+
+```
+config/
+  hospitals.csv    — per-hospital registry (name, network, codes, is_active)
+  hospitals.json   — per-source connection details (URLs, PBI keys, column names)
+  hospitals.py     — adapter: merges both files → exposes SOURCES (active-filtered)
+
+scripts/
+  hospital_monitor.py  — generic engine: reads SOURCES, dispatches by parser type
+```
+
+### Config Files Role
+
+| File | Owns | Change trigger |
+|---|---|---|
+| `hospitals.csv` | Which hospitals exist; their network, AIHW code, active flag | Add/rename/deactivate a hospital |
+| `hospitals.json` | How to reach each source (URL, PBI endpoint, model_id, column names) | Credential rotation, new scraper type, PBI schema change |
+| `hospitals.py` | Python view of the above; `SOURCES`, `HOSPITAL_NETWORK`, etc. | Never — it's derived |
+
+### Adding a New Network
+
+1. Add rows to `hospitals.csv` with `is_active=true`
+2. Add a source block to `hospitals.json` with the correct `parser` type
+3. Run `python3 scripts/hospital_monitor.py` to verify scraping
+
+### Parser Types
+
+| `parser` value | Pattern | Key config fields |
+|---|---|---|
+| `html_js` | Page embeds `const patientCounts` + `const predictedWaitMinutes` (Eastern Health) | `url`, `hospitals` (JS key → formal name) |
+| `powerbi` | Power BI Embedded batch API (`/querydata`) | `endpoint`, `model_id`, `resource_key`, `entity`, column names, `group_col`/`group_target` for Adult vs Paeds split |
+
+### Power BI Adult/Paeds Isolation
+
+Monash campuses return rows for both Adult and Paeds populations. The engine builds a **grouped query** (SemanticQueryDataShapeCommand with `group_col = "AdultPaed"`) and picks only the `group_target = "Adult"` row. This uses DSR delta-decoding to handle compressed repeat rows. Column G4 (`LastUpdatedDisplay`) carries the native hospital freshness timestamp, written to a sidecar JSON at publish time.
 
 ---
 
-## 10. Dashboard & Operational Design
+## 10. Change log
+
+- **1.0 (2026-04-25)** — Restructured around Phase 1 / Phase 2. Added data-safety posture and ML lifecycle. Replaces SSOT v0.2.
+- **1.1 (2026-04-27)** — Merged dashboard design reference (Dual-Clock, Tiered Stale, Vercel). Removed diversion UI.
+- **1.2 (2026-04-27)** — Config-driven architecture: connection details extracted to `config/hospitals.json`; `hospitals.py` becomes a thin adapter; engine unchanged. Documented parser types and PBI Adult/Paeds isolation.
+
+---
+
+## 11. Dashboard & Operational Design
 
 ### Dual-Clock Freshness System
 

@@ -1,0 +1,38 @@
+{
+  "_comment": "Scraper connection details per source group. Credentials here are public (Power BI Embedded resource keys). Per-hospital registry lives in hospitals.csv.",
+
+  "eastern_health": {
+    "parser": "html_js",
+    "url": "https://waittime.easternhealth.org.au/",
+    "hospitals": {
+      "BoxHill":   "Box Hill Hospital",
+      "Angliss":   "Angliss Hospital",
+      "Maroondah": "Maroondah Hospital"
+    }
+  },
+
+  "monash_health": {
+    "parser": "powerbi",
+    "endpoint": "https://wabi-australia-southeast-api.analysis.windows.net/public/reports/querydata?synchronous=true",
+    "model_id": 2556929,
+    "resource_key": "da2bf0d9-bd8a-41b5-a572-ad5c35acdf7e",
+
+    "_data_model_comment": "Confirmed from /conceptualschema + live probe 2026-04-27",
+    "entity":       "CurrentPatients",
+    "hospital_col": "Campus",
+    "group_col":    "AdultPaed",
+    "group_target": "Adult",
+
+    "_columns_comment": "G0=group_col G1=waiting G2=treating G3=wait_str G4=last_updated (optional)",
+    "col_waiting":      "TotalWaiting",
+    "col_treating":     "TotalBeingTreated",
+    "col_wait_str":     "Estimated Time",
+    "col_last_updated": "LastUpdatedDisplay",
+
+    "hospitals": {
+      "Casey":     "Casey Hospital",
+      "Clayton":   "Monash Medical Centre - Clayton",
+      "Dandenong": "Dandenong Hospital"
+    }
+  }
+}
