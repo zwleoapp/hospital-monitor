@@ -145,7 +145,7 @@
     .p90-safety-net strong{color:#9a8040}
 
     /* ── Triage benchmark chips (VAHI quarterly) ─────────────────────────────── */
-    .triage-bench{display:flex;gap:.45rem;margin-bottom:.65rem}
+    .triage-bench{display:flex;gap:.45rem;margin-top:.65rem;margin-bottom:.65rem}
     .tb-chip{
       flex:1;border-radius:6px;padding:.38rem .55rem;
       display:flex;flex-direction:column;gap:.06rem;
@@ -216,6 +216,14 @@
     .overall-forecast-row{display:flex;align-items:baseline;gap:.55rem;flex-wrap:wrap;margin-bottom:.18rem}
     .overall-forecast-row .overall-metric{margin-bottom:0}
     .forecast-inline{font-size:.75rem;font-weight:700;color:#5b72b5;white-space:nowrap}
+
+    /* ── Command-centre row: large current + 60m values with inline timestamp ── */
+    .cmd-row{display:flex;align-items:center;gap:.55rem;margin:.35rem 0 .55rem;flex-wrap:wrap}
+    .cmd-label{font-size:.62rem;color:#9090a8;font-weight:600;text-transform:uppercase;letter-spacing:.05em;white-space:nowrap}
+    .cmd-val{font-size:1.5rem;font-weight:800;color:#1a1a2e;line-height:1}
+    .cmd-forecast-val{font-size:1.5rem;font-weight:800;color:#5b72b5;line-height:1}
+    .cmd-sep{font-size:.7rem;color:#bbb;white-space:nowrap}
+    .cmd-time{font-size:.62rem;color:#bbb;margin-left:auto;white-space:nowrap}
 
     /* ── History mode ────────────────────────────────────────────────────────── */
     #hist-banner{
@@ -602,7 +610,7 @@ function triageTag(usual, estimate) {
   return "→ Near usual";
 }
 function currentVahiQLabel() {
-  return "Q" + (Math.floor(new Date().getMonth() / 3) + 1);
+  return (_lastOutlook?.vahi_qly_label) || ("Q" + (Math.floor(new Date().getMonth() / 3) + 1));
 }
 
 // ── Card renderer ─────────────────────────────────────────────────────────────
@@ -670,8 +678,11 @@ function renderCard(s) {
     const maxWaitPairingHtml = s.max_wait_min != null
       ? `<span class="max-wait-pairing">Max&nbsp;${fmtShort(s.max_wait_min) ?? "—"}${_maxRatio != null ? `&thinsp;<small>(${_maxRatio.toFixed(1)}&times;)</small>` : ""}</span>`
       : "";
-    const crisisHtml   = (_maxRatio != null && _maxRatio > 1.5)
-      ? `<div class="crisis-headline ${_maxCritical ? 'crisis-very-long' : 'crisis-long'}">&#9888; ${_maxCritical ? 'VERY LONG WAIT' : 'LONG WAIT'}</div>`
+    // Crisis triggered by current wait vs P90: amber ≥80%, red ≥100%
+    const _crisisAmber    = p90Mins != null && current >= p90Mins * 0.80;
+    const _crisisCritical = p90Mins != null && current >= p90Mins;
+    const crisisHtml = _crisisAmber
+      ? `<div class="crisis-headline ${_crisisCritical ? 'crisis-very-long' : 'crisis-long'}">&#9888; ${_crisisCritical ? 'VERY LONG WAIT' : 'LONG WAIT'}</div>`
       : "";
 
     const accuracy = getForecastAccuracy(s.site, current);
@@ -728,17 +739,20 @@ function renderCard(s) {
               <div class="count-hero${treatingCount != null ? "" : " count-na"}">${treatingCount ?? "—"}</div>
             </div>
           </div>
+          <div class="cmd-row">
+            <span class="cmd-label">All &middot; Now</span>
+            <span class="cmd-val">${fmtShort(current) ?? current + "m"}</span>
+            <span class="cmd-sep">&rarr;&nbsp;60m</span>
+            <span class="cmd-forecast-val">&#128302;&nbsp;${Math.round(predicted)}m</span>
+            ${hospTimeParsed ? `<span class="cmd-time">&#128336;&thinsp;${hospTimeParsed.time}&thinsp;AEST</span>` : ""}
+          </div>
           <div class="obs-meta" style="margin-bottom:.4rem">
             <span class="badge ${confCls(s.confidence_label)}">${s.confidence_label} confidence &nbsp;${(conf * 100).toFixed(0)}%</span>
             ${accuracyBadgeHtml}
           </div>
           <div class="p90-maxwait-row">
-            ${p90Mins != null ? `<div class="p90-badge">&#128737; <span class="p90-badge-val">${p90Mins}m</span> (9&#8209;in&#8209;10 possibility)</div>` : ""}
+            ${p90Mins != null ? `<div class="p90-badge">&#128737; <span class="p90-badge-val">${p90Mins}m</span> (9&#8209;in&#8209;10 &middot; VAHI&nbsp;Qly)</div>` : ""}
             ${maxWaitPairingHtml}
-          </div>
-          <div class="overall-forecast-row">
-            <div class="overall-metric">All categories &middot; current: <strong>${fmtShort(current) ?? current + "m"}</strong></div>
-            <span class="forecast-inline">&#128302; ${Math.round(predicted)}m in&nbsp;60m</span>
           </div>
           ${crisisHtml || `<div class="trend"><span class="${a.cls}">${a.sym}</span> ${a.lbl}</div>`}
           ${triageBenchHtml}
