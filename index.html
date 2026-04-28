@@ -128,13 +128,14 @@
     .hc-divider{border-right:1px solid #ebebeb;padding-right:1.1rem;margin-right:1.1rem}
     .hc-minor-col{flex:1 1 auto}
     .hero-sub{font-size:.6rem;text-transform:uppercase;letter-spacing:.07em;
-              color:#aaa;font-weight:600;margin-bottom:.1rem}
+              color:#aaa;font-weight:600;margin-bottom:.1rem;
+              display:flex;align-items:center;flex-wrap:wrap;gap:.18rem}
     .hero-sub-primary{color:#1a1a2e;font-weight:700}
     /* Minor is largest (most likely patient type); urgent is bold but smaller */
     .hero-val{font-size:1.75rem;font-weight:800;line-height:1;color:#1a1a2e}
     .hero-val-primary{font-size:2.2rem}
     /* Patient count — 20% smaller than original (1.45rem → 1.16rem) */
-    .count-hero{font-size:1.16rem;font-weight:700;color:#6b7280}
+    .count-hero{font-size:1.75rem;font-weight:800;line-height:1;color:#6b7280}
     .count-na{color:#c8c8d4;font-style:italic}
     /* 90th-percentile lines */
     .p90-line{font-size:.63rem;color:#aaa;margin-bottom:.18rem}
@@ -206,10 +207,10 @@
     .crisis-long{color:var(--amber)}
     .crisis-very-long{color:var(--red)}
     .insights-subheader{font-size:.52rem;text-transform:uppercase;letter-spacing:.1em;color:#ccc;font-weight:700;margin:.55rem 0 .3rem}
-    .hero-sub-cat{font-size:.5rem;opacity:.55;display:block;letter-spacing:.07em;text-transform:uppercase;margin-top:.1rem}
+    .hero-sub-cat{font-size:.5rem;opacity:.55;flex-basis:100%;letter-spacing:.07em;text-transform:uppercase;margin-top:.1rem}
     .p90-maxwait-row{display:flex;align-items:center;gap:.55rem;flex-wrap:wrap;margin-bottom:.3rem}
     .p90-maxwait-row .p90-badge{margin:0}
-    .max-wait-pairing{font-size:.6rem;font-weight:700;color:#6a6a80;white-space:nowrap}
+    .max-wait-pairing{font-size:.85rem;font-weight:700;color:#6a6a80;white-space:nowrap}
     .max-wait-pairing small{font-weight:400;color:#9090a8}
     .overall-forecast-row{display:flex;align-items:baseline;gap:.55rem;flex-wrap:wrap;margin-bottom:.18rem}
     .overall-forecast-row .overall-metric{margin-bottom:0}
@@ -689,13 +690,13 @@ function renderCard(s) {
       const qLabel    = currentVahiQLabel();
       triageBenchHtml = `
         <div class="triage-bench">
-          <div class="tb-chip ${triageCls(medCat45, minorCmp)}">
-            <span class="tb-cat">Minor (Cat 4&ndash;5)</span>
-            <span class="tb-usual">${medCat45 != null ? `Median ${medCat45}m<span class="tb-qsrc">(YoY VAHI ${qLabel})</span>` : "—"}</span>
-          </div>
           <div class="tb-chip ${triageCls(medCat123, urgentCmp)}">
             <span class="tb-cat">Urgent (Cat 1&ndash;3)</span>
             <span class="tb-usual">${medCat123 != null ? `Median ${medCat123}m<span class="tb-qsrc">(YoY VAHI ${qLabel})</span>` : "—"}</span>
+          </div>
+          <div class="tb-chip ${triageCls(medCat45, minorCmp)}">
+            <span class="tb-cat">Minor (Cat 4&ndash;5)</span>
+            <span class="tb-usual">${medCat45 != null ? `Median ${medCat45}m<span class="tb-qsrc">(YoY VAHI ${qLabel})</span>` : "—"}</span>
           </div>
         </div>`;
     }
@@ -714,8 +715,8 @@ function renderCard(s) {
               <div class="hero-val">${urgentEst != null ? fmtShort(urgentEst) ?? "—" : fmtShort(current) ?? "—"}</div>
             </div>
             <div class="hero-col hc-divider hc-minor-col">
-              <div class="hero-sub hero-sub-primary">MINOR<span class="hero-sub-cat">Cat 4&ndash;5</span></div>
-              <div class="hero-val hero-val-primary${minorHasRange ? ' minor-has-range' : ''}">${minorRangeHtml}</div>
+              <div class="hero-sub">MINOR<span class="hero-sub-cat">Cat 4&ndash;5</span></div>
+              <div class="hero-val${minorHasRange ? ' minor-has-range' : ''}">${minorRangeHtml}</div>
             </div>
             <div class="hero-col hc-divider">
               <div class="hero-sub">&#128100; Waiting</div>
@@ -897,6 +898,7 @@ function renderDashboard(outlook) {
   renderLeaderboard(outlook.sites);
   storeForecast(outlook.sites);
   checkStale(outlook);
+  updateHistNav();
 }
 
 function checkStale(outlook) {
