@@ -1,6 +1,6 @@
 # DESIGN — Predictive ED Wait Time Engine
 
-**Version:** 1.2 · **Updated:** 2026-04-27 · **Owner:** G
+**Version:** 1.3 · **Updated:** 2026-04-28 · **Owner:** G
 
 > This document is the **Single Source of Truth (SSOT)**. Every architectural change updates this doc *before* the code is merged. Both Gemini (strategy) and Claude (DS co-design / tactical execution) read it on every session.
 
@@ -206,15 +206,71 @@ Monash campuses return rows for both Adult and Paeds populations. The engine bui
 
 ---
 
-## 10. Change log
+## 10. Seasonal Benchmark Computation
+
+VAHI publishes quarterly ED performance data. From Q1-2026 onward, real data for new quarters is not yet available; `transform_silver.py` forward-fills Q4-2025 values as VAHI_PROXY rows. These are seasonally incorrect (e.g. Box Hill Q4 p90=89m used as a Q1/Q2 benchmark when Q2 actual is ~80m).
+
+### Year-over-Year (YoY) Seasonal Averaging
+
+`_compute_seasonal_benchmarks()` in `transform_silver.py` computes the seasonal correction:
+
+```
+For each (hospital, quarter_of_year):
+    avg(wait_p90_mins, wait_median_cat123_mins, wait_median_cat45_mins)
+    across all real VAHI rows (source == 'VAHI')
+```
+
+Quarter-of-year (`_qoy`) is derived from the **Bronze timestamp** (not the VAHI `quarter_start_utc`), so PROXY rows (which technically begin in Q4 but cover Q1-Q2) are corrected to the seasonal average for the actual observation month.
+
+**Fallback logic:** `combine_first()` — seasonal average overrides exact-quarter value; falls back to exact-quarter if no seasonal data exists.
+
+**Q1–Q2 2026 effect (example, Box Hill):**
+| Quarter | Exact-match VAHI p90 | Seasonal avg p90 | Applied |
+|---|---|---|---|
+| Q4-2025 (real) | 89m | 89m | 89m |
+| Q1-2026 (PROXY) | 89m ← forward-fill | 75m (Q1 avg) | 75m ✓ |
+| Q2-2026 (PROXY) | 89m ← forward-fill | 80m (Q2 avg) | 80m ✓ |
+
+## 11. Triage Split Estimation
+
+The UI renders separate wait estimates for Urgent (Cat 1–3) and Minor (Cat 4–5) by applying VAHI triage median ratios to the current observed wait.
+
+### Formula (`calcSplitEstimates` in `docs/index.html`)
+
+```
+avg = (cat123_median + cat45_median) / 2
+urgent_est = max(1, round(live_wait × cat123_median / avg))
+minor_est  = max(1, round(live_wait × cat45_median  / avg))
+```
+
+The same formula is applied to `predicted_wait_min` (60-min forecast) to produce an arrival-aware range for Minor injuries:
+
+```
+minor_now  = calcSplitEstimates(current_wait,   cat123, cat45).minor
+minor_fore = calcSplitEstimates(predicted_wait, cat123, cat45).minor
+display    = min(minor_now, minor_fore)m – max(minor_now, minor_fore)m
+```
+
+Range is always presented shortest → longest to convey the uncertainty envelope, not a direction of travel.
+
+### VAHI seasonal source columns
+
+| Silver column | Source | Meaning |
+|---|---|---|
+| `ctx_wait_p90_mins` | `_seas_p90` (seasonal avg) | 9-in-10 benchmark |
+| `ctx_wait_median_cat123_mins` | `_seas_med123` | Typical wait, Cat 1–3 |
+| `ctx_wait_median_cat45_mins` | `_seas_med45` | Typical wait, Cat 4–5 |
+
+## 12. Change log
 
 - **1.0 (2026-04-25)** — Restructured around Phase 1 / Phase 2. Added data-safety posture and ML lifecycle. Replaces SSOT v0.2.
 - **1.1 (2026-04-27)** — Merged dashboard design reference (Dual-Clock, Tiered Stale, Vercel). Removed diversion UI.
 - **1.2 (2026-04-27)** — Config-driven architecture: connection details extracted to `config/hospitals.json`; `hospitals.py` becomes a thin adapter; engine unchanged. Documented parser types and PBI Adult/Paeds isolation.
+- **1.3 (2026-04-28)** — Added §10 YoY Seasonal Benchmarks and §11 Triage Split Estimation. Documents `_compute_seasonal_benchmarks()` formula and `calcSplitEstimates()` UI logic.
 
 ---
 
-## 11. Dashboard & Operational Design
+## 13. Dashboard & Operational Design
 
 ### Dual-Clock Freshness System
 
