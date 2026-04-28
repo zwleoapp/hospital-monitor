@@ -172,14 +172,28 @@
       font-size:.7rem;font-weight:700;
     }
 
-    /* ── Per-hospital observation timestamp footer ───────────────────────────── */
+    /* ── Per-hospital observation timestamp footer (Data Heartbeat) ─────────── */
     .obs-footer{
       padding:.5rem 1.3rem .65rem;
       border-top:1px solid #f0f0f0;
       font-size:.63rem;color:#bbb;
-      display:flex;align-items:center;gap:.4rem;flex-wrap:wrap;
+      display:flex;flex-direction:column;align-items:flex-start;gap:.15rem;
     }
     .stale-card .obs-footer{border-top-color:#ecd6d3;color:#b09090}
+    .hb-title{font-size:.56rem;font-weight:700;text-transform:uppercase;
+              letter-spacing:.08em;color:#c8c8d4;margin-bottom:.04rem}
+    .hb-row{display:flex;gap:.3rem;align-items:baseline;flex-wrap:wrap;font-size:.63rem;color:#bbb}
+    .hb-label{font-weight:700;color:#a0a0b0;white-space:nowrap}
+    .hb-na-val{font-style:italic;color:#d4d4dc}
+    /* Gap 3: overall metric row + max-wait outlier warning */
+    .overall-metric{font-size:.62rem;color:#9090a8;margin-bottom:.18rem}
+    .overall-metric strong{font-weight:700;color:#6a6a80}
+    .max-warn{
+      display:inline-flex;align-items:center;gap:.3rem;
+      font-size:.62rem;font-weight:600;color:#b05a00;
+      background:#fff5ea;border:1px solid #f5c89a;border-radius:4px;
+      padding:.16rem .5rem;margin-bottom:.3rem;
+    }
 
     /* ── System Insights — collapsible pro section ───────────────────────────── */
     details.system-insights{
@@ -517,12 +531,13 @@ function renderCard(s) {
     const obsTime     = localTime(s.latest_obs_utc);
     const hospTime    = parseHospDataTime(s.last_updated_display);
     const hospTimeHtml = hospTime
-      ? `<span>&#128197; Hospital data as at: ${hospTime}</span>`
-      : "";
+      ? `<div class="hb-row"><span class="hb-label">Hospital&nbsp;data:</span><span>${hospTime}&thinsp;AEST</span></div>`
+      : `<div class="hb-row"><span class="hb-label">Hospital&nbsp;data:</span><span class="hb-na-val">not published by hospital</span></div>`;
     const obsFooter = `
       <div class="obs-footer">
         ${staleBadge}
-        <span>Pi check-in: ${obsAgo != null ? obsAgo + "m ago" : "—"} (${obsTime} AEST)</span>
+        <div class="hb-title">&#128202;&nbsp;Data Heartbeat</div>
+        <div class="hb-row"><span class="hb-label">Monitor&nbsp;check:</span><span>${obsAgo != null ? obsAgo + "m&thinsp;ago &middot; " : ""}${obsTime}&thinsp;AEST</span></div>
         ${hospTimeHtml}
       </div>`;
 
@@ -537,6 +552,10 @@ function renderCard(s) {
         <span class="il">Max Wait (all pts)</span>
         <span class="iv">${fmtShort(s.max_wait_min) ?? "—"}</span>
       </div>` : "";
+
+    const maxWarnHtml = (p90Mins != null && s.max_wait_min != null && s.max_wait_min > p90Mins * 1.5)
+      ? `<div class="max-warn">&#9888;&#xFE0F;&nbsp;Max wait ${fmtShort(s.max_wait_min) ?? s.max_wait_min + "m"} — ${(s.max_wait_min / p90Mins).toFixed(1)}&times; the safety net (${p90Mins}m)</div>`
+      : "";
 
     const accuracy = getForecastAccuracy(s.site, current);
     const accuracyHtml = accuracy != null ? `
@@ -587,8 +606,9 @@ function renderCard(s) {
               <div class="count-hero">${waitingCount}</div>
             </div>
           </div>
-          ${p90Mins != null ? `<div class="p90-line">9/10 seen by <strong>${fmtShort(p90Mins) ?? p90Mins + "m"}</strong> at this hospital</div>` : ""}
-          ${_p90AllMins != null ? `<div class="p90-line p90-safety-net">&#128737; Overall safety net: <strong>${fmtShort(_p90AllMins)}</strong> (VAHI 90th pct)</div>` : ""}
+          <div class="overall-metric">All categories &middot; current: <strong>${fmtShort(current) ?? current + "m"}</strong>${p90Mins != null ? ` &nbsp;&middot;&nbsp; VAHI 90th: <strong>${p90Mins}m</strong>` : ""}</div>
+          ${p90Mins != null ? `<div class="p90-line p90-safety-net">&#128737;&nbsp;Safety Net: 90% of patients seen within <strong>${p90Mins}m</strong> at this hospital (VAHI)</div>` : ""}
+          ${maxWarnHtml}
 
           <div class="trend">
             <span class="${a.cls}">${a.sym}</span>
