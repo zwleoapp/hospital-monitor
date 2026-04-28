@@ -216,7 +216,13 @@
       align-items:center;gap:.6rem;
       background:#f5f3ff;border-radius:10px;
       padding:.5rem 1rem;border:1px solid #ddd6fe;font-size:.82rem;
+      transition:background .2s,border-color .2s;
     }
+    #hist-nav.hist-nav-active{
+      background:#3730a3;border-color:#6366f1;
+    }
+    #hist-nav.hist-nav-active .tc-label,
+    #hist-nav.hist-nav-active #hist-pos{color:#e0e7ff}
     .hist-btn{
       background:#ede9fe;color:#4338ca;border:1px solid #c4b5fd;
       border-radius:6px;padding:.3rem .7rem;cursor:pointer;
@@ -237,7 +243,7 @@
     .p90-highlight{font-weight:800;font-size:calc(.63rem + 2px)}
     .minor-range-sep{font-size:.82em;font-weight:400;color:#bbb;padding:0 .12rem}
     .minor-range-end{font-size:.82em;font-weight:700;color:#666}
-    .minor-has-range{font-size:.95rem!important}
+    .minor-has-range{font-size:.9rem!important;white-space:nowrap}
     .p90-badge{display:inline-flex;align-items:center;gap:.35rem;background:#1a1a2e;color:#e0e7ff;border-radius:6px;padding:.25rem .55rem;font-size:.7rem;font-weight:700;margin:.2rem 0 .5rem}
     .p90-badge-val{background:#4338ca;color:#fff;border-radius:4px;padding:.05rem .35rem;font-size:.85rem;font-weight:900;letter-spacing:-.01em}
     .tc-label{font-size:.65rem;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#6366f1;white-space:nowrap}
@@ -698,7 +704,7 @@ function renderCard(s) {
               <div class="count-hero${treatingCount != null ? "" : " count-na"}">${treatingCount ?? "—"}</div>
             </div>
           </div>
-          <div class="overall-metric">All categories &middot; current: <strong>${fmtShort(current) ?? current + "m"}</strong>${p90Mins != null ? ` &nbsp;&middot;&nbsp; VAHI 90th: <strong>${p90Mins}m</strong>` : ""}</div>
+          <div class="overall-metric">All categories &middot; current: <strong>${fmtShort(current) ?? current + "m"}</strong></div>
           ${p90Mins != null ? `<div class="p90-badge">&#128737; 9&#8209;in&#8209;10 Target <span class="p90-badge-val">${p90Mins}m</span></div>` : ""}
           ${maxWarnHtml}
 
@@ -723,7 +729,6 @@ function renderCard(s) {
                 <span class="il">60-min Forecast</span>
                 <span class="iv">${Math.round(predicted)} min</span>
               </div>
-              ${maxWaitHtml}
               ${strainHtml}
               <div class="insight">
                 <span class="il">Clearing Speed</span>
@@ -918,12 +923,14 @@ function updateHistNav() {
   nav.style.display = "flex";
 
   if (_histIdx < 0) {
+    nav.classList.remove("hist-nav-active");
     banner.style.display = "none";
     pos.textContent      = "● Live";
     prevBtn.disabled     = false;
     nextBtn.disabled     = true;
     liveBtn.style.display = "none";
   } else {
+    nav.classList.add("hist-nav-active");
     const snap  = _histTimeline.snapshots[_histIdx];
     const ts    = localDateTime(snap.bucket_utc);
     const ago   = minsAgo(snap.bucket_utc);
