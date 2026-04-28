@@ -10,6 +10,8 @@ import re
 import json
 import uuid
 from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
+from email.utils import parsedate_to_datetime
 from status import update_status
 from config.hospitals import SOURCES
 
@@ -17,6 +19,59 @@ CSV_PATH = "/mnt/router_ssd/Data_Hub/Waiting_Live_time/eastern_hospital.csv"
 CSV_HEADER = ["timestamp", "hospital", "waiting", "treating",
               "wait_time", "min_wait_mins", "max_wait_mins"]
 LAST_UPDATED_SIDECAR = "/mnt/router_ssd/Data_Hub/Waiting_Live_time/monash_last_updated.json"
+
+
+_MELB = ZoneInfo("Australia/Melbourne")
+
+
+# ── Sidecar helpers ───────────────────────────────────────────────────────────
+
+def _merge_last_updated_sidecar(updates: dict[str, str]) -> None:
+    """Merge new {hospital: timestamp} entries into the shared sidecar (read→update→write)."""
+    if not updates:
+        return
+    existing: dict = {}
+    try:
+        if os.path.exists(LAST_UPDATED_SIDECAR):
+            existing = json.loads(pathlib.Path(LAST_UPDATED_SIDECAR).read_text())
+    except Exception:
+        pass
+    existing.update(updates)
+    try:
+        os.makedirs(os.path.dirname(LAST_UPDATED_SIDECAR), exist_ok=True)
+        with open(LAST_UPDATED_SIDECAR, "w") as _f:
+            json.dump(existing, _f)
+    except Exception as e:
+        print(f"  Sidecar write failed: {e}")
+
+
+def _extract_eh_page_timestamp(html: str, resp) -> str:
+    """
+    Try to extract a native 'Last Updated' timestamp from the Eastern Health page.
+    Falls back to the HTTP Date response header (marked with ~ to signal approximate).
+    """
+    patterns = [
+        r'lastUpdated\s*[=:]\s*["\']([^"\']+)["\']',
+        r'last[_-]?updated[_-]?(?:at|time)?[\s:=]+["\']?(\d{1,2}[:/]\d{2}(?:[:/]\d{2,4})?\s*(?:[AP]M)?)["\']?',
+        r'(?:data\s+as\s+at|updated)\s*[:\-]\s*(\d{1,2}/\d{1,2}/\d{2,4}\s+\d{1,2}:\d{2}\s*(?:[AP]M)?)',
+        r'<[^>]*(?:last.?update|refresh.?time)[^>]*>([^<]{4,40})<',
+    ]
+    for pat in patterns:
+        m = re.search(pat, html, re.IGNORECASE)
+        if m:
+            val = m.group(1).strip()
+            if val:
+                return val
+
+    # Fall back to HTTP Date header — always available, marks as approximate with ~
+    date_hdr = getattr(resp, "headers", {}).get("Date", "")
+    if date_hdr:
+        try:
+            dt = parsedate_to_datetime(date_hdr).astimezone(_MELB)
+            return "~" + dt.strftime("%H:%M")  # ~ = server clock, not hospital-published
+        except Exception:
+            pass
+    return ""
 
 
 # ── Shared helpers ────────────────────────────────────────────────────────────
@@ -62,7 +117,10 @@ def _scrape_html_source(source_key: str, cfg: dict, timestamp: str) -> list:
     counts = json.loads(counts_m.group(1))
     waits  = json.loads(waits_m.group(1))
 
+    page_ts = _extract_eh_page_timestamp(html, resp)
+
     rows = []
+    last_updated_map: dict[str, str] = {}
     for js_key, formal_name in cfg["hospitals"].items():
         c = counts.get(js_key, {})
         w = waits.get(js_key, {})
@@ -75,6 +133,16 @@ def _scrape_html_source(source_key: str, cfg: dict, timestamp: str) -> list:
         wait_str = f"{min_fmt} - {max_fmt}" if min_fmt != "N/A" else "N/A"
         rows.append([timestamp, formal_name, waiting, treating,
                      wait_str, min_raw, max_raw])
+        if page_ts:
+            last_updated_map[formal_name] = page_ts
+
+    if last_updated_map:
+        _merge_last_updated_sidecar(last_updated_map)
+        suffix = " (native)" if not page_ts.startswith("~") else " (HTTP header fallback)"
+        print(f"  [{source_key}] Page timestamp: {page_ts}{suffix}")
+    else:
+        print(f"  [{source_key}] No page timestamp found.")
+
     return rows
 
 
@@ -214,6 +282,66 @@ def _parse_grouped_dsr(result_obj: dict, group_target: str) -> dict | None:
     return first_valid
 
 
+def _parse_grouped_dsr_maxwait(result_obj: dict) -> int | None:
+    """
+    Scan ALL groups (Adult + Paediatric + any others) in the same DSR response
+    and return the highest wait upper-bound in minutes.
+
+    The grouped query already returns every patient-category row for a campus.
+    By taking the max across all of them we capture the true wait ceiling —
+    e.g. an 8h 51m Paediatric outlier that the Adult-only filter would miss.
+    Uses the same delta/repeat DSR reconstruction as _parse_grouped_dsr.
+    G3 is always col_wait_str ("Estimated Time").
+    """
+    try:
+        ds0    = result_obj["result"]["data"]["dsr"]["DS"][0]
+        rows   = ds0["PH"][0]["DM0"]
+        vdicts = ds0.get("ValueDicts", {})
+        schema = rows[0]["S"]
+    except (KeyError, IndexError, TypeError):
+        return None
+
+    n_cols = len(schema)
+
+    def _decode(c_val, col_idx):
+        if col_idx >= n_cols or c_val is None:
+            return c_val
+        s = schema[col_idx]
+        if "DN" in s and isinstance(c_val, int):
+            return vdicts.get(s["DN"], [])[c_val]
+        return c_val
+
+    prev_c   = [None] * n_cols
+    max_mins = None
+
+    for row in rows:
+        c_raw  = row.get("C", [])
+        r_mask = row.get("R", 0)
+        full_c = list(prev_c)
+        raw_idx = 0
+        for col_idx in range(n_cols):
+            if r_mask & (1 << col_idx):
+                pass
+            else:
+                if raw_idx < len(c_raw):
+                    full_c[col_idx] = c_raw[raw_idx]
+                raw_idx += 1
+        prev_c = list(full_c)
+
+        if n_cols <= 3:
+            continue
+        wait_str = str(_decode(full_c[3], 3) or "").strip()
+        if not wait_str:
+            continue
+        # Upper bound is after " - " separator, or the whole string if no range
+        upper_str = wait_str.split(" - ")[-1]
+        upper_mins = _parse_wait_str(upper_str)
+        if upper_mins > 0:
+            max_mins = max(max_mins or 0, upper_mins)
+
+    return max_mins
+
+
 def _scrape_powerbi_source(source_key: str, cfg: dict, timestamp: str) -> list:
     """
     Single POST to the Power BI batch API: one grouped query per campus.
@@ -299,7 +427,12 @@ def _scrape_powerbi_source(source_key: str, cfg: dict, timestamp: str) -> list:
         treating = int(row["treating"] or 0)
         wait_str = row["wait_str"]                  # e.g. "2 hr 46 min - 6 hr 50 min"
         min_mins = _parse_wait_str(wait_str.split(" - ")[0]) if " - " in wait_str else _parse_wait_str(wait_str)
-        max_mins = _parse_wait_str(wait_str.split(" - ")[1]) if " - " in wait_str else min_mins
+        # Scan ALL patient groups (Adult + Paed) for the true wait ceiling
+        all_max  = _parse_grouped_dsr_maxwait(results[i])
+        adult_max = _parse_wait_str(wait_str.split(" - ")[1]) if " - " in wait_str else min_mins
+        max_mins = all_max if (all_max and all_max >= adult_max) else adult_max
+        if all_max and all_max > adult_max:
+            print(f"   [MAX-WAIT] {formal_name}: all-group max {all_max}m > adult max {adult_max}m")
 
         last_upd = row.get("last_updated", "")
         if last_upd:
@@ -310,13 +443,7 @@ def _scrape_powerbi_source(source_key: str, cfg: dict, timestamp: str) -> list:
         print(f"   [SCRAPED] {formal_name}: waiting={waiting}, treating={treating}, wait={wait_str}"
               + (f", updated={last_upd}" if last_upd else ""))
 
-    if last_updated_map:
-        try:
-            os.makedirs(os.path.dirname(LAST_UPDATED_SIDECAR), exist_ok=True)
-            with open(LAST_UPDATED_SIDECAR, "w") as _f:
-                json.dump(last_updated_map, _f)
-        except Exception as _e:
-            print(f"  [{source_key}] Sidecar write failed: {_e}")
+    _merge_last_updated_sidecar(last_updated_map)
 
     return rows
 

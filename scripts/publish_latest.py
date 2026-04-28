@@ -26,8 +26,11 @@ import subprocess
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))  # repo root for config
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 from predict_next import load_latest_silver, build_outlook   # noqa: E402
+from get_history import build_timeline                        # noqa: E402
+from config.hospitals import VAHI_BENCHMARKS                  # noqa: E402
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
 _BASE = pathlib.Path(__file__).resolve().parent.parent
@@ -35,6 +38,7 @@ _SSD  = pathlib.Path("/mnt/router_ssd/Data_Hub/Waiting_Live_time")
 
 DEFAULT_SILVER        = _SSD / "eastern_hospital_silver.csv"
 DEFAULT_JSON_OUT      = pathlib.Path("/tmp/hospital_monitor_latest.json")
+DEFAULT_HISTORY_OUT   = pathlib.Path("/tmp/history_timeline.json")
 PUBLISHER_TMPDIR      = pathlib.Path("/tmp/publisher")   # staging clone for data branch
 LAST_UPDATED_SIDECAR  = _SSD / "monash_last_updated.json"  # written by hospital_monitor.py
 
@@ -67,7 +71,8 @@ def _git(cmd: str, cwd: pathlib.Path) -> None:
         raise RuntimeError(f"git failed: {cmd}\n{result.stderr.strip()}")
 
 
-def push_to_data_branch(json_path: pathlib.Path) -> None:
+def push_to_data_branch(json_path: pathlib.Path,
+                        history_path: pathlib.Path | None = None) -> None:
     """
     Force-push latest.json to the `data` branch via SSH deploy key.
     Uses a persistent shallow clone at PUBLISHER_TMPDIR to keep pushes fast.
@@ -94,20 +99,31 @@ def push_to_data_branch(json_path: pathlib.Path) -> None:
     # Co-deploy index.html so Vercel serves the full dashboard from the data branch
     shutil.copy(_BASE / "docs" / "index.html", PUBLISHER_TMPDIR / "index.html")
 
-    # Vercel: no-cache on latest.json so the browser always gets the freshest data
+    history_file = "history_timeline.json"
+    if history_path and history_path.exists():
+        shutil.copy(history_path, PUBLISHER_TMPDIR / history_file)
+    elif not (PUBLISHER_TMPDIR / history_file).exists():
+        history_file = ""  # don't add to git if it doesn't exist yet
+
+    # Vercel: no-cache on latest.json; allow browser to cache history for 15 min
     vercel_config = {
         "headers": [
             {
                 "source": "/latest.json",
                 "headers": [{"key": "Cache-Control", "value": "no-cache, no-store, must-revalidate"}]
-            }
+            },
+            {
+                "source": "/history_timeline.json",
+                "headers": [{"key": "Cache-Control", "value": "public, max-age=900"}]
+            },
         ]
     }
     (PUBLISHER_TMPDIR / "vercel.json").write_text(json.dumps(vercel_config, indent=2))
 
     stamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    extra_files = (" " + history_file) if history_file else ""
     try:
-        _git("git add latest.json index.html vercel.json", PUBLISHER_TMPDIR)
+        _git(f"git add latest.json index.html vercel.json{extra_files}", PUBLISHER_TMPDIR)
         _git(f'git commit -m "data: outlook {stamp}"', PUBLISHER_TMPDIR)
     except RuntimeError as e:
         if "nothing to commit" in str(e):
@@ -194,9 +210,10 @@ def main() -> None:
         sites.append(outlook)
 
     payload = {
-        "generated_utc": generated_utc_str,
-        "horizon_min":   60,
-        "sites":         sites,
+        "generated_utc":    generated_utc_str,
+        "horizon_min":      60,
+        "vahi_p90_all_mins": VAHI_BENCHMARKS.get("p90_all_mins"),
+        "sites":            sites,
     }
 
     # ── 2. Write JSON ──────────────────────────────────────────────────────────
@@ -220,11 +237,21 @@ def main() -> None:
         )
     print(f"\n  latest.json → {args.out}")
 
-    # ── 4. Optional git push ───────────────────────────────────────────────────
+    # ── 4. Build 24h history timeline ─────────────────────────────────────────
+    history_path: pathlib.Path | None = None
+    try:
+        timeline = build_timeline(args.silver)
+        history_path = DEFAULT_HISTORY_OUT
+        history_path.write_text(json.dumps(timeline, indent=2))
+        print(f"\n  History timeline: {len(timeline['snapshots'])} snapshots → {history_path}")
+    except Exception as e:
+        print(f"\n  Warning: history timeline skipped: {e}", file=sys.stderr)
+
+    # ── 5. Optional git push ───────────────────────────────────────────────────
     if args.push:
         print("\n  Pushing to data branch …")
         try:
-            push_to_data_branch(args.out)
+            push_to_data_branch(args.out, history_path)
         except Exception as e:
             print(f"  Push failed: {e}", file=sys.stderr)
             print("  Check SSH deploy key is configured.", file=sys.stderr)
