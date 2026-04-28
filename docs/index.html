@@ -231,6 +231,9 @@
     }
     .hist-no-acc{color:#8880c0;background:#f5f3ff;border-color:#ddd6fe;font-style:italic}
     .hb-approx{font-style:italic;font-size:.58rem;color:#c8c8d4}
+    .p90-highlight{font-weight:800;font-size:calc(.63rem + 2px)}
+    .minor-range-sep{font-size:.82em;font-weight:400;color:#bbb;padding:0 .12rem}
+    .minor-range-end{font-size:.82em;font-weight:700;color:#666}
 
     /* ── System Insights — collapsible pro section ───────────────────────────── */
     details.system-insights{
@@ -574,6 +577,8 @@ function renderCard(s) {
     const splits       = calcSplitEstimates(current, medCat123, medCat45);
     const urgentEst    = splits?.urgent ?? null;
     const minorEst     = splits?.minor  ?? null;
+    const minorForecastSplits = calcSplitEstimates(predicted, medCat123, medCat45);
+    const minorForecast = minorForecastSplits?.minor ?? null;
 
     const isStale = ageMin > HOSPITAL_STALE_MINS && !s._is_historical;
     const c    = light(predicted, momentum);
@@ -611,20 +616,20 @@ function renderCard(s) {
       </div>` : "";
 
     const maxWarnHtml = (p90Mins != null && s.max_wait_min != null && s.max_wait_min > p90Mins * 1.5)
-      ? `<div class="max-warn">&#9888;&#xFE0F;&nbsp;Max wait ${fmtShort(s.max_wait_min) ?? s.max_wait_min + "m"} — ${(s.max_wait_min / p90Mins).toFixed(1)}&times; the safety net (${p90Mins}m)</div>`
+      ? `<div class="max-warn">&#9888;&#xFE0F;&nbsp;Max wait ${fmtShort(s.max_wait_min) ?? s.max_wait_min + "m"} — ${(s.max_wait_min / p90Mins).toFixed(1)}&times; the 9-in-10 benchmark (${p90Mins}m)</div>`
       : "";
 
     const accuracy = getForecastAccuracy(s.site, current);
     const accuracyHtml = accuracy != null ? `
       <div class="insight">
         <span class="il">60-min Accuracy</span>
-        <span class="iv"><span class="badge forecast-badge">${accuracy}%</span></span>
+        <span class="iv"><span class="badge forecast-badge">${accuracy > 0 ? accuracy + "%" : "Calibrating…"}</span></span>
       </div>` : "";
 
     const histAccuracyHtml = s._is_historical
-      ? (s._forecast_accuracy != null
+      ? (s._forecast_accuracy != null && s._forecast_accuracy > 0
          ? `<div class="hist-accuracy">&#127919; 60m forecast was <strong>${Math.round(s._forecast_accuracy)}%</strong> accurate — predicted&nbsp;${Math.round(s.predicted_wait_min ?? 0)}m${s._actual_60m != null ? `, actual&nbsp;${Math.round(s._actual_60m)}m` : ""}</div>`
-         : `<div class="hist-accuracy hist-no-acc">&#128336; 60m outcome not yet recorded</div>`)
+         : `<div class="hist-accuracy hist-no-acc">&#8987; Calibrating&hellip;</div>`)
       : "";
 
     // Triage benchmark chips — compare split estimates against VAHI historical medians
@@ -662,19 +667,25 @@ function renderCard(s) {
             </div>
             <div class="hero-col hc-divider hc-minor-col">
               <div class="hero-sub hero-sub-primary">Minor &bull; Cat 4&ndash;5</div>
-              <div class="hero-val hero-val-primary">${minorEst != null ? fmtShort(minorEst) ?? "—" : fmtShort(current) ?? "—"}</div>
+              <div class="hero-val hero-val-primary">${(() => {
+                const nowStr = minorEst != null ? fmtShort(minorEst) ?? "—" : fmtShort(current) ?? "—";
+                const fcastStr = minorForecast != null ? fmtShort(Math.round(minorForecast)) : null;
+                return fcastStr && fcastStr !== nowStr
+                  ? `${nowStr}<span class="minor-range-sep">–</span><span class="minor-range-end">${fcastStr}</span>`
+                  : nowStr;
+              })()}</div>
             </div>
             <div class="hero-col hc-divider">
               <div class="hero-sub" style="font-size:.5rem">&#128100; Waiting</div>
               <div class="count-hero">${waitingCount}</div>
             </div>
             <div class="hero-col">
-              <div class="hero-sub" style="font-size:.5rem">&#128138; In Treatment</div>
+              <div class="hero-sub" style="font-size:.5rem">&#129658; In Treatment</div>
               <div class="count-hero${treatingCount != null ? "" : " count-na"}">${treatingCount ?? "—"}</div>
             </div>
           </div>
           <div class="overall-metric">All categories &middot; current: <strong>${fmtShort(current) ?? current + "m"}</strong>${p90Mins != null ? ` &nbsp;&middot;&nbsp; VAHI 90th: <strong>${p90Mins}m</strong>` : ""}</div>
-          ${p90Mins != null ? `<div class="p90-line p90-safety-net">&#128737;&nbsp;Safety Net: 90% of patients seen within <strong>${p90Mins}m</strong> at this hospital (VAHI)</div>` : ""}
+          ${p90Mins != null ? `<div class="p90-line p90-safety-net">&#128737;&nbsp;9-in-10 seen by: <strong class="p90-highlight">${p90Mins}m</strong> &mdash; seasonally-adjusted VAHI benchmark</div>` : ""}
           ${maxWarnHtml}
 
           <div class="trend">
