@@ -49,10 +49,59 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 from predict_next import project_wait, confidence_score  # noqa: E402
 from config.hospitals import ALL_HOSPITALS               # noqa: E402
 
-_SSD            = pathlib.Path("/mnt/router_ssd/Data_Hub/Waiting_Live_time")
-DEFAULT_SILVER   = _SSD / "eastern_hospital_silver.csv"
-DEFAULT_JSON_OUT = pathlib.Path("/tmp/history_timeline.json")
-HISTORY_HOURS    = 24
+_SSD              = pathlib.Path("/mnt/router_ssd/Data_Hub/Waiting_Live_time")
+DEFAULT_SILVER    = _SSD / "eastern_hospital_silver.csv"
+DEFAULT_JSON_OUT  = pathlib.Path("/tmp/history_timeline.json")
+ACCURACY_LOG_PATH = _SSD / "accuracy_postmortem.jsonl"
+ANOMALY_LOG_PATH  = _SSD / "damping_anomalies.jsonl"
+ANOMALY_ERROR_PCT = 200.0   # entries exceeding this are routed to anomaly log
+HISTORY_HOURS     = 24
+
+
+def _log_accuracy_postmortem(df: "pd.DataFrame") -> None:
+    """
+    Append completed accuracy records to accuracy_postmortem.jsonl.
+
+    Only writes rows where actual_60m_wait_min is known (T+60 already observed).
+    Rows with absolute error > ANOMALY_ERROR_PCT are also written to anomaly log
+    for human review and are NOT used by evolve_damping_factors().
+    """
+    import json as _json
+    completed = df[df["actual_60m_wait_min"].notna() & df["forecast_accuracy"].notna()].copy()
+    if completed.empty:
+        return
+
+    now_str = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    normal_lines = []
+    anomaly_lines = []
+
+    for _, row in completed.iterrows():
+        predicted = float(row["predicted_wait_min"])
+        actual    = float(row["actual_60m_wait_min"])
+        error_pct = abs(predicted - actual) / max(actual, 1) * 100
+        record = {
+            "logged_utc":       now_str,
+            "bucket_utc":       row["bucket"].strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "hospital":         row["hospital"],
+            "predicted_wait":   round(predicted, 1),
+            "actual_wait":      round(actual, 1),
+            "error_pct":        round(error_pct, 1),
+            "forecast_accuracy": float(row["forecast_accuracy"]),
+            "momentum":         float(row.get("wait_momentum") or 0),
+        }
+        if error_pct > ANOMALY_ERROR_PCT:
+            record["anomaly"] = True
+            anomaly_lines.append(_json.dumps(record))
+        else:
+            normal_lines.append(_json.dumps(record))
+
+    for path, lines in [(ACCURACY_LOG_PATH, normal_lines), (ANOMALY_LOG_PATH, anomaly_lines)]:
+        if lines:
+            try:
+                with open(path, "a") as fh:
+                    fh.write("\n".join(lines) + "\n")
+            except OSError:
+                pass  # SSD unavailable — non-fatal
 
 
 def build_timeline(silver_path: pathlib.Path, history_hours: int = HISTORY_HOURS) -> dict:
@@ -105,6 +154,8 @@ def build_timeline(silver_path: pathlib.Path, history_hours: int = HISTORY_HOURS
     actuals  = df.apply(lambda r: _accuracy(r)[1], axis=1)
     df["forecast_accuracy"]   = accs
     df["actual_60m_wait_min"] = actuals
+
+    _log_accuracy_postmortem(df)
 
     snapshots = []
     for bucket, grp in df.groupby("bucket"):
