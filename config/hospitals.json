@@ -1,6 +1,20 @@
 {
   "_comment": "Scraper connection details per source group. Credentials here are public (Power BI Embedded resource keys). Per-hospital registry lives in hospitals.csv.",
 
+  "vahi_benchmarks": {
+    "_comment": "System-wide and per-hospital VAHI 90th percentile (all ED categories). Quarter: Oct–Dec 2025. p90_all_mins = max across all hospitals (Box Hill 89m). Update each VAHI cycle alongside vahi_history_merged.csv.",
+    "p90_all_mins": 89,
+    "quarter": "Oct - Dec 2025",
+    "per_hospital_p90_mins": {
+      "Box Hill Hospital":              89,
+      "Angliss Hospital":               52,
+      "Maroondah Hospital":             62,
+      "Casey Hospital":                 30,
+      "Dandenong Hospital":             20,
+      "Monash Medical Centre - Clayton": 31
+    }
+  },
+
   "eastern_health": {
     "parser": "html_js",
     "url": "https://waittime.easternhealth.org.au/",
@@ -28,6 +42,8 @@
     "col_treating":     "TotalBeingTreated",
     "col_wait_str":     "Estimated Time",
     "col_last_updated": "LastUpdatedDisplay",
+
+    "_max_wait_audit": "KNOWN DISCREPANCY (2026-04-28): Estimated Time for group_target=Adult gives a wait range (e.g. '2hr 46m - 6hr 50m'). The browser dashboard shows 8hr 51m for some campuses. This higher figure likely comes from (a) a separate 'Max Wait' visual querying all patients (not Adult-only), or (b) Paediatric patients included in an All-patients row. To investigate: in DevTools Network tab, filter POST /querydata after page load and inspect any SemanticQueryDataShapeCommand for a measure named MaxWait, LongestWait, or similar. A second query with group_target=All (removing the Where clause entirely) would capture the true ceiling.",
 
     "hospitals": {
       "Casey":     "Casey Hospital",

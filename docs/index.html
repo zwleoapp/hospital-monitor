@@ -31,30 +31,53 @@
       text-align:center;max-width:1160px;margin:0 auto 1.2rem;color:#c62828;
     }
 
-    /* ── Main layout: grid + sidebar ────────────────────────────────────────── */
+    /* ── Main layout ─────────────────────────────────────────────────────────── */
     #main-layout{display:flex;gap:1.2rem;max-width:1160px;margin:0 auto}
     #grid{flex:1;min-width:0}
 
-    /* ── Leaderboard sidebar ─────────────────────────────────────────────────── */
-    #leaderboard{width:210px;flex-shrink:0}
+    /* ── Decision Center sidebar ─────────────────────────────────────────────── */
+    #leaderboard{
+      width:250px;flex-shrink:0;
+      background:#fff;border-radius:16px;
+      box-shadow:0 2px 16px rgba(0,0,0,.08);
+      padding:1.1rem 1rem 1.2rem;
+      align-self:flex-start;
+      position:sticky;top:52px;
+    }
+    .lb-header{
+      font-size:.92rem;font-weight:700;color:#1a1a2e;
+      margin-bottom:1rem;padding-bottom:.65rem;
+      border-bottom:2px solid #f0f2f5;
+    }
+    .lb-header small{
+      display:block;font-size:.66rem;font-weight:400;color:#aaa;margin-top:.15rem;
+    }
+    .lb-section{margin-bottom:1.1rem}
+    .lb-section:last-child{margin-bottom:0}
     .lb-title{
-      font-size:.7rem;text-transform:uppercase;letter-spacing:.1em;
-      color:var(--green);font-weight:700;margin-bottom:.85rem;padding-left:2px;
+      font-size:.6rem;text-transform:uppercase;letter-spacing:.13em;
+      color:#bbb;font-weight:700;margin-bottom:.6rem;padding-left:2px;
     }
     .lb-card{
-      background:#fff;border-radius:12px;
-      box-shadow:0 2px 10px rgba(0,0,0,.07);
-      border-left:4px solid var(--green);
-      padding:.85rem 1rem;margin-bottom:.75rem;
+      background:#f8fafc;border-radius:10px;
+      border-left:3px solid var(--green);
+      padding:.7rem .85rem;margin-bottom:.5rem;
     }
-    .lb-rank{font-size:.7rem;font-weight:700;color:var(--green);
-             text-transform:uppercase;letter-spacing:.07em;margin-bottom:.12rem}
-    .lb-hosp{font-size:1.0rem;font-weight:600;color:#1a1a2e;line-height:1.3;margin-bottom:.08rem}
-    .lb-net{font-size:.74rem;color:#bbb;margin-bottom:.35rem}
-    .lb-momentum{font-size:1.2rem;font-weight:800;color:var(--green);line-height:1;margin-bottom:.15rem}
-    .lb-momentum small{font-size:.74rem;font-weight:400;color:#888}
-    .lb-wait{font-size:.82rem;color:#888}
-    .lb-empty,.lb-loading{font-size:.87rem;color:#ccc;text-align:center;padding:.8rem 0}
+    .lb-card:last-child{margin-bottom:0}
+    .lb-rank{font-size:.6rem;font-weight:700;color:#ccc;
+             text-transform:uppercase;letter-spacing:.07em;margin-bottom:.08rem}
+    .lb-hosp{font-size:.86rem;font-weight:600;color:#1a1a2e;line-height:1.3;margin-bottom:.04rem}
+    .lb-net{font-size:.67rem;color:#ccc;margin-bottom:.28rem}
+    .lb-stat{font-size:1.0rem;font-weight:800;color:var(--green);line-height:1;margin-bottom:.08rem}
+    .lb-stat small{font-size:.67rem;font-weight:400;color:#999}
+    .lb-sub{font-size:.73rem;color:#999}
+    .lb-dir{
+      display:inline-flex;align-items:center;gap:.2rem;
+      margin-top:.3rem;font-size:.67rem;color:#bbb;
+      text-decoration:none;
+    }
+    .lb-dir:hover{color:var(--green)}
+    .lb-empty,.lb-loading{font-size:.82rem;color:#ccc;text-align:center;padding:.55rem 0}
 
     .loading{text-align:center;color:#bbb;padding:3rem;font-size:.9rem}
     .fetch-error{
@@ -99,23 +122,42 @@
     .stale-card .dot{background:#e0e0e0;box-shadow:none}
     .hosp{font-weight:700;font-size:.96rem}
 
-    /* ── Split hero: Wait Time | Patient Count ───────────────────────────────── */
-    .hero-split{display:flex;gap:0;margin-bottom:.75rem}
-    .hero-col{flex:1;display:flex;flex-direction:column}
-    .hero-col:first-child{
-      border-right:1px solid #ebebeb;padding-right:1.1rem;margin-right:1.1rem
+    /* ── Split hero: Urgent | Minor (primary) | Patient Count ─────────────── */
+    .hero-split{display:flex;gap:0;margin-bottom:.5rem;align-items:flex-end}
+    .hero-col{display:flex;flex-direction:column;flex:0 0 auto}
+    .hc-divider{border-right:1px solid #ebebeb;padding-right:1.1rem;margin-right:1.1rem}
+    .hc-minor-col{flex:1 1 auto}
+    .hero-sub{font-size:.6rem;text-transform:uppercase;letter-spacing:.07em;
+              color:#aaa;font-weight:600;margin-bottom:.1rem}
+    .hero-sub-primary{color:#1a1a2e;font-weight:700}
+    /* Minor is largest (most likely patient type); urgent is bold but smaller */
+    .hero-val{font-size:1.75rem;font-weight:800;line-height:1;color:#1a1a2e}
+    .hero-val-primary{font-size:2.2rem}
+    /* Patient count — 20% smaller than original (1.45rem → 1.16rem) */
+    .count-hero{font-size:1.16rem;font-weight:700;color:#6b7280}
+    /* 90th-percentile lines */
+    .p90-line{font-size:.63rem;color:#aaa;margin-bottom:.18rem}
+    .p90-line strong{font-weight:700;color:#888}
+    /* System-wide safety net — last of the p90 lines, adds bottom gap */
+    .p90-safety-net{color:#b8a87a;margin-bottom:.6rem}
+    .p90-safety-net strong{color:#9a8040}
+
+    /* ── Triage benchmark chips (VAHI quarterly) ─────────────────────────────── */
+    .triage-bench{display:flex;gap:.45rem;margin-bottom:.65rem}
+    .tb-chip{
+      flex:1;border-radius:6px;padding:.38rem .55rem;
+      display:flex;flex-direction:column;gap:.06rem;
     }
-    .hero-sub{
-      font-size:.62rem;text-transform:uppercase;letter-spacing:.07em;
-      color:#aaa;font-weight:600;margin-bottom:.12rem
+    .tb-cat{
+      font-size:.52rem;text-transform:uppercase;letter-spacing:.07em;
+      opacity:.6;font-weight:700;line-height:1;
     }
-    .hero-val{font-size:2.2rem;font-weight:800;line-height:1}
-    .wait-hero{color:#1a1a2e}
-    .count-hero{color:#4a5568}
-    .wait-range{
-      font-size:.85rem;font-weight:700;color:#555;
-      margin-top:.3rem;line-height:1.35
-    }
+    .tb-usual{font-size:.76rem;font-weight:700;line-height:1.25}
+    .tb-tag{font-size:.6rem;font-weight:700;margin-top:.06rem}
+    /* Calm palette: ochre (above usual), slate teal (below), neutral blue-gray (near) */
+    .tb-above{background:#fff7ed;color:#b36b10}
+    .tb-below{background:#eaf6f4;color:#2a8a7e}
+    .tb-near{background:#f1f4fc;color:#6a82b0}
 
     .trend{font-size:.8rem;color:#666;margin-bottom:.65rem}
     .up{color:var(--red)} .dn{color:var(--green)} .fl{color:#bbb}
@@ -125,26 +167,54 @@
     .bh{background:var(--green-bg);color:var(--green)}
     .bm{background:var(--amber-bg);color:var(--amber)}
     .bl{background:var(--red-bg);  color:var(--red)}
+    .forecast-badge{
+      background:#eef2ff;color:#5b72b5;
+      font-size:.7rem;font-weight:700;
+    }
 
-    /* ── Per-hospital observation timestamp footer ───────────────────────────── */
+    /* ── Per-hospital observation timestamp footer (Data Heartbeat) ─────────── */
     .obs-footer{
       padding:.5rem 1.3rem .65rem;
       border-top:1px solid #f0f0f0;
       font-size:.63rem;color:#bbb;
-      display:flex;align-items:center;gap:.4rem;flex-wrap:wrap;
+      display:flex;flex-direction:column;align-items:flex-start;gap:.15rem;
     }
     .stale-card .obs-footer{border-top-color:#ecd6d3;color:#b09090}
+    .hb-title{font-size:.56rem;font-weight:700;text-transform:uppercase;
+              letter-spacing:.08em;color:#c8c8d4;margin-bottom:.04rem}
+    .hb-row{display:flex;gap:.3rem;align-items:baseline;flex-wrap:wrap;font-size:.63rem;color:#bbb}
+    .hb-label{font-weight:700;color:#a0a0b0;white-space:nowrap}
+    .hb-na-val{font-style:italic;color:#d4d4dc}
+    /* Gap 3: overall metric row + max-wait outlier warning */
+    .overall-metric{font-size:.62rem;color:#9090a8;margin-bottom:.18rem}
+    .overall-metric strong{font-weight:700;color:#6a6a80}
+    .max-warn{
+      display:inline-flex;align-items:center;gap:.3rem;
+      font-size:.62rem;font-weight:600;color:#b05a00;
+      background:#fff5ea;border:1px solid #f5c89a;border-radius:4px;
+      padding:.16rem .5rem;margin-bottom:.3rem;
+    }
 
-    /* ── System Insights (pro / paramedic row) ───────────────────────────────── */
-    .system-insights{
+    /* ── System Insights — collapsible pro section ───────────────────────────── */
+    details.system-insights{
       background:#f7f9fc;border-top:1px solid #eef0f4;
-      padding:.65rem 1.3rem .75rem;
     }
-    .stale-card .system-insights{background:#fdf3f1;border-top-color:#ecd6d3}
-    .insights-label{
-      font-size:.6rem;text-transform:uppercase;letter-spacing:.08em;
-      color:#bbb;font-weight:600;margin-bottom:.45rem;
+    .stale-card details.system-insights{background:#fdf3f1;border-top-color:#ecd6d3}
+    details.system-insights > summary{
+      list-style:none;
+      display:flex;align-items:center;gap:.35rem;
+      padding:.55rem 1.3rem;cursor:pointer;
+      font-size:.6rem;text-transform:uppercase;letter-spacing:.1em;
+      color:#bbb;font-weight:700;user-select:none;
     }
+    details.system-insights > summary::-webkit-details-marker{display:none}
+    details.system-insights > summary::after{
+      content:"▸";margin-left:auto;font-size:.6rem;
+      transition:transform .18s;
+    }
+    details.system-insights[open] > summary::after{transform:rotate(90deg)}
+    details.system-insights > summary:hover{color:#888}
+    .insights-body{padding:.45rem 1.3rem .75rem}
     .insights-row{display:flex;gap:1.4rem;flex-wrap:wrap}
     .insight{display:flex;flex-direction:column;gap:.1rem;min-width:60px}
     .insight .il{font-size:.6rem;text-transform:uppercase;letter-spacing:.05em;color:#bbb}
@@ -152,36 +222,71 @@
     .strain-low{color:var(--green)}
     .strain-mid{color:var(--amber)}
     .strain-high{color:var(--red)}
-    footer{
-      text-align:center;font-size:.72rem;color:#999;margin-top:2rem;
-      padding:1.2rem 1rem;border-top:1px solid #e8e8e8;line-height:1.9;
-    }
-    .footer-disclaimer{font-weight:600;color:#777;margin-top:.2rem}
-    footer a{color:#999}
 
-    /* ── Mobile: leaderboard becomes top slider ─────────────────────────────── */
+    /* ── Global footer — three-column ────────────────────────────────────────── */
+    .global-footer{
+      max-width:1160px;margin:2.5rem auto 0;
+      padding:1.6rem 1rem 1.2rem;
+      border-top:1px solid #e8e8e8;
+    }
+    .footer-grid{
+      display:grid;grid-template-columns:repeat(3,1fr);
+      gap:1.5rem 2rem;margin-bottom:1.2rem;
+    }
+    .footer-col h4{
+      font-size:.62rem;text-transform:uppercase;letter-spacing:.1em;
+      color:#aaa;font-weight:700;margin-bottom:.55rem;
+    }
+    .footer-col p,.footer-col a{
+      font-size:.71rem;color:#999;line-height:1.85;display:block;
+    }
+    .footer-col a{text-decoration:none}
+    .footer-col a:hover{color:var(--green)}
+    .footer-bottom{
+      text-align:center;font-size:.68rem;color:#bbb;
+      padding-top:.9rem;border-top:1px solid #f0f0f0;
+    }
+    .footer-bottom strong{color:#888}
+
+    /* ── Triage category glossary ────────────────────────────────────────────── */
+    .footer-glossary{
+      background:#f7f9fc;border-radius:10px;
+      padding:1rem 1.3rem;margin-bottom:1.2rem;
+      font-size:.72rem;color:#888;line-height:1.8;
+    }
+    .footer-glossary h4{
+      font-size:.62rem;text-transform:uppercase;letter-spacing:.1em;
+      color:#aaa;font-weight:700;margin-bottom:.55rem;
+    }
+    .footer-glossary strong{color:#666;font-weight:700}
+
+    /* ── Mobile: sidebar becomes top strip ───────────────────────────────────── */
     @media(max-width:640px){
       #main-layout{flex-direction:column}
-      #leaderboard{width:100%;order:-1}
-      #lb-shortest,#lb-clearing{
-        display:flex;overflow-x:auto;gap:.7rem;
-        padding-bottom:.5rem;
+      #leaderboard{
+        width:100%;order:-1;position:static;
+      }
+      #lb-shortest,#lb-clearing,#lb-minor{
+        display:flex;overflow-x:auto;gap:.6rem;
+        padding-bottom:.4rem;
         scroll-snap-type:x mandatory;
         -webkit-overflow-scrolling:touch;
       }
       .lb-card{
-        min-width:155px;scroll-snap-align:start;
+        min-width:148px;scroll-snap-align:start;
         flex-shrink:0;margin-bottom:0;
       }
+      .footer-grid{grid-template-columns:1fr}
     }
 
     @media(max-width:480px){
       body{padding:.8rem}
       .patient-headline{padding:1rem 1rem .75rem}
       .obs-footer{padding:.4rem 1rem .5rem}
-      .system-insights{padding:.55rem 1rem .65rem}
-      .hero-val{font-size:1.8rem}
-      .hero-col:first-child{padding-right:.85rem;margin-right:.85rem}
+      .insights-body{padding:.4rem 1rem .65rem}
+      .hero-val{font-size:1.5rem}
+      .hero-val-primary{font-size:1.8rem}
+      .hc-divider{padding-right:.75rem;margin-right:.75rem}
     }
   </style>
 </head>
@@ -210,30 +315,79 @@
 </div>
 
 <div id="main-layout">
+  <aside id="leaderboard" aria-label="Decision Center">
+    <div class="lb-header">
+      Decision Center
+      <small>Where should I go right now?</small>
+    </div>
+    <div class="lb-section">
+      <div class="lb-title">Shortest Wait</div>
+      <div id="lb-shortest"><div class="lb-loading">—</div></div>
+    </div>
+    <div class="lb-section">
+      <div class="lb-title">&#8595; Fastest Clearing</div>
+      <div id="lb-clearing"><div class="lb-loading">—</div></div>
+    </div>
+    <div class="lb-section">
+      <div class="lb-title">Best for Minor Injuries</div>
+      <div id="lb-minor"><div class="lb-loading">—</div></div>
+    </div>
+  </aside>
   <div id="grid"><div class="loading">Loading data&hellip;</div></div>
-  <div id="leaderboard">
-    <div class="lb-title">Shortest Wait</div>
-    <div id="lb-shortest"><div class="lb-loading">—</div></div>
-    <div class="lb-title" style="margin-top:1.1rem">&#8595; Fastest Clearing</div>
-    <div id="lb-clearing"><div class="lb-loading">—</div></div>
-  </div>
 </div>
 
-<footer>
-  <div>Raw data sourced via Monash Health &amp; Eastern Health public feeds.</div>
-  <div>Trends and predictions calculated by Melbourne ED Monitor Engine.</div>
-  <div class="footer-disclaimer">Not an official hospital tool. For informational use only.</div>
-  <div style="margin-top:.5rem;font-size:.66rem">
-    Raspberry Pi scraper &middot; Vercel dashboard &middot;
-    <a href="https://github.com/zwleoapp/hospital-monitor">github.com/zwleoapp/hospital-monitor</a>
+<footer class="global-footer">
+  <div class="footer-grid">
+    <div class="footer-col">
+      <h4>Data Sources</h4>
+      <p>Live feed: Monash Health &amp; Eastern Health public dashboards</p>
+      <p>Benchmarks: VAHI quarterly ED performance data (Oct&nbsp;2024&ndash;)</p>
+      <p>Historical baseline: AIHW ED statistics 2011&ndash;2025</p>
+    </div>
+    <div class="footer-col">
+      <h4>Methodology</h4>
+      <p>Raspberry Pi scraper &middot; 15-min collection cycles</p>
+      <p>Momentum + VAHI baseline confidence model</p>
+      <p>60-min rolling forecast with adaptive damping</p>
+      <a href="https://github.com/zwleoapp/hospital-monitor" target="_blank" rel="noopener">
+        github.com/zwleoapp/hospital-monitor
+      </a>
+    </div>
+    <div class="footer-col">
+      <h4>Legal</h4>
+      <p>Not an official hospital tool.</p>
+      <p>For informational use only &mdash; not clinical advice.</p>
+      <p>Predictions are statistical estimates derived from public-aggregate data.</p>
+      <p>Always verify wait times directly with hospital staff.</p>
+    </div>
+  </div>
+  <div class="footer-glossary">
+    <h4>General Understanding of Triage Categories</h4>
+    <p><strong>Urgent (Categories 1&ndash;3):</strong> Life-threatening emergencies, severe chest pain, major trauma, or difficulty breathing. These cases are always prioritised by clinical staff first.</p>
+    <p><strong>Minor (Categories 4&ndash;5):</strong> Non-life-threatening conditions such as sprains, minor cuts, or viral symptoms. Waiting times are typically longer as resources are directed to more critical patients.</p>
+    <p style="margin-top:.4rem;font-style:italic">Note: These estimates are statistical models and do not replace professional medical triage. Actual wait times may vary.</p>
+  </div>
+  <div class="footer-bottom">
+    <strong>NOT CLINICAL ADVICE</strong> &mdash;
+    Verify all information with hospital staff before making decisions.
   </div>
 </footer>
 
 <script>
-const DATA_URL          = "/latest.json";   // served from same Vercel deployment as this page
-const HOSPITAL_STALE_MINS = 60;             // per-hospital stale threshold
-const NETWORK_ORDER     = ["Monash Health", "Eastern Health"];  // fixed display order
-let _lastOutlook = null;
+const DATA_URL            = "/latest.json";
+const HOSPITAL_STALE_MINS = 60;
+const NETWORK_ORDER       = ["Monash Health", "Eastern Health"];
+const FORECAST_KEY        = "ed_forecast_v1";
+const MAPS_QUERIES        = {
+  "Box Hill Hospital":               "Box+Hill+Hospital+Box+Hill+VIC",
+  "Maroondah Hospital":              "Maroondah+Hospital+Ringwood+East+VIC",
+  "Angliss Hospital":                "Angliss+Hospital+Upper+Ferntree+Gully+VIC",
+  "Monash Medical Centre - Clayton": "Monash+Medical+Centre+Clayton+VIC",
+  "Dandenong Hospital":              "Dandenong+Hospital+Dandenong+VIC",
+  "Casey Hospital":                  "Casey+Hospital+Berwick+VIC"
+};
+let _lastOutlook   = null;
+let _p90AllMins    = null;  // system-wide VAHI 90th-pct safety net, set from outlook
 
 function parseHospDataTime(display) {
   const m = (display || "").match(/(\d{1,2}:\d{2})\s*$/);
@@ -287,26 +441,87 @@ function minsAgo(utc) {
   if (!d) return null;
   return Math.round((Date.now() - d.getTime()) / 60000);
 }
+function mapsUrl(site) {
+  const q = MAPS_QUERIES[site] || encodeURIComponent(site + " Melbourne VIC");
+  return "https://maps.google.com/?q=" + q;
+}
 
+// ── Rolling forecast accuracy via localStorage ────────────────────────────────
+function storeForecast(sites) {
+  try {
+    const now = Date.now();
+    const stored = JSON.parse(localStorage.getItem(FORECAST_KEY) || "[]");
+    sites.forEach(s => {
+      if (s.predicted_wait_min != null) {
+        stored.push({site: s.site, p: s.predicted_wait_min, ts: now});
+      }
+    });
+    // Prune to last 3 hours
+    const pruned = stored.filter(h => now - h.ts < 3 * 60 * 60 * 1000);
+    localStorage.setItem(FORECAST_KEY, JSON.stringify(pruned));
+  } catch(e) { /* storage unavailable */ }
+}
+
+function getForecastAccuracy(siteName, actual) {
+  try {
+    const now = Date.now();
+    const stored = JSON.parse(localStorage.getItem(FORECAST_KEY) || "[]");
+    // Predictions from 45–75 min ago (±15 min window around the 60-min horizon)
+    const candidates = stored.filter(h =>
+      h.site === siteName &&
+      now - h.ts >= 45 * 60 * 1000 &&
+      now - h.ts <= 75 * 60 * 1000
+    );
+    if (!candidates.length || actual == null || actual <= 0) return null;
+    const best = candidates.reduce((a, b) =>
+      Math.abs(now - a.ts - 3600000) < Math.abs(now - b.ts - 3600000) ? a : b
+    );
+    return Math.max(0, Math.round(100 - Math.abs(best.p - actual) / Math.max(actual, 5) * 100));
+  } catch(e) { return null; }
+}
+
+// ── Triage split-estimate helpers ─────────────────────────────────────────────
+function calcSplitEstimates(live, cat123, cat45) {
+  if (cat123 == null && cat45 == null) return null;
+  const avg = ((cat123 ?? cat45) + (cat45 ?? cat123)) / 2;
+  return {
+    urgent: cat123 != null ? Math.max(1, Math.round(live * cat123 / avg)) : null,
+    minor:  cat45  != null ? Math.max(1, Math.round(live * cat45  / avg)) : null,
+  };
+}
+function triageCls(usual, estimate) {
+  if (usual == null) return "tb-near";
+  if (estimate > usual * 1.5) return "tb-above";
+  if (estimate <= usual)      return "tb-below";
+  return "tb-near";
+}
+function triageTag(usual, estimate) {
+  if (usual == null) return "—";
+  if (estimate > usual * 1.5) return "▲ Above usual";
+  if (estimate <= usual)      return "▼ Below usual";
+  return "→ Near usual";
+}
+
+// ── Card renderer ─────────────────────────────────────────────────────────────
 function renderCard(s) {
   try {
-    const momentum     = s.wait_momentum      ?? 0;
-    const current      = s.current_wait_min   ?? 0;
-    // Floor predicted at 50% of current — matches backend predict_next.py guard
+    const momentum     = s.wait_momentum           ?? 0;
+    const current      = s.current_wait_min        ?? 0;
     const predicted    = Math.max(s.predicted_wait_min ?? 0, current * 0.5);
-    const conf         = s.confidence         ?? 0;
-    const ageMin       = s.heartbeat_age_mins  ?? 0;
-    const waitingCount = s.waiting_count       ?? 0;
+    const conf         = s.confidence              ?? 0;
+    const ageMin       = s.heartbeat_age_mins      ?? 0;
+    const waitingCount = s.waiting_count           ?? 0;
+    const medCat45     = s.vahi_median_cat45_mins  ?? null;
+    const medCat123    = s.vahi_median_cat123_mins ?? null;
+    const p90Mins      = s.vahi_p90_mins           ?? null;
+    const splits       = calcSplitEstimates(current, medCat123, medCat45);
+    const urgentEst    = splits?.urgent ?? null;
+    const minorEst     = splits?.minor  ?? null;
 
     const isStale = ageMin > HOSPITAL_STALE_MINS;
     const c    = light(predicted, momentum);
     const a    = arrow(momentum);
     const sign = momentum >= 0 ? "+" : "";
-
-    const maxWait    = s.max_wait_min != null ? s.max_wait_min : null;
-    const waitRangeTxt = maxWait != null
-      ? `${Math.round(current)}&ndash;${maxWait} min`
-      : `${Math.round(current)} min`;
 
     const staleBadge = isStale
       ? `<span class="stale-badge">&#9888;&#xFE0F; STALE</span>`
@@ -316,12 +531,13 @@ function renderCard(s) {
     const obsTime     = localTime(s.latest_obs_utc);
     const hospTime    = parseHospDataTime(s.last_updated_display);
     const hospTimeHtml = hospTime
-      ? `<span>&#128197; Hospital data as at: ${hospTime}</span>`
-      : "";
+      ? `<div class="hb-row"><span class="hb-label">Hospital&nbsp;data:</span><span>${hospTime}&thinsp;AEST</span></div>`
+      : `<div class="hb-row"><span class="hb-label">Hospital&nbsp;data:</span><span class="hb-na-val">not published by hospital</span></div>`;
     const obsFooter = `
       <div class="obs-footer">
         ${staleBadge}
-        <span>Pi check-in: ${obsAgo != null ? obsAgo + "m ago" : "—"} (${obsTime} AEST)</span>
+        <div class="hb-title">&#128202;&nbsp;Data Heartbeat</div>
+        <div class="hb-row"><span class="hb-label">Monitor&nbsp;check:</span><span>${obsAgo != null ? obsAgo + "m&thinsp;ago &middot; " : ""}${obsTime}&thinsp;AEST</span></div>
         ${hospTimeHtml}
       </div>`;
 
@@ -331,7 +547,44 @@ function renderCard(s) {
         <span class="iv ${strainCls(s.strain_index)}">${s.strain_index.toFixed(2)}&times;</span>
       </div>` : "";
 
-    const html = `
+    const maxWaitHtml = s.max_wait_min != null ? `
+      <div class="insight">
+        <span class="il">Max Wait (all pts)</span>
+        <span class="iv">${fmtShort(s.max_wait_min) ?? "—"}</span>
+      </div>` : "";
+
+    const maxWarnHtml = (p90Mins != null && s.max_wait_min != null && s.max_wait_min > p90Mins * 1.5)
+      ? `<div class="max-warn">&#9888;&#xFE0F;&nbsp;Max wait ${fmtShort(s.max_wait_min) ?? s.max_wait_min + "m"} — ${(s.max_wait_min / p90Mins).toFixed(1)}&times; the safety net (${p90Mins}m)</div>`
+      : "";
+
+    const accuracy = getForecastAccuracy(s.site, current);
+    const accuracyHtml = accuracy != null ? `
+      <div class="insight">
+        <span class="il">60-min Accuracy</span>
+        <span class="iv"><span class="badge forecast-badge">${accuracy}%</span></span>
+      </div>` : "";
+
+    // Triage benchmark chips — compare split estimates against VAHI historical medians
+    let triageBenchHtml = "";
+    if (medCat45 != null || medCat123 != null) {
+      const minorCmp  = minorEst  ?? current;
+      const urgentCmp = urgentEst ?? current;
+      triageBenchHtml = `
+        <div class="triage-bench">
+          <div class="tb-chip ${triageCls(medCat45, minorCmp)}">
+            <span class="tb-cat">Minor (Cat 4&ndash;5)</span>
+            <span class="tb-usual">${medCat45 != null ? "usual " + medCat45 + "m" : "—"}</span>
+            <span class="tb-tag">${triageTag(medCat45, minorCmp)}</span>
+          </div>
+          <div class="tb-chip ${triageCls(medCat123, urgentCmp)}">
+            <span class="tb-cat">Urgent (Cat 1&ndash;3)</span>
+            <span class="tb-usual">${medCat123 != null ? "usual " + medCat123 + "m" : "—"}</span>
+            <span class="tb-tag">${triageTag(medCat123, urgentCmp)}</span>
+          </div>
+        </div>`;
+    }
+
+    return `
       <div class="card ${c}${isStale ? " stale-card" : ""}">
         <div class="patient-headline">
           <div class="card-header">
@@ -340,112 +593,174 @@ function renderCard(s) {
           </div>
 
           <div class="hero-split">
-            <div class="hero-col">
-              <div class="hero-sub">Est. Wait</div>
-              <div class="hero-val wait-hero">${fmtShort(current) ?? "—"}</div>
-              <div class="wait-range">${waitRangeTxt} range</div>
+            <div class="hero-col hc-divider">
+              <div class="hero-sub">Urgent &bull; Cat 1&ndash;3</div>
+              <div class="hero-val">${urgentEst != null ? fmtShort(urgentEst) ?? "—" : fmtShort(current) ?? "—"}</div>
+            </div>
+            <div class="hero-col hc-divider hc-minor-col">
+              <div class="hero-sub hero-sub-primary">Minor &bull; Cat 4&ndash;5</div>
+              <div class="hero-val hero-val-primary">${minorEst != null ? fmtShort(minorEst) ?? "—" : fmtShort(current) ?? "—"}</div>
             </div>
             <div class="hero-col">
-              <div class="hero-sub">Patients Waiting</div>
-              <div class="hero-val count-hero">${waitingCount}</div>
+              <div class="hero-sub" style="font-size:.5rem">&#128100; Patients Waiting</div>
+              <div class="count-hero">${waitingCount}</div>
             </div>
           </div>
+          <div class="overall-metric">All categories &middot; current: <strong>${fmtShort(current) ?? current + "m"}</strong>${p90Mins != null ? ` &nbsp;&middot;&nbsp; VAHI 90th: <strong>${p90Mins}m</strong>` : ""}</div>
+          ${p90Mins != null ? `<div class="p90-line p90-safety-net">&#128737;&nbsp;Safety Net: 90% of patients seen within <strong>${p90Mins}m</strong> at this hospital (VAHI)</div>` : ""}
+          ${maxWarnHtml}
 
           <div class="trend">
             <span class="${a.cls}">${a.sym}</span>
             ${a.lbl} &nbsp;&middot;&nbsp; ${sign}${momentum.toFixed(1)} min / 15 min
           </div>
+          ${triageBenchHtml}
           <div class="obs-meta">
             <span class="badge ${confCls(s.confidence_label)}">
               ${s.confidence_label} confidence &nbsp;${(conf * 100).toFixed(0)}%
             </span>
           </div>
         </div>
-        <div class="system-insights">
-          <div class="insights-label">Pro / Paramedic View</div>
-          <div class="insights-row">
-            <div class="insight">
-              <span class="il">Arrival Prediction</span>
-              <span class="iv">${Math.round(predicted)} min</span>
-            </div>
-            ${strainHtml}
-            <div class="insight">
-              <span class="il">Clearing Speed</span>
-              <span class="iv ${a.cls}">${a.sym} ${sign}${momentum.toFixed(1)}<small style="font-weight:400;font-size:.65rem"> /15m</small></span>
+
+        <details class="system-insights">
+          <summary>System Insights</summary>
+          <div class="insights-body">
+            <div class="insights-row">
+              <div class="insight">
+                <span class="il">60-min Forecast</span>
+                <span class="iv">${Math.round(predicted)} min</span>
+              </div>
+              ${maxWaitHtml}
+              ${strainHtml}
+              <div class="insight">
+                <span class="il">Clearing Speed</span>
+                <span class="iv ${a.cls}">${a.sym} ${sign}${momentum.toFixed(1)}<small style="font-weight:400;font-size:.65rem"> /15m</small></span>
+              </div>
+              ${accuracyHtml}
             </div>
           </div>
-        </div>
+        </details>
+
         ${obsFooter}
       </div>`;
-    return html;
   } catch(e) {
-    console.error('Failed to render card for', s?.site, e);
+    console.error("Failed to render card for", s?.site, e);
     return `<div class="card stale-card"><div class="patient-headline">
-      <div class="card-header"><div class="dot"></div><div class="hosp">${s?.site ?? 'Unknown'}</div></div>
+      <div class="card-header"><div class="dot"></div><div class="hosp">${s?.site ?? "Unknown"}</div></div>
       <div class="trend" style="color:#e53935;font-size:.78rem;margin-top:.5rem">Data temporarily unavailable</div>
     </div></div>`;
   }
 }
 
+// ── Sidebar card builder ──────────────────────────────────────────────────────
+function lbCard(s, rank, statHtml, subHtml, borderColor) {
+  return `
+    <div class="lb-card" style="border-left-color:${borderColor}">
+      <div class="lb-rank">#${rank}</div>
+      <div class="lb-hosp">&#127973; ${s.site}</div>
+      <div class="lb-net">${s.network ?? ""}</div>
+      <div class="lb-stat" style="color:${borderColor}">${statHtml}</div>
+      <div class="lb-sub">${subHtml}</div>
+      <a class="lb-dir" href="${mapsUrl(s.site)}" target="_blank" rel="noopener">
+        &#128205; Directions
+      </a>
+    </div>`;
+}
+
+function colorVar(c) {
+  return c === "green" ? "var(--green)" : c === "amber" ? "var(--amber)" : "var(--red)";
+}
+
+// ── Leaderboard renderer ──────────────────────────────────────────────────────
 function renderLeaderboard(sites) {
   const lbShortest = document.getElementById("lb-shortest");
   const lbClearing = document.getElementById("lb-clearing");
-  if (!lbShortest || !lbClearing) return;
+  const lbMinor    = document.getElementById("lb-minor");
+  if (!lbShortest || !lbClearing || !lbMinor) return;
 
-  // Shortest Wait: top 3 by current_wait_min ascending
+  // Shortest Wait
   const shortest = [...sites]
     .filter(s => (s.current_wait_min ?? 0) > 0)
     .sort((a, b) => (a.current_wait_min ?? 0) - (b.current_wait_min ?? 0))
     .slice(0, 3);
 
-  if (shortest.length === 0) {
-    lbShortest.innerHTML = '<div class="lb-empty">No data</div>';
-  } else {
-    const colorVar = c => c === "green" ? "var(--green)" : c === "amber" ? "var(--amber)" : "var(--red)";
-    lbShortest.innerHTML = shortest.map((s, i) => {
-      const c = light(s.current_wait_min ?? 0, s.wait_momentum ?? 0);
-      const cv = colorVar(c);
-      return `
-        <div class="lb-card" style="border-left-color:${cv}">
-          <div class="lb-rank">#${i + 1}</div>
-          <div class="lb-hosp">${s.site}</div>
-          <div class="lb-net">${s.network ?? ""}</div>
-          <div class="lb-momentum" style="color:${cv}">${fmtShort(s.current_wait_min) ?? "—"}</div>
-          <div class="lb-wait">${s.waiting_count ?? 0} waiting</div>
-        </div>`;
-    }).join("");
-  }
+  lbShortest.innerHTML = shortest.length
+    ? shortest.map((s, i) => {
+        const c = light(s.current_wait_min ?? 0, s.wait_momentum ?? 0);
+        return lbCard(
+          s, i + 1,
+          fmtShort(s.current_wait_min) ?? "—",
+          `${s.waiting_count ?? 0} waiting`,
+          colorVar(c)
+        );
+      }).join("")
+    : '<div class="lb-empty">No data</div>';
 
-  // Fastest Clearing: top 2 by most negative momentum
+  // Fastest Clearing
   const clearing = [...sites]
     .filter(s => (s.wait_momentum ?? 0) < -1)
     .sort((a, b) => (a.wait_momentum ?? 0) - (b.wait_momentum ?? 0))
     .slice(0, 2);
 
-  if (clearing.length === 0) {
-    lbClearing.innerHTML = '<div class="lb-empty">No improving trends right now</div>';
-  } else {
-    lbClearing.innerHTML = clearing.map((s, i) => {
-      const m = (s.wait_momentum ?? 0).toFixed(1);
-      return `
-        <div class="lb-card">
-          <div class="lb-rank">#${i + 1}</div>
-          <div class="lb-hosp">${s.site}</div>
-          <div class="lb-net">${s.network ?? ""}</div>
-          <div class="lb-momentum">&#8595; ${m} <small>min/15m</small></div>
-          <div class="lb-wait">${s.waiting_count ?? 0} waiting &middot; ~${Math.round(s.current_wait_min ?? 0)} min</div>
-        </div>`;
-    }).join("");
-  }
+  lbClearing.innerHTML = clearing.length
+    ? clearing.map((s, i) => {
+        const m = (s.wait_momentum ?? 0).toFixed(1);
+        return lbCard(
+          s, i + 1,
+          `&#8595; ${m} <small>min/15m</small>`,
+          `${s.waiting_count ?? 0} waiting &middot; ~${Math.round(s.current_wait_min ?? 0)} min`,
+          "var(--green)"
+        );
+      }).join("")
+    : '<div class="lb-empty">No improving trends right now</div>';
+
+  // Best for Minor Injuries — ranked by minor (Cat 4-5) split estimate, fallback to current
+  const minorSorted = [...sites]
+    .filter(s => (s._minor_est ?? s.current_wait_min ?? 0) > 0)
+    .sort((a, b) =>
+      (a._minor_est ?? a.current_wait_min ?? 999) -
+      (b._minor_est ?? b.current_wait_min ?? 999)
+    )
+    .slice(0, 2);
+
+  lbMinor.innerHTML = minorSorted.length
+    ? minorSorted.map((s, i) => {
+        const est    = s._minor_est ?? s.current_wait_min ?? 0;
+        const c      = light(est, s.wait_momentum ?? 0);
+        const vahi45 = s.vahi_median_cat45_mins;
+        const subText = vahi45 != null
+          ? `usual ${vahi45}m &middot; ${s.waiting_count ?? 0} waiting`
+          : `${s.waiting_count ?? 0} waiting`;
+        return lbCard(
+          s, i + 1,
+          `${fmtShort(Math.round(est)) ?? est + " min"} <small>minor est.</small>`,
+          subText,
+          colorVar(c)
+        );
+      }).join("")
+    : '<div class="lb-empty">No data</div>';
 }
 
+// ── Dashboard orchestrator ────────────────────────────────────────────────────
 function renderDashboard(outlook) {
   _lastOutlook = outlook;
+  _p90AllMins  = outlook.vahi_p90_all_mins ?? null;
 
   const genDate = safeDate(outlook.generated_utc);
   document.getElementById("gt").textContent = genDate
     ? localDateTime(outlook.generated_utc)
     : "—";
+
+  // Pre-compute split estimates so sidebar and cards share the same values
+  outlook.sites.forEach(s => {
+    const sp = calcSplitEstimates(
+      s.current_wait_min ?? 0,
+      s.vahi_median_cat123_mins ?? null,
+      s.vahi_median_cat45_mins  ?? null
+    );
+    s._urgent_est = sp?.urgent ?? null;
+    s._minor_est  = sp?.minor  ?? null;
+  });
 
   const groups = {};
   outlook.sites.forEach(s => { (groups[s.network] = groups[s.network] || []).push(s); });
@@ -464,6 +779,7 @@ function renderDashboard(outlook) {
     `).join("");
 
   renderLeaderboard(outlook.sites);
+  storeForecast(outlook.sites);
   checkStale(outlook);
 }
 
@@ -477,9 +793,7 @@ function checkStale(outlook) {
 
   const banner = document.getElementById("stale-banner");
   banner.style.display = allStale ? "block" : "none";
-  if (allStale) {
-    document.getElementById("stale-age").textContent = totalAge;
-  }
+  if (allStale) document.getElementById("stale-age").textContent = totalAge;
 
   const grid = document.getElementById("grid");
   if (allStale) {
@@ -508,9 +822,7 @@ async function loadOutlook() {
 
 loadOutlook();
 setInterval(loadOutlook, 5 * 60 * 1000);
-setInterval(() => {
-  if (_lastOutlook) checkStale(_lastOutlook);
-}, 60_000);
+setInterval(() => { if (_lastOutlook) checkStale(_lastOutlook); }, 60_000);
 </script>
 </body>
 </html>
