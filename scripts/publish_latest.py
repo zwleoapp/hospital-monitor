@@ -209,10 +209,14 @@ def main() -> None:
         outlook["last_updated_display"] = last_updated_map.get(outlook["site"], "")
         sites.append(outlook)
 
+    quarter = (generated_utc_dt.month - 1) // 3 + 1
+    vahi_qly_label = f"Q{quarter} {generated_utc_dt.year}"
+
     payload = {
         "generated_utc":    generated_utc_str,
         "horizon_min":      60,
         "vahi_p90_all_mins": VAHI_BENCHMARKS.get("p90_all_mins"),
+        "vahi_qly_label":   vahi_qly_label,
         "sites":            sites,
     }
 

@@ -1,0 +1,16 @@
+{
+  "_comment": "Human override layer — values here take priority over ML-evolved parameters. Remove a key to revert to the ML-learned value.",
+
+  "_manual_damping_example": "Uncomment the line below to override the damping factor for all sites:",
+  "_manual_damping": 0.50,
+
+  "_manual_damping_per_site_example": "Uncomment below to override per hospital (key = exact hospital name from hospitals.json):",
+  "_manual_damping_per_site": {
+    "Box Hill Hospital": 0.60,
+    "Angliss Hospital": 0.50,
+    "Maroondah Hospital": 0.50,
+    "Casey Hospital": 0.50,
+    "Dandenong Hospital": 0.50,
+    "Monash Medical Centre - Clayton": 0.50
+  }
+}

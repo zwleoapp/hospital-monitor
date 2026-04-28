@@ -38,7 +38,7 @@ import sys
 import json
 import argparse
 import pathlib
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
 import pandas as pd
 
@@ -52,25 +52,105 @@ DEFAULT_SILVER = _SSD / "eastern_hospital_silver.csv"
 # ── Tuning constants ──────────────────────────────────────────────────────────
 HORIZON_MIN       = 60     # forecast horizon in minutes
 CADENCE_MIN       = 15     # scraper cadence — momentum is normalised to this unit
-MOMENTUM_DAMPING  = 0.50   # trends don't compound: half-weight beyond one step
+MOMENTUM_DAMPING  = 0.50   # default damping — overridden by get_effective_damping()
 MOMENTUM_CEILING  = 30.0   # momentum beyond this (min/cadence) = max uncertainty
 MAX_WAIT_MIN      = 480    # hard upper clamp on projected wait (8 hours)
 LOS_TARGET_PCT    = 70.0   # Australian national 4-hour ED target
 
+# ── Safety & evolution constraints ────────────────────────────────────────────
+DAMPING_MIN       = 0.50   # ML-evolved damping cannot go below this (D ∈ [0.5, 1.2])
+DAMPING_MAX       = 1.20   # ML-evolved damping cannot exceed this
+ANOMALY_ERROR_PCT = 200.0  # skip ML training on snapshots with error > 200%
+
+# ── Derived paths ─────────────────────────────────────────────────────────────
+_OVERRIDES_PATH = pathlib.Path(__file__).resolve().parent.parent / "config" / "overrides.json"
+_ACCURACY_LOG   = _SSD / "accuracy_postmortem.jsonl"
+_ANOMALY_LOG    = _SSD / "damping_anomalies.jsonl"
+
+
+# ── Override & safety layer ───────────────────────────────────────────────────
+
+def _load_overrides() -> dict:
+    """Return config/overrides.json if it exists and is valid, else empty dict."""
+    try:
+        return json.loads(_OVERRIDES_PATH.read_text())
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {}
+
+
+def get_effective_damping(hospital: str | None = None) -> float:
+    """
+    Resolve the damping factor for a hospital, clamped to [DAMPING_MIN, DAMPING_MAX].
+
+    Priority order:
+      1. config/overrides.json → manual_damping_per_site[hospital]  (human override)
+      2. config/overrides.json → manual_damping                      (global human override)
+      3. ML-evolved value from evolve_damping_factors()              (Phase 2 — placeholder)
+      4. MOMENTUM_DAMPING compile-time default
+    """
+    ov = _load_overrides()
+
+    if hospital and "manual_damping_per_site" in ov:
+        per_site = ov["manual_damping_per_site"]
+        if hospital in per_site:
+            return float(min(DAMPING_MAX, max(DAMPING_MIN, per_site[hospital])))
+
+    if "manual_damping" in ov:
+        return float(min(DAMPING_MAX, max(DAMPING_MIN, ov["manual_damping"])))
+
+    return MOMENTUM_DAMPING
+
+
+def evolve_damping_factors(accuracy_log: pathlib.Path = _ACCURACY_LOG) -> dict:
+    """
+    Phase 2 ML loop — reads last 72h of accuracy postmortem entries and will
+    compute the per-hospital damping factor that minimises mean-absolute-error.
+
+    Safety constraints (enforced when compute is activated):
+      - All results clamped to [DAMPING_MIN, DAMPING_MAX]
+      - Snapshots where |predicted − actual| / actual > ANOMALY_ERROR_PCT are skipped
+
+    Returns dict mapping hospital name → evolved damping factor.
+    Returns {} (no-op) until Phase 2 grid-search compute is activated.
+    """
+    if not accuracy_log.exists():
+        return {}
+    try:
+        cutoff = datetime.now(timezone.utc) - timedelta(hours=72)
+        records = []
+        with open(accuracy_log) as fh:
+            for line in fh:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    rec = json.loads(line)
+                    logged = datetime.fromisoformat(rec["logged_utc"].replace("Z", "+00:00"))
+                    if logged >= cutoff:
+                        records.append(rec)
+                except Exception:
+                    continue
+        # TODO Phase 2: grid-search optimal damping per hospital over records
+        _ = records  # consumed when Phase 2 compute is activated
+        return {}
+    except OSError:
+        return {}
+
 
 # ── Core functions ────────────────────────────────────────────────────────────
 
-def project_wait(current_wait: float, momentum: float) -> float:
+def project_wait(current_wait: float, momentum: float, damping: float | None = None) -> float:
     """
     Damped linear extrapolation across HORIZON_MIN.
 
     steps = HORIZON_MIN / CADENCE_MIN = 4 cadence units.
-    MOMENTUM_DAMPING prevents runaway compounding (mean-reverting assumption).
+    Damping prevents runaway compounding (mean-reverting assumption).
     Floor at 50% of current_wait: a one-cycle momentum spike shouldn't predict
     near-zero wait when the system is clearly still busy.
     """
+    d = damping if damping is not None else MOMENTUM_DAMPING
     steps = HORIZON_MIN / CADENCE_MIN
-    projected = current_wait + momentum * steps * MOMENTUM_DAMPING
+    projected = current_wait + momentum * steps * d
     floor = current_wait * 0.50
     return round(max(floor, min(MAX_WAIT_MIN, projected)), 1)
 
@@ -145,8 +225,9 @@ def build_outlook(silver_row: pd.Series) -> dict:
     vahi_median_cat123 = None if pd.isna(raw_med123) else int(raw_med123)
     vahi_median_cat45  = None if pd.isna(raw_med45)  else int(raw_med45)
 
+    damping = get_effective_damping(hospital)
     projected, (confidence, label) = (
-        project_wait(current_wait, momentum),
+        project_wait(current_wait, momentum, damping),
         confidence_score(current_wait, momentum, los_pct, p90),
     )
 
