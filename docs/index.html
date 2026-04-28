@@ -199,9 +199,12 @@
     /* ── History mode ────────────────────────────────────────────────────────── */
     #hist-banner{
       display:none;background:#3730a3;color:#e0e7ff;border-radius:10px;
-      padding:.85rem 1.4rem;text-align:center;max-width:1160px;
-      margin:0 auto 1rem;font-weight:600;font-size:.82rem;
+      padding:1rem 1.4rem;text-align:center;max-width:1160px;
+      margin:0 auto 1rem;font-weight:700;font-size:.96rem;
+      border:2px solid #6366f1;
+      animation:hist-banner-pulse 2.4s ease-in-out infinite;
     }
+    @keyframes hist-banner-pulse{0%,100%{border-color:#6366f1}50%{border-color:#a5b4fc}}
     .hist-exit-btn{
       background:#4338ca;color:#e0e7ff;border:1px solid #6366f1;
       border-radius:6px;padding:.3rem .75rem;cursor:pointer;
@@ -234,6 +237,10 @@
     .p90-highlight{font-weight:800;font-size:calc(.63rem + 2px)}
     .minor-range-sep{font-size:.82em;font-weight:400;color:#bbb;padding:0 .12rem}
     .minor-range-end{font-size:.82em;font-weight:700;color:#666}
+    .minor-has-range{font-size:.95rem!important}
+    .p90-badge{display:inline-flex;align-items:center;gap:.35rem;background:#1a1a2e;color:#e0e7ff;border-radius:6px;padding:.25rem .55rem;font-size:.7rem;font-weight:700;margin:.2rem 0 .5rem}
+    .p90-badge-val{background:#4338ca;color:#fff;border-radius:4px;padding:.05rem .35rem;font-size:.85rem;font-weight:900;letter-spacing:-.01em}
+    .tc-label{font-size:.65rem;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#6366f1;white-space:nowrap}
 
     /* ── System Insights — collapsible pro section ───────────────────────────── */
     details.system-insights{
@@ -346,6 +353,14 @@
   </div>
 </header>
 
+<div id="hist-nav" style="display:none">
+  <span class="tc-label">&#9200; Timeline</span>
+  <button id="hist-prev" class="hist-btn" onclick="histStep(-1)">&#8592; Earlier</button>
+  <span id="hist-pos">&#9679; Live</span>
+  <button id="hist-next" class="hist-btn" onclick="histStep(+1)">Later &#8594;</button>
+  <button id="hist-live-btn" class="hist-btn hist-live" onclick="exitHistory()" style="display:none">&#9679; Live</button>
+</div>
+
 <div id="stale-banner">
   <strong>&#9888; ALL DATA STALE</strong> &mdash;
   Pi may be offline. Last update was <span id="stale-age">?</span> minutes ago.
@@ -355,16 +370,9 @@
 </div>
 
 <div id="hist-banner">
-  &#128336;&nbsp;<strong>HISTORICAL VIEW</strong> &mdash;
+  &#9888;&nbsp;&#128336;&nbsp;<strong>HISTORICAL VIEW</strong> &mdash;
   Showing data from: <span id="hist-ts">—</span>
   <button class="hist-exit-btn" onclick="exitHistory()">&#9654; Back&nbsp;to&nbsp;Live</button>
-</div>
-
-<div id="hist-nav" style="display:none">
-  <button id="hist-prev" class="hist-btn" onclick="histStep(-1)">&#8592; Step&nbsp;Back</button>
-  <span id="hist-pos">&#9679; Live</span>
-  <button id="hist-next" class="hist-btn" onclick="histStep(+1)">Step&nbsp;Forward &#8594;</button>
-  <button id="hist-live-btn" class="hist-btn hist-live" onclick="exitHistory()" style="display:none">&#9654; Live</button>
 </div>
 
 <div id="main-layout">
@@ -580,6 +588,18 @@ function renderCard(s) {
     const minorForecastSplits = calcSplitEstimates(predicted, medCat123, medCat45);
     const minorForecast = minorForecastSplits?.minor ?? null;
 
+    // Arrival-aware range: always show min on left, max on right
+    const minorNowVal   = minorEst ?? current;
+    const minorFcastVal = minorForecast != null ? Math.round(minorForecast) : null;
+    const minorLoVal    = minorFcastVal != null ? Math.min(minorNowVal, minorFcastVal) : minorNowVal;
+    const minorHiVal    = minorFcastVal != null ? Math.max(minorNowVal, minorFcastVal) : null;
+    const minorLoStr    = fmtShort(minorLoVal) ?? "—";
+    const minorHiStr    = minorHiVal != null ? fmtShort(minorHiVal) : null;
+    const minorHasRange = !!(minorHiStr && minorHiStr !== minorLoStr);
+    const minorRangeHtml = minorHasRange
+      ? `${minorLoStr}<span class="minor-range-sep">–</span><span class="minor-range-end">${minorHiStr}</span>`
+      : minorLoStr;
+
     const isStale = ageMin > HOSPITAL_STALE_MINS && !s._is_historical;
     const c    = light(predicted, momentum);
     const a    = arrow(momentum);
@@ -667,13 +687,7 @@ function renderCard(s) {
             </div>
             <div class="hero-col hc-divider hc-minor-col">
               <div class="hero-sub hero-sub-primary">Minor &bull; Cat 4&ndash;5</div>
-              <div class="hero-val hero-val-primary">${(() => {
-                const nowStr = minorEst != null ? fmtShort(minorEst) ?? "—" : fmtShort(current) ?? "—";
-                const fcastStr = minorForecast != null ? fmtShort(Math.round(minorForecast)) : null;
-                return fcastStr && fcastStr !== nowStr
-                  ? `${nowStr}<span class="minor-range-sep">–</span><span class="minor-range-end">${fcastStr}</span>`
-                  : nowStr;
-              })()}</div>
+              <div class="hero-val hero-val-primary${minorHasRange ? ' minor-has-range' : ''}">${minorRangeHtml}</div>
             </div>
             <div class="hero-col hc-divider">
               <div class="hero-sub" style="font-size:.5rem">&#128100; Waiting</div>
@@ -685,7 +699,7 @@ function renderCard(s) {
             </div>
           </div>
           <div class="overall-metric">All categories &middot; current: <strong>${fmtShort(current) ?? current + "m"}</strong>${p90Mins != null ? ` &nbsp;&middot;&nbsp; VAHI 90th: <strong>${p90Mins}m</strong>` : ""}</div>
-          ${p90Mins != null ? `<div class="p90-line p90-safety-net">&#128737;&nbsp;9-in-10 seen by: <strong class="p90-highlight">${p90Mins}m</strong> &mdash; seasonally-adjusted VAHI benchmark</div>` : ""}
+          ${p90Mins != null ? `<div class="p90-badge">&#128737; 9&#8209;in&#8209;10 Target <span class="p90-badge-val">${p90Mins}m</span></div>` : ""}
           ${maxWarnHtml}
 
           <div class="trend">
