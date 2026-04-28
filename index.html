@@ -665,11 +665,9 @@ function renderCard(s) {
 
     const _maxRatio    = (p90Mins != null && s.max_wait_min != null) ? s.max_wait_min / p90Mins : null;
     const _maxCritical = _maxRatio != null && _maxRatio > 5;
-    const maxWaitHtml  = s.max_wait_min != null ? `
-      <div class="insight">
-        <span class="il">Max Wait (all pts)</span>
-        <span class="iv">${fmtShort(s.max_wait_min) ?? "—"}${_maxRatio != null ? `<small style="font-weight:400;font-size:.65rem;color:#888"> (${_maxRatio.toFixed(1)}&times;)</small>` : ""}</span>
-      </div>` : "";
+    const maxWaitPairingHtml = s.max_wait_min != null
+      ? `<span class="max-wait-pairing">Max&nbsp;${fmtShort(s.max_wait_min) ?? "—"}${_maxRatio != null ? `&thinsp;<small>(${_maxRatio.toFixed(1)}&times;)</small>` : ""}</span>`
+      : "";
     const crisisHtml   = (_maxRatio != null && _maxRatio > 1.5)
       ? `<div class="crisis-headline ${_maxCritical ? 'crisis-very-long' : 'crisis-long'}">&#9888; ${_maxCritical ? 'VERY LONG WAIT' : 'LONG WAIT'}</div>`
       : "";
@@ -694,12 +692,10 @@ function renderCard(s) {
           <div class="tb-chip ${triageCls(medCat45, minorCmp)}">
             <span class="tb-cat">Minor (Cat 4&ndash;5)</span>
             <span class="tb-usual">${medCat45 != null ? `Median ${medCat45}m<span class="tb-qsrc">(YoY VAHI ${qLabel})</span>` : "—"}</span>
-            <span class="tb-tag">${triageTag(medCat45, minorCmp)}</span>
           </div>
           <div class="tb-chip ${triageCls(medCat123, urgentCmp)}">
             <span class="tb-cat">Urgent (Cat 1&ndash;3)</span>
             <span class="tb-usual">${medCat123 != null ? `Median ${medCat123}m<span class="tb-qsrc">(YoY VAHI ${qLabel})</span>` : "—"}</span>
-            <span class="tb-tag">${triageTag(medCat123, urgentCmp)}</span>
           </div>
         </div>`;
     }
@@ -714,11 +710,11 @@ function renderCard(s) {
 
           <div class="hero-split">
             <div class="hero-col hc-divider">
-              <div class="hero-sub">Urgent &bull; Cat 1&ndash;3</div>
+              <div class="hero-sub">URGENT<span class="hero-sub-cat">Cat 1&ndash;3</span></div>
               <div class="hero-val">${urgentEst != null ? fmtShort(urgentEst) ?? "—" : fmtShort(current) ?? "—"}</div>
             </div>
             <div class="hero-col hc-divider hc-minor-col">
-              <div class="hero-sub hero-sub-primary">Minor &bull; Cat 4&ndash;5</div>
+              <div class="hero-sub hero-sub-primary">MINOR<span class="hero-sub-cat">Cat 4&ndash;5</span></div>
               <div class="hero-val hero-val-primary${minorHasRange ? ' minor-has-range' : ''}">${minorRangeHtml}</div>
             </div>
             <div class="hero-col hc-divider">
@@ -734,23 +730,22 @@ function renderCard(s) {
             <span class="badge ${confCls(s.confidence_label)}">${s.confidence_label} confidence &nbsp;${(conf * 100).toFixed(0)}%</span>
             ${accuracyBadgeHtml}
           </div>
-          ${p90Mins != null ? `<div class="p90-badge">&#128737; <span class="p90-badge-val">${p90Mins}m</span> (9&#8209;in&#8209;10 possibility)</div>` : ""}
-          <div class="overall-metric">All categories &middot; current: <strong>${fmtShort(current) ?? current + "m"}</strong></div>
+          <div class="p90-maxwait-row">
+            ${p90Mins != null ? `<div class="p90-badge">&#128737; <span class="p90-badge-val">${p90Mins}m</span> (9&#8209;in&#8209;10 possibility)</div>` : ""}
+            ${maxWaitPairingHtml}
+          </div>
+          <div class="overall-forecast-row">
+            <div class="overall-metric">All categories &middot; current: <strong>${fmtShort(current) ?? current + "m"}</strong></div>
+            <span class="forecast-inline">&#128302; ${Math.round(predicted)}m in&nbsp;60m</span>
+          </div>
           ${crisisHtml || `<div class="trend"><span class="${a.cls}">${a.sym}</span> ${a.lbl}</div>`}
           ${triageBenchHtml}
           ${histAccuracyHtml}
         </div>
 
         <details class="system-insights">
-          <summary>System Insights</summary>
+          <summary>Metrics &amp; Index Insights</summary>
           <div class="insights-body">
-            <div class="insights-row">
-              <div class="insight">
-                <span class="il">60-min Forecast</span>
-                <span class="iv">${Math.round(predicted)} min</span>
-              </div>
-              ${maxWaitHtml}
-            </div>
             <div class="insights-subheader">System Metrics</div>
             <div class="insights-row">
               ${strainHtml}
@@ -940,7 +935,7 @@ function updateHistNav() {
   const hasHistory = !!(
     _histTimeline &&
     _histTimeline.snapshots &&
-    _histTimeline.snapshots.length > 1
+    _histTimeline.snapshots.length > 0
   );
 
   if (_histIdx < 0) {
@@ -965,7 +960,7 @@ function updateHistNav() {
       ts + (ago != null ? " (" + Math.round(ago / 60 * 10) / 10 + "h ago)" : "");
     pos.innerHTML         = (_histIdx + 1) + " / " + _histTimeline.snapshots.length + " &middot; " + ts;
     prevBtn.disabled      = (_histIdx === 0);
-    nextBtn.disabled      = false;
+    nextBtn.disabled      = (_histIdx >= _histTimeline.snapshots.length - 1);
     liveBtn.style.display = "";
   }
 }
