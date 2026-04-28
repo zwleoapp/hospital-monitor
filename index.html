@@ -135,6 +135,7 @@
     .hero-val-primary{font-size:2.2rem}
     /* Patient count — 20% smaller than original (1.45rem → 1.16rem) */
     .count-hero{font-size:1.16rem;font-weight:700;color:#6b7280}
+    .count-na{color:#c8c8d4;font-style:italic}
     /* 90th-percentile lines */
     .p90-line{font-size:.63rem;color:#aaa;margin-bottom:.18rem}
     .p90-line strong{font-weight:700;color:#888}
@@ -510,7 +511,8 @@ function renderCard(s) {
     const predicted    = Math.max(s.predicted_wait_min ?? 0, current * 0.5);
     const conf         = s.confidence              ?? 0;
     const ageMin       = s.heartbeat_age_mins      ?? 0;
-    const waitingCount = s.waiting_count           ?? 0;
+    const waitingCount  = s.waiting_count           ?? 0;
+    const treatingCount = s.treating_count          ?? null;
     const medCat45     = s.vahi_median_cat45_mins  ?? null;
     const medCat123    = s.vahi_median_cat123_mins ?? null;
     const p90Mins      = s.vahi_p90_mins           ?? null;
@@ -601,9 +603,13 @@ function renderCard(s) {
               <div class="hero-sub hero-sub-primary">Minor &bull; Cat 4&ndash;5</div>
               <div class="hero-val hero-val-primary">${minorEst != null ? fmtShort(minorEst) ?? "—" : fmtShort(current) ?? "—"}</div>
             </div>
-            <div class="hero-col">
-              <div class="hero-sub" style="font-size:.5rem">&#128100; Patients Waiting</div>
+            <div class="hero-col hc-divider">
+              <div class="hero-sub" style="font-size:.5rem">&#128100; Waiting</div>
               <div class="count-hero">${waitingCount}</div>
+            </div>
+            <div class="hero-col">
+              <div class="hero-sub" style="font-size:.5rem">&#128138; In Treatment</div>
+              <div class="count-hero${treatingCount != null ? "" : " count-na"}">${treatingCount ?? "—"}</div>
             </div>
           </div>
           <div class="overall-metric">All categories &middot; current: <strong>${fmtShort(current) ?? current + "m"}</strong>${p90Mins != null ? ` &nbsp;&middot;&nbsp; VAHI 90th: <strong>${p90Mins}m</strong>` : ""}</div>
