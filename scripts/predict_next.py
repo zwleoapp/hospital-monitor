@@ -131,7 +131,8 @@ def build_outlook(silver_row: pd.Series) -> dict:
     current_wait  = float(silver_row["min_wait_mins"])
     raw_max       = silver_row.get("max_wait_mins", float("nan"))
     max_wait      = None if pd.isna(raw_max) else int(raw_max)
-    waiting_count = int(silver_row.get("waiting", 0) or 0)
+    waiting_count   = int(silver_row.get("waiting",  0) or 0)
+    treating_count  = int(silver_row.get("treating", 0) or 0)
     raw_momentum = silver_row.get("wait_momentum", float("nan"))
     momentum     = 0.0 if pd.isna(raw_momentum) else float(raw_momentum)
     los_pct      = float(silver_row["ctx_los_pct_under_4hr"])
@@ -139,23 +140,32 @@ def build_outlook(silver_row: pd.Series) -> dict:
     ctx_source   = str(silver_row["ctx_source"])
     obs_utc      = silver_row["timestamp"].strftime("%Y-%m-%dT%H:%M:%SZ")
 
+    raw_med123 = silver_row.get("ctx_wait_median_cat123_mins", float("nan"))
+    raw_med45  = silver_row.get("ctx_wait_median_cat45_mins",  float("nan"))
+    vahi_median_cat123 = None if pd.isna(raw_med123) else int(raw_med123)
+    vahi_median_cat45  = None if pd.isna(raw_med45)  else int(raw_med45)
+
     projected, (confidence, label) = (
         project_wait(current_wait, momentum),
         confidence_score(current_wait, momentum, los_pct, p90),
     )
 
     return {
-        "site":               hospital,
-        "network":            network,
-        "latest_obs_utc":     obs_utc,
-        "waiting_count":      waiting_count,
-        "current_wait_min":   round(current_wait, 1),
-        "max_wait_min":       max_wait,
-        "predicted_wait_min": projected,
-        "wait_momentum":      round(momentum, 1),
-        "confidence":         confidence,
-        "confidence_label":   label,
-        "ctx_source":         ctx_source,
+        "site":                  hospital,
+        "network":               network,
+        "latest_obs_utc":        obs_utc,
+        "waiting_count":         waiting_count,
+        "treating_count":        treating_count,
+        "current_wait_min":      round(current_wait, 1),
+        "max_wait_min":          max_wait,
+        "predicted_wait_min":    projected,
+        "wait_momentum":         round(momentum, 1),
+        "confidence":            confidence,
+        "confidence_label":      label,
+        "ctx_source":            ctx_source,
+        "vahi_p90_mins":         None if pd.isna(p90) else int(p90),
+        "vahi_median_cat123_mins": vahi_median_cat123,
+        "vahi_median_cat45_mins":  vahi_median_cat45,
     }
 
 
