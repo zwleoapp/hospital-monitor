@@ -1,6 +1,6 @@
 # DESIGN — Predictive ED Wait Time Engine
 
-**Version:** 1.3 · **Updated:** 2026-04-28 · **Owner:** G
+**Version:** 1.4 · **Updated:** 2026-04-28 · **Owner:** G
 
 > This document is the **Single Source of Truth (SSOT)**. Every architectural change updates this doc *before* the code is merged. Both Gemini (strategy) and Claude (DS co-design / tactical execution) read it on every session.
 
@@ -261,12 +261,16 @@ Range is always presented shortest → longest to convey the uncertainty envelop
 | `ctx_wait_median_cat123_mins` | `_seas_med123` | Typical wait, Cat 1–3 |
 | `ctx_wait_median_cat45_mins` | `_seas_med45` | Typical wait, Cat 4–5 |
 
+The triage benchmark chips ("Median Xm") displayed on each hospital card are sourced from `ctx_wait_median_cat45_mins` and `ctx_wait_median_cat123_mins` in the published JSON. Because these columns are overwritten by `_seas_med45`/`_seas_med123` in Silver, they always reflect the YoY seasonal average for the **current quarter-of-year** (e.g. a Q2 observation compares against the average of all historical Q2 VAHI rows, not the most recent quarter's exact value). This ensures "Median" is the right seasonal comparator, not a stale forward-fill.
+
 ## 12. Change log
 
 - **1.0 (2026-04-25)** — Restructured around Phase 1 / Phase 2. Added data-safety posture and ML lifecycle. Replaces SSOT v0.2.
 - **1.1 (2026-04-27)** — Merged dashboard design reference (Dual-Clock, Tiered Stale, Vercel). Removed diversion UI.
 - **1.2 (2026-04-27)** — Config-driven architecture: connection details extracted to `config/hospitals.json`; `hospitals.py` becomes a thin adapter; engine unchanged. Documented parser types and PBI Adult/Paeds isolation.
 - **1.3 (2026-04-28)** — Added §10 YoY Seasonal Benchmarks and §11 Triage Split Estimation. Documents `_compute_seasonal_benchmarks()` formula and `calcSplitEstimates()` UI logic.
+- **1.4 (2026-04-28)** — §11 extended: clarified that triage chip "Usual" values are sourced from seasonal YoY averages, comparing current quarter-of-year against the same historical quarter.
+- **1.5 (2026-04-28)** — Command Center layout finalised (§13 updated). Hero hierarchy: times → Confidence + 72h Accuracy badges → 🛡️ p90 (9-in-10 possibility) → All-categories current → Crisis headline (LONG WAIT / VERY LONG WAIT, hero-sized) or trend arrow → Median triage chips. System Insights now has a "System Metrics" subgroup (Strain Index, Clearing Speed). Timeline nav requires >1 snapshot to unlock. "Usual" → "Median" in triage chips.
 
 ---
 
@@ -301,6 +305,25 @@ Hospitals are grouped by network and rendered in fixed order:
 
 1. **Monash Health** — Casey Hospital, Dandenong Hospital, Monash Medical Centre - Clayton
 2. **Eastern Health** — Box Hill Hospital, Angliss Hospital, Maroondah Hospital
+
+### Hospital Card Layout (Command Center hierarchy)
+
+Each card renders data in this fixed order:
+
+| Row | Element | Notes |
+|---|---|---|
+| 1 | Urgent & Minor hero times | Urgent (Cat 1–3) left, Minor (Cat 4–5) right; Waiting / In Treatment counts |
+| 2 | Confidence + 72h Accuracy badges | Inline below hero; Calibrating if <4h of data |
+| 3 | 🛡️ `XXm (9-in-10 possibility)` | VAHI seasonal p90; absent if no benchmark |
+| 4 | All categories · current: Xm | Raw hospital-reported wait across all triage categories |
+| 5 | Crisis headline OR trend arrow | LONG WAIT (amber) / VERY LONG WAIT (red) at hero font-size if max_wait > 1.5× p90; otherwise Rising / Stable / Improving arrow |
+| 6 | Triage chips | Minor (Cat 4–5): Median Xm (YoY VAHI QN) / Urgent (Cat 1–3): Median Xm |
+| 7 | Historical accuracy (history mode only) | 60m forecast accuracy shown when viewing a snapshot |
+
+Collapsible **System Insights** panel:
+- Row 1: 60-min Forecast · Max Wait (if available)
+- Subheader: System Metrics
+- Row 2: Strain Index · Clearing Speed
 
 ### Trend Leaderboard
 

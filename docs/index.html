@@ -123,7 +123,7 @@
     .hosp{font-weight:700;font-size:.96rem}
 
     /* ── Split hero: Urgent | Minor (primary) | Patient Count ─────────────── */
-    .hero-split{display:flex;gap:0;margin-bottom:.5rem;align-items:flex-end}
+    .hero-split{display:flex;gap:0;margin-bottom:.75rem;align-items:flex-end}
     .hero-col{display:flex;flex-direction:column;flex:0 0 auto}
     .hc-divider{border-right:1px solid #ebebeb;padding-right:1.1rem;margin-right:1.1rem}
     .hc-minor-col{flex:1 1 auto}
@@ -153,8 +153,9 @@
       font-size:.52rem;text-transform:uppercase;letter-spacing:.07em;
       opacity:.6;font-weight:700;line-height:1;
     }
-    .tb-usual{font-size:.76rem;font-weight:700;line-height:1.25}
+    .tb-usual{font-size:.65rem;font-weight:700;line-height:1.25}
     .tb-tag{font-size:.6rem;font-weight:700;margin-top:.06rem}
+    .tb-qsrc{font-size:.5rem;font-weight:400;opacity:.65;display:block;margin-top:.02rem}
     /* Calm palette: ochre (above usual), slate teal (below), neutral blue-gray (near) */
     .tb-above{background:#fff7ed;color:#b36b10}
     .tb-below{background:#eaf6f4;color:#2a8a7e}
@@ -172,6 +173,7 @@
       background:#eef2ff;color:#5b72b5;
       font-size:.7rem;font-weight:700;
     }
+    .forecast-badge-cal{background:#f5f5f5;color:#9ca3af;border:1px solid #e5e7eb;font-style:italic}
 
     /* ── Per-hospital observation timestamp footer (Data Heartbeat) ─────────── */
     .obs-footer{
@@ -195,6 +197,15 @@
       background:#fff5ea;border:1px solid #f5c89a;border-radius:4px;
       padding:.16rem .5rem;margin-bottom:.3rem;
     }
+    @keyframes max-warn-pulse{
+      0%,100%{border-color:#f5c89a;box-shadow:none}
+      50%{border-color:#d97706;box-shadow:0 0 0 2px #fbbf2466}
+    }
+    .max-warn-critical{animation:max-warn-pulse 1.2s ease-in-out infinite;border-width:2px}
+    .crisis-headline{font-size:1.75rem;font-weight:800;line-height:1;padding:.25rem 0;margin:.1rem 0}
+    .crisis-long{color:var(--amber)}
+    .crisis-very-long{color:var(--red)}
+    .insights-subheader{font-size:.52rem;text-transform:uppercase;letter-spacing:.1em;color:#ccc;font-weight:700;margin:.55rem 0 .3rem}
 
     /* ── History mode ────────────────────────────────────────────────────────── */
     #hist-banner{
@@ -212,11 +223,18 @@
     }
     .hist-exit-btn:hover{background:#312e81}
     #hist-nav{
+      display:flex;position:sticky;top:44px;z-index:90;
       max-width:1160px;margin:0 auto .75rem;
       align-items:center;gap:.6rem;
       background:#f5f3ff;border-radius:10px;
       padding:.5rem 1rem;border:1px solid #ddd6fe;font-size:.82rem;
+      transition:background .2s,border-color .2s;
     }
+    #hist-nav.hist-nav-active{
+      background:#3730a3;border-color:#6366f1;
+    }
+    #hist-nav.hist-nav-active .tc-label,
+    #hist-nav.hist-nav-active #hist-pos{color:#e0e7ff}
     .hist-btn{
       background:#ede9fe;color:#4338ca;border:1px solid #c4b5fd;
       border-radius:6px;padding:.3rem .7rem;cursor:pointer;
@@ -237,8 +255,10 @@
     .p90-highlight{font-weight:800;font-size:calc(.63rem + 2px)}
     .minor-range-sep{font-size:.82em;font-weight:400;color:#bbb;padding:0 .12rem}
     .minor-range-end{font-size:.82em;font-weight:700;color:#666}
-    .minor-has-range{font-size:.95rem!important}
-    .p90-badge{display:inline-flex;align-items:center;gap:.35rem;background:#1a1a2e;color:#e0e7ff;border-radius:6px;padding:.25rem .55rem;font-size:.7rem;font-weight:700;margin:.2rem 0 .5rem}
+    .drive-penalty{color:var(--amber)!important}
+    .drive-improve{color:var(--green)!important}
+    .minor-has-range{font-size:.9rem!important;white-space:nowrap}
+    .p90-badge{display:inline-flex;align-items:center;gap:.35rem;background:#1a1a2e;color:#e0e7ff;border-radius:6px;padding:.25rem .55rem;font-size:.6rem;font-weight:700;margin:.2rem 0 .5rem}
     .p90-badge-val{background:#4338ca;color:#fff;border-radius:4px;padding:.05rem .35rem;font-size:.85rem;font-weight:900;letter-spacing:-.01em}
     .tc-label{font-size:.65rem;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#6366f1;white-space:nowrap}
 
@@ -353,11 +373,11 @@
   </div>
 </header>
 
-<div id="hist-nav" style="display:none">
+<div id="hist-nav">
   <span class="tc-label">&#9200; Timeline</span>
-  <button id="hist-prev" class="hist-btn" onclick="histStep(-1)">&#8592; Earlier</button>
-  <span id="hist-pos">&#9679; Live</span>
-  <button id="hist-next" class="hist-btn" onclick="histStep(+1)">Later &#8594;</button>
+  <button id="hist-prev" class="hist-btn" onclick="histStep(-1)" disabled>&#8592; Earlier</button>
+  <span id="hist-pos">&#8987; Loading&hellip;</span>
+  <button id="hist-next" class="hist-btn" onclick="histStep(+1)" disabled>Later &#8594;</button>
   <button id="hist-live-btn" class="hist-btn hist-live" onclick="exitHistory()" style="display:none">&#9679; Live</button>
 </div>
 
@@ -422,15 +442,15 @@
       <p>Always verify wait times directly with hospital staff.</p>
     </div>
   </div>
+  <div class="footer-bottom">
+    <strong>NOT CLINICAL ADVICE</strong> &mdash;
+    Verify all information with hospital staff before making decisions.
+  </div>
   <div class="footer-glossary">
     <h4>General Understanding of Triage Categories</h4>
     <p><strong>Urgent (Categories 1&ndash;3):</strong> Life-threatening emergencies, severe chest pain, major trauma, or difficulty breathing. These cases are always prioritised by clinical staff first.</p>
     <p><strong>Minor (Categories 4&ndash;5):</strong> Non-life-threatening conditions such as sprains, minor cuts, or viral symptoms. Waiting times are typically longer as resources are directed to more critical patients.</p>
     <p style="margin-top:.4rem;font-style:italic">Note: These estimates are statistical models and do not replace professional medical triage. Actual wait times may vary.</p>
-  </div>
-  <div class="footer-bottom">
-    <strong>NOT CLINICAL ADVICE</strong> &mdash;
-    Verify all information with hospital staff before making decisions.
   </div>
 </footer>
 
@@ -524,7 +544,7 @@ function storeForecast(sites) {
       }
     });
     // Prune to last 3 hours
-    const pruned = stored.filter(h => now - h.ts < 3 * 60 * 60 * 1000);
+    const pruned = stored.filter(h => now - h.ts < 6 * 60 * 60 * 1000);
     localStorage.setItem(FORECAST_KEY, JSON.stringify(pruned));
   } catch(e) { /* storage unavailable */ }
 }
@@ -533,9 +553,12 @@ function getForecastAccuracy(siteName, actual) {
   try {
     const now = Date.now();
     const stored = JSON.parse(localStorage.getItem(FORECAST_KEY) || "[]");
+    const siteStored = stored.filter(h => h.site === siteName);
+    // Calibrating until we have ≥ 4 hours of stored data for this site
+    const oldest = siteStored.length ? Math.min(...siteStored.map(h => h.ts)) : now;
+    if (now - oldest < 4 * 60 * 60 * 1000) return null;
     // Predictions from 45–75 min ago (±15 min window around the 60-min horizon)
-    const candidates = stored.filter(h =>
-      h.site === siteName &&
+    const candidates = siteStored.filter(h =>
       now - h.ts >= 45 * 60 * 1000 &&
       now - h.ts <= 75 * 60 * 1000
     );
@@ -568,6 +591,9 @@ function triageTag(usual, estimate) {
   if (estimate <= usual)      return "▼ Below usual";
   return "→ Near usual";
 }
+function currentVahiQLabel() {
+  return "Q" + (Math.floor(new Date().getMonth() / 3) + 1);
+}
 
 // ── Card renderer ─────────────────────────────────────────────────────────────
 function renderCard(s) {
@@ -588,17 +614,17 @@ function renderCard(s) {
     const minorForecastSplits = calcSplitEstimates(predicted, medCat123, medCat45);
     const minorForecast = minorForecastSplits?.minor ?? null;
 
-    // Arrival-aware range: always show min on left, max on right
+    // Range: min always left, max always right
     const minorNowVal   = minorEst ?? current;
     const minorFcastVal = minorForecast != null ? Math.round(minorForecast) : null;
     const minorLoVal    = minorFcastVal != null ? Math.min(minorNowVal, minorFcastVal) : minorNowVal;
     const minorHiVal    = minorFcastVal != null ? Math.max(minorNowVal, minorFcastVal) : null;
-    const minorLoStr    = fmtShort(minorLoVal) ?? "—";
-    const minorHiStr    = minorHiVal != null ? fmtShort(minorHiVal) : null;
-    const minorHasRange = !!(minorHiStr && minorHiStr !== minorLoStr);
+    const minorNowStr   = fmtShort(minorLoVal) ?? "—";
+    const minorFcastStr = minorHiVal != null ? fmtShort(minorHiVal) : null;
+    const minorHasRange = !!(minorFcastStr && minorFcastStr !== minorNowStr);
     const minorRangeHtml = minorHasRange
-      ? `${minorLoStr}<span class="minor-range-sep">–</span><span class="minor-range-end">${minorHiStr}</span>`
-      : minorLoStr;
+      ? `${minorNowStr}<span class="minor-range-sep">–</span><span class="minor-range-end">${minorFcastStr}</span>`
+      : minorNowStr;
 
     const isStale = ageMin > HOSPITAL_STALE_MINS && !s._is_historical;
     const c    = light(predicted, momentum);
@@ -629,22 +655,19 @@ function renderCard(s) {
         <span class="iv ${strainCls(s.strain_index)}">${s.strain_index.toFixed(2)}&times;</span>
       </div>` : "";
 
-    const maxWaitHtml = s.max_wait_min != null ? `
+    const _maxRatio    = (p90Mins != null && s.max_wait_min != null) ? s.max_wait_min / p90Mins : null;
+    const _maxCritical = _maxRatio != null && _maxRatio > 5;
+    const maxWaitHtml  = s.max_wait_min != null ? `
       <div class="insight">
         <span class="il">Max Wait (all pts)</span>
-        <span class="iv">${fmtShort(s.max_wait_min) ?? "—"}</span>
+        <span class="iv">${fmtShort(s.max_wait_min) ?? "—"}${_maxRatio != null ? `<small style="font-weight:400;font-size:.65rem;color:#888"> (${_maxRatio.toFixed(1)}&times;)</small>` : ""}</span>
       </div>` : "";
-
-    const maxWarnHtml = (p90Mins != null && s.max_wait_min != null && s.max_wait_min > p90Mins * 1.5)
-      ? `<div class="max-warn">&#9888;&#xFE0F;&nbsp;Max wait ${fmtShort(s.max_wait_min) ?? s.max_wait_min + "m"} — ${(s.max_wait_min / p90Mins).toFixed(1)}&times; the 9-in-10 benchmark (${p90Mins}m)</div>`
+    const crisisHtml   = (_maxRatio != null && _maxRatio > 1.5)
+      ? `<div class="crisis-headline ${_maxCritical ? 'crisis-very-long' : 'crisis-long'}">&#9888; ${_maxCritical ? 'VERY LONG WAIT' : 'LONG WAIT'}</div>`
       : "";
 
     const accuracy = getForecastAccuracy(s.site, current);
-    const accuracyHtml = accuracy != null ? `
-      <div class="insight">
-        <span class="il">60-min Accuracy</span>
-        <span class="iv"><span class="badge forecast-badge">${accuracy > 0 ? accuracy + "%" : "Calibrating…"}</span></span>
-      </div>` : "";
+    const accuracyBadgeHtml = `<span class="badge ${accuracy != null ? 'forecast-badge' : 'forecast-badge-cal'}">${accuracy != null ? (accuracy > 0 ? '72h&nbsp;Accuracy&nbsp;' + accuracy + '%' : '72h&nbsp;Accuracy&nbsp;&mdash;') : '&#8987; Calibrating&hellip;'}</span>`;
 
     const histAccuracyHtml = s._is_historical
       ? (s._forecast_accuracy != null && s._forecast_accuracy > 0
@@ -657,16 +680,17 @@ function renderCard(s) {
     if (medCat45 != null || medCat123 != null) {
       const minorCmp  = minorEst  ?? current;
       const urgentCmp = urgentEst ?? current;
+      const qLabel    = currentVahiQLabel();
       triageBenchHtml = `
         <div class="triage-bench">
           <div class="tb-chip ${triageCls(medCat45, minorCmp)}">
             <span class="tb-cat">Minor (Cat 4&ndash;5)</span>
-            <span class="tb-usual">${medCat45 != null ? "usual " + medCat45 + "m" : "—"}</span>
+            <span class="tb-usual">${medCat45 != null ? `Median ${medCat45}m<span class="tb-qsrc">(YoY VAHI ${qLabel})</span>` : "—"}</span>
             <span class="tb-tag">${triageTag(medCat45, minorCmp)}</span>
           </div>
           <div class="tb-chip ${triageCls(medCat123, urgentCmp)}">
             <span class="tb-cat">Urgent (Cat 1&ndash;3)</span>
-            <span class="tb-usual">${medCat123 != null ? "usual " + medCat123 + "m" : "—"}</span>
+            <span class="tb-usual">${medCat123 != null ? `Median ${medCat123}m<span class="tb-qsrc">(YoY VAHI ${qLabel})</span>` : "—"}</span>
             <span class="tb-tag">${triageTag(medCat123, urgentCmp)}</span>
           </div>
         </div>`;
@@ -690,28 +714,22 @@ function renderCard(s) {
               <div class="hero-val hero-val-primary${minorHasRange ? ' minor-has-range' : ''}">${minorRangeHtml}</div>
             </div>
             <div class="hero-col hc-divider">
-              <div class="hero-sub" style="font-size:.5rem">&#128100; Waiting</div>
+              <div class="hero-sub">&#128100; Waiting</div>
               <div class="count-hero">${waitingCount}</div>
             </div>
             <div class="hero-col">
-              <div class="hero-sub" style="font-size:.5rem">&#129658; In Treatment</div>
+              <div class="hero-sub">&#129658; In Treatment</div>
               <div class="count-hero${treatingCount != null ? "" : " count-na"}">${treatingCount ?? "—"}</div>
             </div>
           </div>
-          <div class="overall-metric">All categories &middot; current: <strong>${fmtShort(current) ?? current + "m"}</strong>${p90Mins != null ? ` &nbsp;&middot;&nbsp; VAHI 90th: <strong>${p90Mins}m</strong>` : ""}</div>
-          ${p90Mins != null ? `<div class="p90-badge">&#128737; 9&#8209;in&#8209;10 Target <span class="p90-badge-val">${p90Mins}m</span></div>` : ""}
-          ${maxWarnHtml}
-
-          <div class="trend">
-            <span class="${a.cls}">${a.sym}</span>
-            ${a.lbl} &nbsp;&middot;&nbsp; ${sign}${momentum.toFixed(1)} min / 15 min
+          <div class="obs-meta" style="margin-bottom:.4rem">
+            <span class="badge ${confCls(s.confidence_label)}">${s.confidence_label} confidence &nbsp;${(conf * 100).toFixed(0)}%</span>
+            ${accuracyBadgeHtml}
           </div>
+          ${p90Mins != null ? `<div class="p90-badge">&#128737; <span class="p90-badge-val">${p90Mins}m</span> (9&#8209;in&#8209;10 possibility)</div>` : ""}
+          <div class="overall-metric">All categories &middot; current: <strong>${fmtShort(current) ?? current + "m"}</strong></div>
+          ${crisisHtml || `<div class="trend"><span class="${a.cls}">${a.sym}</span> ${a.lbl}</div>`}
           ${triageBenchHtml}
-          <div class="obs-meta">
-            <span class="badge ${confCls(s.confidence_label)}">
-              ${s.confidence_label} confidence &nbsp;${(conf * 100).toFixed(0)}%
-            </span>
-          </div>
           ${histAccuracyHtml}
         </div>
 
@@ -724,12 +742,14 @@ function renderCard(s) {
                 <span class="iv">${Math.round(predicted)} min</span>
               </div>
               ${maxWaitHtml}
+            </div>
+            <div class="insights-subheader">System Metrics</div>
+            <div class="insights-row">
               ${strainHtml}
               <div class="insight">
                 <span class="il">Clearing Speed</span>
                 <span class="iv ${a.cls}">${a.sym} ${sign}${momentum.toFixed(1)}<small style="font-weight:400;font-size:.65rem"> /15m</small></span>
               </div>
-              ${accuracyHtml}
             </div>
           </div>
         </details>
@@ -909,28 +929,33 @@ function updateHistNav() {
   const liveBtn = document.getElementById("hist-live-btn");
   const pos     = document.getElementById("hist-pos");
 
-  if (!_histTimeline || !_histTimeline.snapshots.length) {
-    nav.style.display    = "none";
-    banner.style.display = "none";
-    return;
-  }
-
-  nav.style.display = "flex";
+  const hasHistory = !!(
+    _histTimeline &&
+    _histTimeline.snapshots &&
+    _histTimeline.snapshots.length > 1
+  );
 
   if (_histIdx < 0) {
-    banner.style.display = "none";
-    pos.textContent      = "● Live";
-    prevBtn.disabled     = false;
-    nextBtn.disabled     = true;
+    nav.classList.remove("hist-nav-active");
+    banner.style.display  = "none";
     liveBtn.style.display = "none";
+    nextBtn.disabled      = true;
+    if (!hasHistory) {
+      pos.innerHTML    = _histTimeline === null ? "&#8987; Loading&hellip;" : "&#9679; Live";
+      prevBtn.disabled = true;
+    } else {
+      pos.innerHTML    = "&#9679; Live";
+      prevBtn.disabled = false;
+    }
   } else {
+    nav.classList.add("hist-nav-active");
     const snap  = _histTimeline.snapshots[_histIdx];
     const ts    = localDateTime(snap.bucket_utc);
     const ago   = minsAgo(snap.bucket_utc);
     banner.style.display = "block";
     document.getElementById("hist-ts").textContent =
       ts + (ago != null ? " (" + Math.round(ago / 60 * 10) / 10 + "h ago)" : "");
-    pos.textContent       = (_histIdx + 1) + " / " + _histTimeline.snapshots.length + " · " + ts;
+    pos.innerHTML         = (_histIdx + 1) + " / " + _histTimeline.snapshots.length + " &middot; " + ts;
     prevBtn.disabled      = (_histIdx === 0);
     nextBtn.disabled      = false;
     liveBtn.style.display = "";
@@ -1014,11 +1039,12 @@ function exitHistory() {
 async function loadHistory() {
   try {
     const resp = await fetch(HISTORY_URL + "?t=" + Date.now());
-    if (!resp.ok) return;
+    if (!resp.ok) { _histTimeline = false; updateHistNav(); return; }
     _histTimeline = await resp.json();
     updateHistNav();
   } catch(e) {
-    // History is optional — fail silently
+    _histTimeline = false;
+    updateHistNav();
   }
 }
 
