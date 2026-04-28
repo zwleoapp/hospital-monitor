@@ -202,6 +202,10 @@
       50%{border-color:#d97706;box-shadow:0 0 0 2px #fbbf2466}
     }
     .max-warn-critical{animation:max-warn-pulse 1.2s ease-in-out infinite;border-width:2px}
+    .crisis-headline{font-size:1.75rem;font-weight:800;line-height:1;padding:.25rem 0;margin:.1rem 0}
+    .crisis-long{color:var(--amber)}
+    .crisis-very-long{color:var(--red)}
+    .insights-subheader{font-size:.52rem;text-transform:uppercase;letter-spacing:.1em;color:#ccc;font-weight:700;margin:.55rem 0 .3rem}
 
     /* ── History mode ────────────────────────────────────────────────────────── */
     #hist-banner{
@@ -658,16 +662,12 @@ function renderCard(s) {
         <span class="il">Max Wait (all pts)</span>
         <span class="iv">${fmtShort(s.max_wait_min) ?? "—"}${_maxRatio != null ? `<small style="font-weight:400;font-size:.65rem;color:#888"> (${_maxRatio.toFixed(1)}&times;)</small>` : ""}</span>
       </div>` : "";
-    const maxWarnHtml  = (_maxRatio != null && _maxRatio > 1.5)
-      ? `<div class="max-warn${_maxCritical ? ' max-warn-critical' : ''}">&#9888;&#xFE0F;&nbsp;${_maxCritical ? "Extreme wait" : "Extended wait"} &mdash; ${_maxCritical ? "significantly" : "notably"} above usual</div>`
+    const crisisHtml   = (_maxRatio != null && _maxRatio > 1.5)
+      ? `<div class="crisis-headline ${_maxCritical ? 'crisis-very-long' : 'crisis-long'}">&#9888; ${_maxCritical ? 'VERY LONG WAIT' : 'LONG WAIT'}</div>`
       : "";
 
     const accuracy = getForecastAccuracy(s.site, current);
-    const accuracyHtml = `
-      <div class="insight">
-        <span class="il">60-min Accuracy</span>
-        <span class="iv"><span class="badge ${accuracy != null ? 'forecast-badge' : 'forecast-badge-cal'}">${accuracy != null ? (accuracy > 0 ? accuracy + "%" : "—") : "&#8987; Calibrating&hellip;"}</span></span>
-      </div>`;
+    const accuracyBadgeHtml = `<span class="badge ${accuracy != null ? 'forecast-badge' : 'forecast-badge-cal'}">${accuracy != null ? (accuracy > 0 ? '72h&nbsp;Accuracy&nbsp;' + accuracy + '%' : '72h&nbsp;Accuracy&nbsp;&mdash;') : '&#8987; Calibrating&hellip;'}</span>`;
 
     const histAccuracyHtml = s._is_historical
       ? (s._forecast_accuracy != null && s._forecast_accuracy > 0
@@ -685,12 +685,12 @@ function renderCard(s) {
         <div class="triage-bench">
           <div class="tb-chip ${triageCls(medCat45, minorCmp)}">
             <span class="tb-cat">Minor (Cat 4&ndash;5)</span>
-            <span class="tb-usual">${medCat45 != null ? `usual ${medCat45}m<span class="tb-qsrc">(VAHI YoY ${qLabel})</span>` : "—"}</span>
+            <span class="tb-usual">${medCat45 != null ? `Median ${medCat45}m<span class="tb-qsrc">(YoY VAHI ${qLabel})</span>` : "—"}</span>
             <span class="tb-tag">${triageTag(medCat45, minorCmp)}</span>
           </div>
           <div class="tb-chip ${triageCls(medCat123, urgentCmp)}">
             <span class="tb-cat">Urgent (Cat 1&ndash;3)</span>
-            <span class="tb-usual">${medCat123 != null ? `usual ${medCat123}m<span class="tb-qsrc">(VAHI YoY ${qLabel})</span>` : "—"}</span>
+            <span class="tb-usual">${medCat123 != null ? `Median ${medCat123}m<span class="tb-qsrc">(YoY VAHI ${qLabel})</span>` : "—"}</span>
             <span class="tb-tag">${triageTag(medCat123, urgentCmp)}</span>
           </div>
         </div>`;
@@ -722,20 +722,14 @@ function renderCard(s) {
               <div class="count-hero${treatingCount != null ? "" : " count-na"}">${treatingCount ?? "—"}</div>
             </div>
           </div>
+          <div class="obs-meta" style="margin-bottom:.4rem">
+            <span class="badge ${confCls(s.confidence_label)}">${s.confidence_label} confidence &nbsp;${(conf * 100).toFixed(0)}%</span>
+            ${accuracyBadgeHtml}
+          </div>
+          ${p90Mins != null ? `<div class="p90-badge">&#128737; <span class="p90-badge-val">${p90Mins}m</span> (9&#8209;in&#8209;10 possibility)</div>` : ""}
           <div class="overall-metric">All categories &middot; current: <strong>${fmtShort(current) ?? current + "m"}</strong></div>
-          ${p90Mins != null ? `<div class="p90-badge">&#128737; 9&#8209;in&#8209;10 Target <span class="p90-badge-val">${p90Mins}m</span></div>` : ""}
-          ${maxWarnHtml}
-
-          <div class="trend">
-            <span class="${a.cls}">${a.sym}</span>
-            ${a.lbl}
-          </div>
+          ${crisisHtml || `<div class="trend"><span class="${a.cls}">${a.sym}</span> ${a.lbl}</div>`}
           ${triageBenchHtml}
-          <div class="obs-meta">
-            <span class="badge ${confCls(s.confidence_label)}">
-              ${s.confidence_label} confidence &nbsp;${(conf * 100).toFixed(0)}%
-            </span>
-          </div>
           ${histAccuracyHtml}
         </div>
 
@@ -747,12 +741,15 @@ function renderCard(s) {
                 <span class="il">60-min Forecast</span>
                 <span class="iv">${Math.round(predicted)} min</span>
               </div>
+              ${maxWaitHtml}
+            </div>
+            <div class="insights-subheader">System Metrics</div>
+            <div class="insights-row">
               ${strainHtml}
               <div class="insight">
                 <span class="il">Clearing Speed</span>
                 <span class="iv ${a.cls}">${a.sym} ${sign}${momentum.toFixed(1)}<small style="font-weight:400;font-size:.65rem"> /15m</small></span>
               </div>
-              ${accuracyHtml}
             </div>
           </div>
         </details>
@@ -935,7 +932,7 @@ function updateHistNav() {
   const hasHistory = !!(
     _histTimeline &&
     _histTimeline.snapshots &&
-    _histTimeline.snapshots.length > 0
+    _histTimeline.snapshots.length > 1
   );
 
   if (_histIdx < 0) {
