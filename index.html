@@ -155,6 +155,7 @@
     }
     .tb-usual{font-size:.76rem;font-weight:700;line-height:1.25}
     .tb-tag{font-size:.6rem;font-weight:700;margin-top:.06rem}
+    .tb-qsrc{font-size:.5rem;font-weight:400;opacity:.65;display:block;margin-top:.02rem}
     /* Calm palette: ochre (above usual), slate teal (below), neutral blue-gray (near) */
     .tb-above{background:#fff7ed;color:#b36b10}
     .tb-below{background:#eaf6f4;color:#2a8a7e}
@@ -172,6 +173,7 @@
       background:#eef2ff;color:#5b72b5;
       font-size:.7rem;font-weight:700;
     }
+    .forecast-badge-cal{background:#f5f5f5;color:#9ca3af;border:1px solid #e5e7eb;font-style:italic}
 
     /* ── Per-hospital observation timestamp footer (Data Heartbeat) ─────────── */
     .obs-footer{
@@ -195,6 +197,11 @@
       background:#fff5ea;border:1px solid #f5c89a;border-radius:4px;
       padding:.16rem .5rem;margin-bottom:.3rem;
     }
+    @keyframes max-warn-pulse{
+      0%,100%{border-color:#f5c89a;box-shadow:none}
+      50%{border-color:#d97706;box-shadow:0 0 0 2px #fbbf2466}
+    }
+    .max-warn-critical{animation:max-warn-pulse 1.2s ease-in-out infinite;border-width:2px}
 
     /* ── History mode ────────────────────────────────────────────────────────── */
     #hist-banner{
@@ -212,6 +219,7 @@
     }
     .hist-exit-btn:hover{background:#312e81}
     #hist-nav{
+      display:flex;position:sticky;top:44px;z-index:90;
       max-width:1160px;margin:0 auto .75rem;
       align-items:center;gap:.6rem;
       background:#f5f3ff;border-radius:10px;
@@ -243,6 +251,8 @@
     .p90-highlight{font-weight:800;font-size:calc(.63rem + 2px)}
     .minor-range-sep{font-size:.82em;font-weight:400;color:#bbb;padding:0 .12rem}
     .minor-range-end{font-size:.82em;font-weight:700;color:#666}
+    .drive-penalty{color:var(--amber)!important}
+    .drive-improve{color:var(--green)!important}
     .minor-has-range{font-size:.9rem!important;white-space:nowrap}
     .p90-badge{display:inline-flex;align-items:center;gap:.35rem;background:#1a1a2e;color:#e0e7ff;border-radius:6px;padding:.25rem .55rem;font-size:.7rem;font-weight:700;margin:.2rem 0 .5rem}
     .p90-badge-val{background:#4338ca;color:#fff;border-radius:4px;padding:.05rem .35rem;font-size:.85rem;font-weight:900;letter-spacing:-.01em}
@@ -359,11 +369,11 @@
   </div>
 </header>
 
-<div id="hist-nav" style="display:none">
+<div id="hist-nav">
   <span class="tc-label">&#9200; Timeline</span>
-  <button id="hist-prev" class="hist-btn" onclick="histStep(-1)">&#8592; Earlier</button>
-  <span id="hist-pos">&#9679; Live</span>
-  <button id="hist-next" class="hist-btn" onclick="histStep(+1)">Later &#8594;</button>
+  <button id="hist-prev" class="hist-btn" onclick="histStep(-1)" disabled>&#8592; Earlier</button>
+  <span id="hist-pos">&#8987; Loading&hellip;</span>
+  <button id="hist-next" class="hist-btn" onclick="histStep(+1)" disabled>Later &#8594;</button>
   <button id="hist-live-btn" class="hist-btn hist-live" onclick="exitHistory()" style="display:none">&#9679; Live</button>
 </div>
 
@@ -530,7 +540,7 @@ function storeForecast(sites) {
       }
     });
     // Prune to last 3 hours
-    const pruned = stored.filter(h => now - h.ts < 3 * 60 * 60 * 1000);
+    const pruned = stored.filter(h => now - h.ts < 6 * 60 * 60 * 1000);
     localStorage.setItem(FORECAST_KEY, JSON.stringify(pruned));
   } catch(e) { /* storage unavailable */ }
 }
@@ -539,9 +549,12 @@ function getForecastAccuracy(siteName, actual) {
   try {
     const now = Date.now();
     const stored = JSON.parse(localStorage.getItem(FORECAST_KEY) || "[]");
+    const siteStored = stored.filter(h => h.site === siteName);
+    // Calibrating until we have ≥ 4 hours of stored data for this site
+    const oldest = siteStored.length ? Math.min(...siteStored.map(h => h.ts)) : now;
+    if (now - oldest < 4 * 60 * 60 * 1000) return null;
     // Predictions from 45–75 min ago (±15 min window around the 60-min horizon)
-    const candidates = stored.filter(h =>
-      h.site === siteName &&
+    const candidates = siteStored.filter(h =>
       now - h.ts >= 45 * 60 * 1000 &&
       now - h.ts <= 75 * 60 * 1000
     );
@@ -573,6 +586,9 @@ function triageTag(usual, estimate) {
   if (estimate > usual * 1.5) return "▲ Above usual";
   if (estimate <= usual)      return "▼ Below usual";
   return "→ Near usual";
+}
+function currentVahiQLabel() {
+  return "Q" + (Math.floor(new Date().getMonth() / 3) + 1);
 }
 
 // ── Card renderer ─────────────────────────────────────────────────────────────
