@@ -123,7 +123,7 @@
     .hosp{font-weight:700;font-size:.96rem}
 
     /* ── Split hero: Urgent | Minor (primary) | Patient Count ─────────────── */
-    .hero-split{display:flex;gap:0;margin-bottom:.5rem;align-items:flex-end}
+    .hero-split{display:flex;gap:0;margin-bottom:.75rem;align-items:flex-end}
     .hero-col{display:flex;flex-direction:column;flex:0 0 auto}
     .hc-divider{border-right:1px solid #ebebeb;padding-right:1.1rem;margin-right:1.1rem}
     .hc-minor-col{flex:1 1 auto}
@@ -153,7 +153,7 @@
       font-size:.52rem;text-transform:uppercase;letter-spacing:.07em;
       opacity:.6;font-weight:700;line-height:1;
     }
-    .tb-usual{font-size:.76rem;font-weight:700;line-height:1.25}
+    .tb-usual{font-size:.65rem;font-weight:700;line-height:1.25}
     .tb-tag{font-size:.6rem;font-weight:700;margin-top:.06rem}
     .tb-qsrc{font-size:.5rem;font-weight:400;opacity:.65;display:block;margin-top:.02rem}
     /* Calm palette: ochre (above usual), slate teal (below), neutral blue-gray (near) */
@@ -254,7 +254,7 @@
     .drive-penalty{color:var(--amber)!important}
     .drive-improve{color:var(--green)!important}
     .minor-has-range{font-size:.9rem!important;white-space:nowrap}
-    .p90-badge{display:inline-flex;align-items:center;gap:.35rem;background:#1a1a2e;color:#e0e7ff;border-radius:6px;padding:.25rem .55rem;font-size:.7rem;font-weight:700;margin:.2rem 0 .5rem}
+    .p90-badge{display:inline-flex;align-items:center;gap:.35rem;background:#1a1a2e;color:#e0e7ff;border-radius:6px;padding:.25rem .55rem;font-size:.6rem;font-weight:700;margin:.2rem 0 .5rem}
     .p90-badge-val{background:#4338ca;color:#fff;border-radius:4px;padding:.05rem .35rem;font-size:.85rem;font-weight:900;letter-spacing:-.01em}
     .tc-label{font-size:.65rem;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#6366f1;white-space:nowrap}
 
@@ -438,15 +438,15 @@
       <p>Always verify wait times directly with hospital staff.</p>
     </div>
   </div>
+  <div class="footer-bottom">
+    <strong>NOT CLINICAL ADVICE</strong> &mdash;
+    Verify all information with hospital staff before making decisions.
+  </div>
   <div class="footer-glossary">
     <h4>General Understanding of Triage Categories</h4>
     <p><strong>Urgent (Categories 1&ndash;3):</strong> Life-threatening emergencies, severe chest pain, major trauma, or difficulty breathing. These cases are always prioritised by clinical staff first.</p>
     <p><strong>Minor (Categories 4&ndash;5):</strong> Non-life-threatening conditions such as sprains, minor cuts, or viral symptoms. Waiting times are typically longer as resources are directed to more critical patients.</p>
     <p style="margin-top:.4rem;font-style:italic">Note: These estimates are statistical models and do not replace professional medical triage. Actual wait times may vary.</p>
-  </div>
-  <div class="footer-bottom">
-    <strong>NOT CLINICAL ADVICE</strong> &mdash;
-    Verify all information with hospital staff before making decisions.
   </div>
 </footer>
 
@@ -610,17 +610,16 @@ function renderCard(s) {
     const minorForecastSplits = calcSplitEstimates(predicted, medCat123, medCat45);
     const minorForecast = minorForecastSplits?.minor ?? null;
 
-    // Arrival-aware range: Current → 60-min Forecast; direction signals drive-time penalty
-    const minorNowVal        = minorEst ?? current;
-    const minorFcastVal      = minorForecast != null ? Math.round(minorForecast) : null;
-    const minorNowStr        = fmtShort(minorNowVal) ?? "—";
-    const minorFcastStr      = minorFcastVal != null ? fmtShort(minorFcastVal) : null;
-    const minorHasRange      = !!(minorFcastStr && minorFcastStr !== minorNowStr);
-    const isDriveTimePenalty = minorFcastVal != null && minorFcastVal > minorNowVal;
-    const _minorEndCls       = isDriveTimePenalty ? " drive-penalty"
-                             : (minorFcastVal != null && minorFcastVal < minorNowVal ? " drive-improve" : "");
+    // Range: min always left, max always right
+    const minorNowVal   = minorEst ?? current;
+    const minorFcastVal = minorForecast != null ? Math.round(minorForecast) : null;
+    const minorLoVal    = minorFcastVal != null ? Math.min(minorNowVal, minorFcastVal) : minorNowVal;
+    const minorHiVal    = minorFcastVal != null ? Math.max(minorNowVal, minorFcastVal) : null;
+    const minorNowStr   = fmtShort(minorLoVal) ?? "—";
+    const minorFcastStr = minorHiVal != null ? fmtShort(minorHiVal) : null;
+    const minorHasRange = !!(minorFcastStr && minorFcastStr !== minorNowStr);
     const minorRangeHtml = minorHasRange
-      ? `${minorNowStr}<span class="minor-range-sep">${isDriveTimePenalty ? "→" : "–"}</span><span class="minor-range-end${_minorEndCls}">${minorFcastStr}</span>`
+      ? `${minorNowStr}<span class="minor-range-sep">–</span><span class="minor-range-end">${minorFcastStr}</span>`
       : minorNowStr;
 
     const isStale = ageMin > HOSPITAL_STALE_MINS && !s._is_historical;
@@ -652,15 +651,15 @@ function renderCard(s) {
         <span class="iv ${strainCls(s.strain_index)}">${s.strain_index.toFixed(2)}&times;</span>
       </div>` : "";
 
-    const maxWaitHtml = s.max_wait_min != null ? `
+    const _maxRatio    = (p90Mins != null && s.max_wait_min != null) ? s.max_wait_min / p90Mins : null;
+    const _maxCritical = _maxRatio != null && _maxRatio > 5;
+    const maxWaitHtml  = s.max_wait_min != null ? `
       <div class="insight">
         <span class="il">Max Wait (all pts)</span>
-        <span class="iv">${fmtShort(s.max_wait_min) ?? "—"}</span>
+        <span class="iv">${fmtShort(s.max_wait_min) ?? "—"}${_maxRatio != null ? `<small style="font-weight:400;font-size:.65rem;color:#888"> (${_maxRatio.toFixed(1)}&times;)</small>` : ""}</span>
       </div>` : "";
-
-    const _maxCritical = p90Mins != null && s.max_wait_min != null && s.max_wait_min > p90Mins * 5;
-    const maxWarnHtml = (p90Mins != null && s.max_wait_min != null && s.max_wait_min > p90Mins * 1.5)
-      ? `<div class="max-warn${_maxCritical ? ' max-warn-critical' : ''}">&#9888;&#xFE0F;&nbsp;Max wait ${fmtShort(s.max_wait_min) ?? s.max_wait_min + "m"} — ${(s.max_wait_min / p90Mins).toFixed(1)}&times; the 9-in-10 benchmark (${p90Mins}m)</div>`
+    const maxWarnHtml  = (_maxRatio != null && _maxRatio > 1.5)
+      ? `<div class="max-warn${_maxCritical ? ' max-warn-critical' : ''}">&#9888;&#xFE0F;&nbsp;${_maxCritical ? "Extreme wait" : "Extended wait"} &mdash; ${_maxCritical ? "significantly" : "notably"} above usual</div>`
       : "";
 
     const accuracy = getForecastAccuracy(s.site, current);
@@ -715,11 +714,11 @@ function renderCard(s) {
               <div class="hero-val hero-val-primary${minorHasRange ? ' minor-has-range' : ''}">${minorRangeHtml}</div>
             </div>
             <div class="hero-col hc-divider">
-              <div class="hero-sub" style="font-size:.5rem">&#128100; Waiting</div>
+              <div class="hero-sub">&#128100; Waiting</div>
               <div class="count-hero">${waitingCount}</div>
             </div>
             <div class="hero-col">
-              <div class="hero-sub" style="font-size:.5rem">&#129658; In Treatment</div>
+              <div class="hero-sub">&#129658; In Treatment</div>
               <div class="count-hero${treatingCount != null ? "" : " count-na"}">${treatingCount ?? "—"}</div>
             </div>
           </div>
@@ -945,10 +944,10 @@ function updateHistNav() {
     liveBtn.style.display = "none";
     nextBtn.disabled      = true;
     if (!hasHistory) {
-      pos.textContent  = _histTimeline === null ? "&#8987; Loading…" : "&#9679; Live";
+      pos.innerHTML    = _histTimeline === null ? "&#8987; Loading&hellip;" : "&#9679; Live";
       prevBtn.disabled = true;
     } else {
-      pos.textContent  = "&#9679; Live";
+      pos.innerHTML    = "&#9679; Live";
       prevBtn.disabled = false;
     }
   } else {
@@ -959,7 +958,7 @@ function updateHistNav() {
     banner.style.display = "block";
     document.getElementById("hist-ts").textContent =
       ts + (ago != null ? " (" + Math.round(ago / 60 * 10) / 10 + "h ago)" : "");
-    pos.textContent       = (_histIdx + 1) + " / " + _histTimeline.snapshots.length + " · " + ts;
+    pos.innerHTML         = (_histIdx + 1) + " / " + _histTimeline.snapshots.length + " &middot; " + ts;
     prevBtn.disabled      = (_histIdx === 0);
     nextBtn.disabled      = false;
     liveBtn.style.display = "";
