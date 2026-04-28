@@ -51,10 +51,15 @@ HOSPITAL_CODES   = {h: m["aihw_code"] for h, m in HOSPITAL_META.items()}
 # To add a new source: add an entry to hospitals.json and rows to hospitals.csv.
 # No Python changes required.
 with open(_JSON) as _jf:
-    _SOURCES_RAW: dict = {
-        k: v for k, v in json.load(_jf).items()
-        if not k.startswith("_")   # skip comment keys
-    }
+    _full_json: dict = json.load(_jf)
+
+# Source entries must have a "hospitals" sub-key; everything else (e.g. vahi_benchmarks) is metadata.
+_SOURCES_RAW: dict = {
+    k: v for k, v in _full_json.items()
+    if not k.startswith("_") and isinstance(v, dict) and "hospitals" in v
+}
+
+VAHI_BENCHMARKS: dict = _full_json.get("vahi_benchmarks", {})
 
 # Filter each source's hospital list to only active entries from the registry.
 # Disabling a hospital in hospitals.csv removes it from scraping automatically.

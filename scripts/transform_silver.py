@@ -58,6 +58,14 @@ AIHW_FILE      = _BASE / "bronze" / "eastern_hospital_historical_context.csv"
 
 # ── Constants ─────────────────────────────────────────────────────────────────
 MELBOURNE = ZoneInfo("Australia/Melbourne")
+
+# Maps calendar month → quarter-of-year (Melbourne-local)
+_QUARTER_MONTH_TO_QOY = {
+    1: 1, 2: 1, 3: 1,   # Jan–Mar
+    4: 2, 5: 2, 6: 2,   # Apr–Jun
+    7: 3, 8: 3, 9: 3,   # Jul–Sep
+    10: 4, 11: 4, 12: 4, # Oct–Dec
+}
 VIC_HOLIDAYS = holidays.AU(subdiv="VIC")
 
 # AIHW uses this long-form name; our live schema uses the short form.
@@ -99,6 +107,31 @@ def load_vahi(path: pathlib.Path) -> pd.DataFrame:
     df["quarter_end_utc"]   = pd.to_datetime(df["quarter_end_utc"],   utc=True)
     df["hospital"] = df["hospital"].str.strip()
     return df
+
+
+def _compute_seasonal_benchmarks(vahi: pd.DataFrame) -> pd.DataFrame:
+    """
+    For each (hospital, quarter-of-year), average the three wait benchmark columns
+    across all real VAHI years (source == 'VAHI').
+
+    Returns a DataFrame with columns: hospital, _qoy, _seas_p90, _seas_med123, _seas_med45.
+    Used by _join_vahi to replace exact-quarter benchmark values with seasonally-adjusted ones.
+    """
+    real = vahi[vahi["source"] == "VAHI"].copy()
+    real["_qoy"] = (
+        real["quarter_start_utc"].dt.tz_convert(MELBOURNE).dt.month
+        .map(_QUARTER_MONTH_TO_QOY)
+    )
+    return (
+        real.groupby(["hospital", "_qoy"])
+        [["wait_p90_mins", "wait_median_cat123_mins", "wait_median_cat45_mins"]]
+        .mean().round(1).reset_index()
+        .rename(columns={
+            "wait_p90_mins":           "_seas_p90",
+            "wait_median_cat123_mins": "_seas_med123",
+            "wait_median_cat45_mins":  "_seas_med45",
+        })
+    )
 
 
 def load_aihw(path: pathlib.Path) -> pd.DataFrame:
@@ -224,6 +257,23 @@ def _join_vahi(bronze: pd.DataFrame, vahi: pd.DataFrame) -> tuple[pd.DataFrame, 
         "non_admitted_los_pct_under_4hr":  "ctx_non_admitted_los_pct_under_4hr",
     })
     matched["ctx_source"] = "VAHI"
+
+    # Overwrite wait benchmark columns with seasonally-adjusted YoY averages.
+    # The QOY is derived from the Bronze timestamp (not the VAHI quarter start),
+    # so PROXY rows (which cover Q1+Q2 2026 with Q4-2025 values) are corrected
+    # to reflect the observed seasonal level for that quarter of the year.
+    seasonal = _compute_seasonal_benchmarks(vahi)
+    matched["_qoy"] = (
+        matched["timestamp"].dt.tz_convert(MELBOURNE).dt.month.map(_QUARTER_MONTH_TO_QOY)
+    )
+    matched = matched.merge(seasonal, on=["hospital", "_qoy"], how="left")
+    for ctx_col, seas_col in [
+        ("ctx_wait_p90_mins",           "_seas_p90"),
+        ("ctx_wait_median_cat123_mins", "_seas_med123"),
+        ("ctx_wait_median_cat45_mins",  "_seas_med45"),
+    ]:
+        matched[ctx_col] = matched[seas_col].combine_first(matched[ctx_col])
+    matched = matched.drop(columns=["_qoy", "_seas_p90", "_seas_med123", "_seas_med45"])
 
     unmatched = merged[~in_quarter].copy().drop(
         columns=["quarter_start_utc", "quarter_end_utc"] + _VAHI_CTX
