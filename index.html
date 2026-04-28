@@ -610,17 +610,18 @@ function renderCard(s) {
     const minorForecastSplits = calcSplitEstimates(predicted, medCat123, medCat45);
     const minorForecast = minorForecastSplits?.minor ?? null;
 
-    // Arrival-aware range: always show min on left, max on right
-    const minorNowVal   = minorEst ?? current;
-    const minorFcastVal = minorForecast != null ? Math.round(minorForecast) : null;
-    const minorLoVal    = minorFcastVal != null ? Math.min(minorNowVal, minorFcastVal) : minorNowVal;
-    const minorHiVal    = minorFcastVal != null ? Math.max(minorNowVal, minorFcastVal) : null;
-    const minorLoStr    = fmtShort(minorLoVal) ?? "—";
-    const minorHiStr    = minorHiVal != null ? fmtShort(minorHiVal) : null;
-    const minorHasRange = !!(minorHiStr && minorHiStr !== minorLoStr);
+    // Arrival-aware range: Current → 60-min Forecast; direction signals drive-time penalty
+    const minorNowVal        = minorEst ?? current;
+    const minorFcastVal      = minorForecast != null ? Math.round(minorForecast) : null;
+    const minorNowStr        = fmtShort(minorNowVal) ?? "—";
+    const minorFcastStr      = minorFcastVal != null ? fmtShort(minorFcastVal) : null;
+    const minorHasRange      = !!(minorFcastStr && minorFcastStr !== minorNowStr);
+    const isDriveTimePenalty = minorFcastVal != null && minorFcastVal > minorNowVal;
+    const _minorEndCls       = isDriveTimePenalty ? " drive-penalty"
+                             : (minorFcastVal != null && minorFcastVal < minorNowVal ? " drive-improve" : "");
     const minorRangeHtml = minorHasRange
-      ? `${minorLoStr}<span class="minor-range-sep">–</span><span class="minor-range-end">${minorHiStr}</span>`
-      : minorLoStr;
+      ? `${minorNowStr}<span class="minor-range-sep">${isDriveTimePenalty ? "→" : "–"}</span><span class="minor-range-end${_minorEndCls}">${minorFcastStr}</span>`
+      : minorNowStr;
 
     const isStale = ageMin > HOSPITAL_STALE_MINS && !s._is_historical;
     const c    = light(predicted, momentum);
@@ -657,16 +658,17 @@ function renderCard(s) {
         <span class="iv">${fmtShort(s.max_wait_min) ?? "—"}</span>
       </div>` : "";
 
+    const _maxCritical = p90Mins != null && s.max_wait_min != null && s.max_wait_min > p90Mins * 5;
     const maxWarnHtml = (p90Mins != null && s.max_wait_min != null && s.max_wait_min > p90Mins * 1.5)
-      ? `<div class="max-warn">&#9888;&#xFE0F;&nbsp;Max wait ${fmtShort(s.max_wait_min) ?? s.max_wait_min + "m"} — ${(s.max_wait_min / p90Mins).toFixed(1)}&times; the 9-in-10 benchmark (${p90Mins}m)</div>`
+      ? `<div class="max-warn${_maxCritical ? ' max-warn-critical' : ''}">&#9888;&#xFE0F;&nbsp;Max wait ${fmtShort(s.max_wait_min) ?? s.max_wait_min + "m"} — ${(s.max_wait_min / p90Mins).toFixed(1)}&times; the 9-in-10 benchmark (${p90Mins}m)</div>`
       : "";
 
     const accuracy = getForecastAccuracy(s.site, current);
-    const accuracyHtml = accuracy != null ? `
+    const accuracyHtml = `
       <div class="insight">
         <span class="il">60-min Accuracy</span>
-        <span class="iv"><span class="badge forecast-badge">${accuracy > 0 ? accuracy + "%" : "Calibrating…"}</span></span>
-      </div>` : "";
+        <span class="iv"><span class="badge ${accuracy != null ? 'forecast-badge' : 'forecast-badge-cal'}">${accuracy != null ? (accuracy > 0 ? accuracy + "%" : "—") : "&#8987; Calibrating&hellip;"}</span></span>
+      </div>`;
 
     const histAccuracyHtml = s._is_historical
       ? (s._forecast_accuracy != null && s._forecast_accuracy > 0
@@ -679,16 +681,17 @@ function renderCard(s) {
     if (medCat45 != null || medCat123 != null) {
       const minorCmp  = minorEst  ?? current;
       const urgentCmp = urgentEst ?? current;
+      const qLabel    = currentVahiQLabel();
       triageBenchHtml = `
         <div class="triage-bench">
           <div class="tb-chip ${triageCls(medCat45, minorCmp)}">
             <span class="tb-cat">Minor (Cat 4&ndash;5)</span>
-            <span class="tb-usual">${medCat45 != null ? "usual " + medCat45 + "m" : "—"}</span>
+            <span class="tb-usual">${medCat45 != null ? `usual ${medCat45}m<span class="tb-qsrc">(VAHI YoY ${qLabel})</span>` : "—"}</span>
             <span class="tb-tag">${triageTag(medCat45, minorCmp)}</span>
           </div>
           <div class="tb-chip ${triageCls(medCat123, urgentCmp)}">
             <span class="tb-cat">Urgent (Cat 1&ndash;3)</span>
-            <span class="tb-usual">${medCat123 != null ? "usual " + medCat123 + "m" : "—"}</span>
+            <span class="tb-usual">${medCat123 != null ? `usual ${medCat123}m<span class="tb-qsrc">(VAHI YoY ${qLabel})</span>` : "—"}</span>
             <span class="tb-tag">${triageTag(medCat123, urgentCmp)}</span>
           </div>
         </div>`;
@@ -726,7 +729,7 @@ function renderCard(s) {
 
           <div class="trend">
             <span class="${a.cls}">${a.sym}</span>
-            ${a.lbl} &nbsp;&middot;&nbsp; ${sign}${momentum.toFixed(1)} min / 15 min
+            ${a.lbl}
           </div>
           ${triageBenchHtml}
           <div class="obs-meta">
@@ -930,21 +933,24 @@ function updateHistNav() {
   const liveBtn = document.getElementById("hist-live-btn");
   const pos     = document.getElementById("hist-pos");
 
-  if (!_histTimeline || !_histTimeline.snapshots.length) {
-    nav.style.display    = "none";
-    banner.style.display = "none";
-    return;
-  }
-
-  nav.style.display = "flex";
+  const hasHistory = !!(
+    _histTimeline &&
+    _histTimeline.snapshots &&
+    _histTimeline.snapshots.length > 0
+  );
 
   if (_histIdx < 0) {
     nav.classList.remove("hist-nav-active");
-    banner.style.display = "none";
-    pos.textContent      = "● Live";
-    prevBtn.disabled     = false;
-    nextBtn.disabled     = true;
+    banner.style.display  = "none";
     liveBtn.style.display = "none";
+    nextBtn.disabled      = true;
+    if (!hasHistory) {
+      pos.textContent  = _histTimeline === null ? "&#8987; Loading…" : "&#9679; Live";
+      prevBtn.disabled = true;
+    } else {
+      pos.textContent  = "&#9679; Live";
+      prevBtn.disabled = false;
+    }
   } else {
     nav.classList.add("hist-nav-active");
     const snap  = _histTimeline.snapshots[_histIdx];
@@ -1037,11 +1043,12 @@ function exitHistory() {
 async function loadHistory() {
   try {
     const resp = await fetch(HISTORY_URL + "?t=" + Date.now());
-    if (!resp.ok) return;
+    if (!resp.ok) { _histTimeline = false; updateHistNav(); return; }
     _histTimeline = await resp.json();
     updateHistNav();
   } catch(e) {
-    // History is optional — fail silently
+    _histTimeline = false;
+    updateHistNav();
   }
 }
 
