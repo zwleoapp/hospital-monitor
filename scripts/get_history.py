@@ -172,20 +172,23 @@ def build_timeline(silver_path: pathlib.Path, history_hours: int = HISTORY_HOURS
             except Exception:
                 conf, label = None, "—"
 
-            raw_max = row.get("max_wait_mins")
+            raw_max  = row.get("max_wait_mins")
+            raw_pred = row["predicted_wait_min"]
+            raw_acc  = row["forecast_accuracy"]
+            raw_act  = row["actual_60m_wait_min"]
             sites.append({
                 "site":                 row["hospital"],
                 "timestamp_utc":        row["timestamp"].strftime("%Y-%m-%dT%H:%M:%SZ"),
                 "current_wait_min":     round(current, 1),
-                "max_wait_min":         None if pd.isna(raw_max) else int(raw_max),
+                "max_wait_min":         None if pd.isna(raw_max)  else int(raw_max),
                 "waiting_count":        int(row.get("waiting") or 0),
                 "treating_count":       int(row.get("treating") or 0),
                 "wait_momentum":        round(momentum, 1),
-                "predicted_wait_min":   row["predicted_wait_min"],
+                "predicted_wait_min":   None if pd.isna(raw_pred) else round(float(raw_pred), 1),
                 "confidence":           conf,
                 "confidence_label":     label,
-                "forecast_accuracy":    row["forecast_accuracy"],
-                "actual_60m_wait_min":  row["actual_60m_wait_min"],
+                "forecast_accuracy":    None if pd.isna(raw_acc)  else round(float(raw_acc),  1),
+                "actual_60m_wait_min":  None if pd.isna(raw_act)  else round(float(raw_act),  1),
             })
 
         snapshots.append({
@@ -213,7 +216,7 @@ def main() -> None:
 
     timeline = build_timeline(args.silver, args.hours)
     args.out.parent.mkdir(parents=True, exist_ok=True)
-    args.out.write_text(json.dumps(timeline, indent=2))
+    args.out.write_text(json.dumps(timeline, indent=2, allow_nan=False))
     n = len(timeline["snapshots"])
     print(f"  History timeline: {n} snapshots ({args.hours}h) → {args.out}")
 

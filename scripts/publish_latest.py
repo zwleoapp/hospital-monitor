@@ -256,7 +256,7 @@ def main() -> None:
     try:
         timeline = build_timeline(args.silver)
         history_path = DEFAULT_HISTORY_OUT
-        history_path.write_text(json.dumps(timeline, indent=2))
+        history_path.write_text(json.dumps(timeline, indent=2, allow_nan=False))
         print(f"\n  History timeline: {len(timeline['snapshots'])} snapshots → {history_path}")
     except Exception as e:
         print(f"\n  Warning: history timeline skipped: {e}", file=sys.stderr)
