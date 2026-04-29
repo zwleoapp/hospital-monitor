@@ -23,7 +23,8 @@ If the API URL or response schema changes (myhospitals.gov.au restructures perio
   4. Update NAME_OVERRIDES if facility names changed
   5. Run --out to a temp file and inspect rows before --append
 
-Current API base: https://myhospitalsapi.aihw.gov.au/api/v1
+Current API base: https://myhospitalsapi.aihw.gov.au/api/v0  (v0 legacy — preserves facilities/{code}/statistics/{measure} structure)
+v1 endpoint exists but uses reporting-units/{code}/data-items (bulk dump, needs full rewrite to filter).
 API docs / Swagger: https://myhospitalsapi.aihw.gov.au/index.html
 """
 
@@ -60,7 +61,7 @@ MEASURES = {
 }
 
 # ── API ───────────────────────────────────────────────────────────────────────
-BASE = "https://myhospitalsapi.aihw.gov.au/api/v1"   # migrated 2024–25; docs: myhospitalsapi.aihw.gov.au/index.html
+BASE = "https://myhospitalsapi.aihw.gov.au/api/v0"   # v0 legacy: keeps facilities/{code}/statistics/{measure} structure
 SESSION = requests.Session()
 SESSION.headers.update({"Accept": "application/json", "User-Agent": "hospital-monitor/1.0"})
 
@@ -75,7 +76,7 @@ def api_get(path: str, params: dict | None = None) -> dict | list:
 def resolve_code(code: str) -> dict | None:
     """Return the API facility object for a given H-code, or None if not found."""
     try:
-        return api_get(f"reporting-units/{code}")
+        return api_get(f"facilities/{code}")
     except requests.HTTPError as e:
         if e.response.status_code == 404:
             return None
@@ -101,7 +102,7 @@ def fetch_measures(code: str, hospital_name: str) -> list[dict]:
 
     for measure_code, measure_alias in MEASURES.items():
         try:
-            data = api_get(f"reporting-units/{code}/statistics/{measure_code}")
+            data = api_get(f"facilities/{code}/statistics/{measure_code}")
             time.sleep(0.15)  # be polite
         except requests.HTTPError as e:
             print(f"  WARN: {hospital_name} / {measure_code} → {e.response.status_code}, skipping")
@@ -174,7 +175,7 @@ def main() -> None:
         return
 
     if not resolved:
-        print("ERROR: no reporting-units resolved. Check HOSPITAL_CODES constants.", file=sys.stderr)
+        print("ERROR: no facilities resolved. Check HOSPITAL_CODES constants.", file=sys.stderr)
         sys.exit(1)
 
     # ── Step 2: fetch measures ───────────────────────────────────────────────
