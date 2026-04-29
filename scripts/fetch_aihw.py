@@ -75,7 +75,7 @@ def api_get(path: str, params: dict | None = None) -> dict | list:
 def resolve_code(code: str) -> dict | None:
     """Return the API facility object for a given H-code, or None if not found."""
     try:
-        return api_get(f"facilities/{code}")
+        return api_get(f"reporting-units/{code}")
     except requests.HTTPError as e:
         if e.response.status_code == 404:
             return None
@@ -101,7 +101,7 @@ def fetch_measures(code: str, hospital_name: str) -> list[dict]:
 
     for measure_code, measure_alias in MEASURES.items():
         try:
-            data = api_get(f"facilities/{code}/statistics/{measure_code}")
+            data = api_get(f"reporting-units/{code}/statistics/{measure_code}")
             time.sleep(0.15)  # be polite
         except requests.HTTPError as e:
             print(f"  WARN: {hospital_name} / {measure_code} → {e.response.status_code}, skipping")
@@ -174,7 +174,7 @@ def main() -> None:
         return
 
     if not resolved:
-        print("ERROR: no facilities resolved. Check HOSPITAL_CODES constants.", file=sys.stderr)
+        print("ERROR: no reporting-units resolved. Check HOSPITAL_CODES constants.", file=sys.stderr)
         sys.exit(1)
 
     # ── Step 2: fetch measures ───────────────────────────────────────────────
