@@ -23,7 +23,8 @@ If the API URL or response schema changes (myhospitals.gov.au restructures perio
   4. Update NAME_OVERRIDES if facility names changed
   5. Run --out to a temp file and inspect rows before --append
 
-Current API base: https://myhospitals.gov.au/api/v1
+Current API base: https://myhospitalsapi.aihw.gov.au/api/v1
+API docs / Swagger: https://myhospitalsapi.aihw.gov.au/index.html
 """
 
 import sys
@@ -59,7 +60,7 @@ MEASURES = {
 }
 
 # ── API ───────────────────────────────────────────────────────────────────────
-BASE = "https://myhospitals.gov.au/api/v1"   # no www — Pi can't resolve www. prefix
+BASE = "https://myhospitalsapi.aihw.gov.au/api/v1"   # migrated 2024–25; docs: myhospitalsapi.aihw.gov.au/index.html
 SESSION = requests.Session()
 SESSION.headers.update({"Accept": "application/json", "User-Agent": "hospital-monitor/1.0"})
 

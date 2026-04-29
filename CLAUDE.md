@@ -60,7 +60,7 @@ Deduplicates on `(hospital, period_start, measure_code, triage_category)` so re-
 | Dandenong Hospital | H0329 | unverified |
 | Casey Hospital | H0345 | unverified |
 
-**If the API URL changes:** update `BASE` in `fetch_aihw.py` and follow the checklist in that file's docstring.
+**API base URL (updated 2026-04-29):** `https://myhospitalsapi.aihw.gov.au/api/v1` — migrated from old `myhospitals.gov.au` domain. Swagger docs at `https://myhospitalsapi.aihw.gov.au/index.html`. If the URL changes again, update `BASE` in `fetch_aihw.py` and follow the checklist in that file's docstring.
 
 ### Silver Transform
 Run after any change to Bronze or VAHI/AIHW reference files:
