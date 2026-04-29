@@ -1,8 +1,10 @@
 # DESIGN — Predictive ED Wait Time Engine
 
-**Version:** 1.4 · **Updated:** 2026-04-28 · **Owner:** G
+**Version:** 1.6 · **Updated:** 2026-04-29 · **Owner:** G
 
 > This document is the **Single Source of Truth (SSOT)**. Every architectural change updates this doc *before* the code is merged. Both Gemini (strategy) and Claude (DS co-design / tactical execution) read it on every session.
+>
+> **Pipeline & deployment details** (branch layout, Pi steps, Vercel config, cache headers) are documented separately in [dataflow.md](dataflow.md).
 
 ---
 
@@ -127,12 +129,13 @@ Phase 1 is deliberately small, but the lifecycle shape is set now so Phase 2 is 
 **Phase 1 (zero-cost path):**
 
 - Pi runs `publish_latest.py` after each Silver rebuild.
-- Script writes a small JSON with one record per site: `{site, latest_obs_utc, current_wait_min, predicted_wait_min, confidence, heartbeat_age_mins}`.
-- Force-pushes that single file to the `data` branch of the repo via deploy-key SSH. Force-push keeps git history small.
-- A static `docs/index.html` (vanilla JS + Leaflet or just an HTML table) is served from GitHub Pages on `main`. It fetches `https://raw.githubusercontent.com/zwleoapp/hospital-monitor/data/latest.json` and renders.
-- Cache-busting via `?t=<timestamp>` query string.
+- Script writes `latest.json` (one record per site) and `history_timeline.json` (last 24 h of 15-min snapshots).
+- Force-pushes exactly 4 files to the `data` branch: `index.html`, `latest.json`, `history_timeline.json`, `vercel.json`. Force-push keeps git history small.
+- Vercel serves the dashboard directly from the `data` branch root. `index.html` fetches `/latest.json` with `Cache-Control: no-cache` — browser gets fresh data within seconds of each Pi push, not the 5-min CDN lag of raw GitHub URLs.
+- Cache-busting via `?t=<timestamp>` query string on every poll.
+- `vercel.json` carries an `ignoreCommand` so Vercel skips rebuilds when only JSON data files change (~95 pushes/day produce zero builds).
 
-This is the simplest possible public surface: no servers, no DNS, no inbound on the Pi, no spend. Petrol Spy Australia is a useful reference for *what* (live, public-good, map-driven) but the implementation here is far smaller — we don't need accounts, comments, or a backend.
+This is the simplest possible public surface: no servers, no DNS, no inbound on the Pi, no spend. See [dataflow.md](dataflow.md) for the full pipeline steps and Vercel settings checklist.
 
 **Phase 2 swap:** Databricks job writes the same JSON shape to the same branch. Frontend untouched.
 
@@ -152,12 +155,15 @@ This is the simplest possible public surface: no servers, no DNS, no inbound on 
 | 2026-04-25 | Publisher = force-push `latest.json` to `data` branch. | Zero-cost public surface; git history stays small. |
 | 2026-04-25 | Pi → GitHub auth = deploy-key SSH (scoped). | One-way push, key-rotatable, minimum blast radius. |
 | 2026-04-25 | Pi → Databricks auth (Phase 2) = PAT for v1; OAuth M2M deferred. | OAuth is overkill at hobby scale; revisit if a second sensor or service joins. |
+| 2026-04-29 | Data branch capped at exactly 4 files; `push_to_data_branch` strips index on every commit. | Manual pushes (Gemini session) contaminated data branch with source code. Clean-slate approach prevents recurrence without extra guards. |
+| 2026-04-29 | `vercel.json` carries `ignoreCommand` to skip builds on JSON-only pushes. | ~95 Pi pushes/day were triggering Vercel deployments unnecessarily. Code deploys (index.html change) still trigger a build. |
+| 2026-04-29 | Vercel serves from `data` branch; frontend uses root-relative URLs (not `raw.githubusercontent.com`). | Vercel + `Cache-Control: no-cache` gives instant freshness. Raw GitHub CDN adds ~5 min lag and ignores custom headers. |
 
 ---
 
 ## 8. Open questions
 
-1. **Sync cadence to GitHub `data` branch:** every 30 min (matches scrape) vs hourly. Default 30 min until file count or push noise is a problem.
+1. ~~**Sync cadence to GitHub `data` branch:** every 30 min vs hourly.~~ Resolved 2026-04-29: cadence is 15 min (matches scrape); `ignoreCommand` prevents Vercel build noise.
 2. **Weather endpoint:** Open-Meteo archive (backfill) vs forecast (live). Need both; the join key is the archive value once it's available.
 3. **Phase-2 trigger:** which threshold trips first — row count, training time, or grant?
 
@@ -271,6 +277,7 @@ The triage benchmark chips ("Median Xm") displayed on each hospital card are sou
 - **1.3 (2026-04-28)** — Added §10 YoY Seasonal Benchmarks and §11 Triage Split Estimation. Documents `_compute_seasonal_benchmarks()` formula and `calcSplitEstimates()` UI logic.
 - **1.4 (2026-04-28)** — §11 extended: clarified that triage chip "Usual" values are sourced from seasonal YoY averages, comparing current quarter-of-year against the same historical quarter.
 - **1.5 (2026-04-28)** — Command Center layout finalised (§13 updated). Hero hierarchy: times → Confidence + 72h Accuracy badges → 🛡️ p90 (9-in-10 possibility) → All-categories current → Crisis headline (LONG WAIT / VERY LONG WAIT, hero-sized) or trend arrow → Median triage chips. System Insights now has a "System Metrics" subgroup (Strain Index, Clearing Speed). Timeline nav requires >1 snapshot to unlock. "Usual" → "Median" in triage chips.
+- **1.6 (2026-04-29)** — Decoupled data pipeline: data branch capped to 4 files, `ignoreCommand` added to suppress Vercel builds on Pi pushes, `raw.githubusercontent.com` reference removed from §6. DATA HEARTBEAT footer removed from card UI. Companion [dataflow.md](dataflow.md) created for pipeline/Vercel operational detail.
 
 ---
 
@@ -292,7 +299,7 @@ Two independent clocks govern data freshness. They measure different things and 
 | Tier | Condition | UI Effect |
 |---|---|---|
 | **Fresh** | `heartbeat_age_mins ≤ 60` | Normal card rendering |
-| **Hospital Stale** | `heartbeat_age_mins > 60` per site | `.stale-card`: 0.7 opacity, light-red border, ⚠️ STALE badge in footer |
+| **Hospital Stale** | `heartbeat_age_mins > 60` per site | `.stale-card`: 0.7 opacity, light-red border, grey status dot |
 | **Network Stale (global)** | **All** hospitals `> 60 mins` | Top red banner: "ALL DATA STALE — Pi may be offline" |
 
 **Why 60 minutes?** The Pi scrapes every 15 min. A 60-min threshold tolerates up to 3 missed cycles before flagging. If the Pi is offline entirely, all hospitals cross 60 min together and the global banner fires. If only one hospital is stale, its card is individually marked but the dashboard stays usable.
@@ -332,10 +339,12 @@ A sidebar panel (desktop) / top horizontal slider (mobile) ranks the top 3 hospi
 ### Vercel Deployment
 
 - Production branch: `data`
-- Pi force-pushes `latest.json` + `index.html` + `vercel.json` to `data` on every publish cycle
-- `vercel.json` sets `Cache-Control: no-cache, no-store, must-revalidate` on `/latest.json`
+- Pi force-pushes exactly 4 files to `data` on every cycle: `index.html`, `latest.json`, `history_timeline.json`, `vercel.json`
+- `vercel.json` sets `Cache-Control: no-cache` on `/latest.json`; 15-min cache on `/history_timeline.json`
+- `ignoreCommand` in `vercel.json` tells Vercel to skip builds when only data JSON files change — ~95 Pi pushes/day produce zero Vercel deployments
 - Browser receives fresh JSON within ~30 s of Pi push, not the 5-min CDN lag of raw GitHub URLs
 - Dashboard auto-refreshes every 5 min; stale-check re-runs every 60 s against the in-memory object
+- Full settings checklist: see [dataflow.md](dataflow.md)
 
 ### Key UI Constants
 
