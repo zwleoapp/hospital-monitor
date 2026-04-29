@@ -107,12 +107,6 @@
       border-left-color:var(--stale-border) !important;
       background:var(--stale-bg);
     }
-    .stale-badge{
-      display:inline-flex;align-items:center;gap:.3rem;
-      font-size:.67rem;font-weight:700;padding:.18rem .55rem;border-radius:99px;
-      background:#ffebee;color:#c62828;border:1px solid #ef9a9a;
-    }
-
     .patient-headline{padding:1.2rem 1.3rem .9rem}
     .card-header{display:flex;align-items:center;gap:.5rem;margin-bottom:.9rem}
     .dot{width:11px;height:11px;border-radius:50%;flex-shrink:0}
@@ -177,19 +171,6 @@
     }
     .forecast-badge-cal{background:#f5f5f5;color:#9ca3af;border:1px solid #e5e7eb;font-style:italic}
 
-    /* ── Per-hospital observation timestamp footer (Data Heartbeat) ─────────── */
-    .obs-footer{
-      padding:.5rem 1.3rem .65rem;
-      border-top:1px solid #f0f0f0;
-      font-size:.63rem;color:#bbb;
-      display:flex;flex-direction:column;align-items:flex-start;gap:.15rem;
-    }
-    .stale-card .obs-footer{border-top-color:#ecd6d3;color:#b09090}
-    .hb-title{font-size:.56rem;font-weight:700;text-transform:uppercase;
-              letter-spacing:.08em;color:#c8c8d4;margin-bottom:.04rem}
-    .hb-row{display:flex;gap:.3rem;align-items:baseline;flex-wrap:wrap;font-size:.63rem;color:#bbb}
-    .hb-label{font-weight:700;color:#a0a0b0;white-space:nowrap}
-    .hb-na-val{font-style:italic;color:#d4d4dc}
     /* Gap 3: overall metric row + max-wait outlier warning */
     .overall-metric{font-size:.75rem;color:#9090a8;margin-bottom:.18rem}
     .overall-metric strong{font-weight:700;color:#6a6a80}
@@ -269,7 +250,6 @@
       padding:.2rem .5rem;margin:.25rem 0 .1rem;display:inline-block;
     }
     .hist-no-acc{color:#8880c0;background:#f5f3ff;border-color:#ddd6fe;font-style:italic}
-    .hb-approx{font-style:italic;font-size:.58rem;color:#c8c8d4}
     .p90-highlight{font-weight:800;font-size:calc(.63rem + 2px)}
     .minor-range-sep{font-size:.82em;font-weight:400;color:#bbb;padding:0 .12rem}
     .minor-range-end{font-size:.82em;font-weight:700;color:#666}
@@ -367,7 +347,6 @@
     @media(max-width:480px){
       body{padding:.8rem}
       .patient-headline{padding:1rem 1rem .75rem}
-      .obs-footer{padding:.4rem 1rem .5rem}
       .insights-body{padding:.4rem 1rem .65rem}
       .hero-val{font-size:1.5rem}
       .hero-val-primary{font-size:1.8rem}
@@ -649,23 +628,7 @@ function renderCard(s) {
     const a    = arrow(momentum);
     const sign = momentum >= 0 ? "+" : "";
 
-    const staleBadge = isStale
-      ? `<span class="stale-badge">&#9888;&#xFE0F; STALE</span>`
-      : "";
-
-    const obsAgo      = minsAgo(s.latest_obs_utc);
-    const obsTime     = localTime(s.latest_obs_utc);
     const hospTimeParsed = parseHospDataTime(s.last_updated_display);
-    const hospTimeHtml = hospTimeParsed
-      ? `<div class="hb-row"><span class="hb-label">Hospital&nbsp;data:</span><span>${hospTimeParsed.time}&thinsp;AEST${hospTimeParsed.approx ? "&thinsp;<span class='hb-approx'>(approx&nbsp;&mdash;&nbsp;Pi&nbsp;clock)</span>" : ""}</span></div>`
-      : `<div class="hb-row"><span class="hb-label">Hospital&nbsp;data:</span><span class="hb-na-val">${s._is_historical ? "—" : "not published by hospital"}</span></div>`;
-    const obsFooter = `
-      <div class="obs-footer">
-        ${staleBadge}
-        <div class="hb-title">&#128202;&nbsp;Data Heartbeat</div>
-        <div class="hb-row"><span class="hb-label">Monitor&nbsp;check:</span><span>${obsAgo != null ? obsAgo + "m&thinsp;ago &middot; " : ""}${obsTime}&thinsp;AEST</span></div>
-        ${hospTimeHtml}
-      </div>`;
 
     const strainHtml = s.strain_index != null ? `
       <div class="insight">
@@ -773,7 +736,6 @@ function renderCard(s) {
           </div>
         </details>
 
-        ${obsFooter}
       </div>`;
   } catch(e) {
     console.error("Failed to render card for", s?.site, e);

@@ -74,8 +74,10 @@ def _git(cmd: str, cwd: pathlib.Path) -> None:
 def push_to_data_branch(json_path: pathlib.Path,
                         history_path: pathlib.Path | None = None) -> None:
     """
-    Force-push latest.json to the `data` branch via SSH deploy key.
-    Uses a persistent shallow clone at PUBLISHER_TMPDIR to keep pushes fast.
+    Force-push data files to the `data` branch via SSH deploy key.
+    Each commit is a clean slate containing exactly 4 files:
+      index.html, latest.json, history_timeline.json, vercel.json
+    This removes any source-code files that crept in via earlier manual pushes.
     """
     repo_url = subprocess.check_output(
         ["git", "remote", "get-url", "origin"],
@@ -93,20 +95,29 @@ def push_to_data_branch(json_path: pathlib.Path,
         _git("git fetch origin data", PUBLISHER_TMPDIR)
         _git("git reset --hard origin/data", PUBLISHER_TMPDIR)
 
+    # Strip everything from the index and working tree so only our 4 files land in the commit.
+    # Handles the case where manual pushes contaminated the data branch with source files.
+    _git("git rm -rf --cached --quiet .", PUBLISHER_TMPDIR)
+    subprocess.run(["git", "clean", "-fdx", "--quiet"],
+                   cwd=PUBLISHER_TMPDIR, capture_output=True, check=False)
+
     import shutil
     shutil.copy(json_path, PUBLISHER_TMPDIR / "latest.json")
-
-    # Co-deploy index.html so Vercel serves the full dashboard from the data branch
     shutil.copy(_BASE / "docs" / "index.html", PUBLISHER_TMPDIR / "index.html")
 
     history_file = "history_timeline.json"
     if history_path and history_path.exists():
         shutil.copy(history_path, PUBLISHER_TMPDIR / history_file)
-    elif not (PUBLISHER_TMPDIR / history_file).exists():
-        history_file = ""  # don't add to git if it doesn't exist yet
+    else:
+        history_file = ""  # build_timeline failed this cycle; omit from commit
 
-    # Vercel: no-cache on latest.json; allow browser to cache history for 15 min
+    # ignoreCommand: Vercel skips rebuild when only data JSON files change
     vercel_config = {
+        "ignoreCommand": (
+            "git diff HEAD^ HEAD --name-only"
+            " | grep -qvE '(latest|history_timeline)\\.json$'"
+            " && exit 1 || exit 0"
+        ),
         "headers": [
             {
                 "source": "/latest.json",
@@ -131,7 +142,7 @@ def push_to_data_branch(json_path: pathlib.Path,
             return
         raise
     _git("git push --force origin HEAD:data", PUBLISHER_TMPDIR)
-    print(f"  Force-pushed latest.json → data branch ({stamp})")
+    print(f"  Force-pushed → data branch ({stamp})")
 
 # ── Strain index ──────────────────────────────────────────────────────────────
 
