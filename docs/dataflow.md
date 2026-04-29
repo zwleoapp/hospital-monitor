@@ -68,10 +68,12 @@ Vercel serves `index.html` directly from the data branch root. It never reads `m
 
 **Ignored Build Step (`ignoreCommand` in `vercel.json`):**
 ```
-git diff HEAD^ HEAD --name-only | grep -qvE '(latest|history_timeline)\.json$' && exit 1 || exit 0
+git diff HEAD^ HEAD --quiet index.html vercel.json
 ```
-- Pi pushes (JSON-only) → Vercel exits 0 → **build skipped**
-- Code pushes (index.html or vercel.json changed) → Vercel exits 1 → **build runs**
+`git diff --quiet` exits **0** (no diff) when only JSON data files changed → Vercel skips the build.
+Exits **1** (diff found) when `index.html` or `vercel.json` changed → Vercel builds.
+- Pi pushes (JSON-only) → `index.html`/`vercel.json` unchanged → exit 0 → **build skipped**
+- Code deploy (index.html changed) → exit 1 → **build runs**
 
 This means roughly 95 daily Pi pushes produce zero Vercel builds. Only a code deploy triggers one.
 
