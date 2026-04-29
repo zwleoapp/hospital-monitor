@@ -19,6 +19,7 @@ Usage:
 
 import sys
 import json
+import math
 import shlex
 import argparse
 import pathlib
@@ -210,8 +211,11 @@ def main() -> None:
         outlook["heartbeat_age_mins"] = round(
             (generated_utc_dt - obs_dt).total_seconds() / 60, 1
         )
-        outlook["strain_index"] = compute_strain_index(
-            outlook["predicted_wait_min"], float(row["ctx_wait_p90_mins"])
+        p90_val = row["ctx_wait_p90_mins"]
+        outlook["strain_index"] = (
+            compute_strain_index(outlook["predicted_wait_min"], float(p90_val))
+            if p90_val is not None and not (isinstance(p90_val, float) and math.isnan(p90_val))
+            else None
         )
         outlook["last_updated_display"] = last_updated_map.get(outlook["site"], "")
         sites.append(outlook)

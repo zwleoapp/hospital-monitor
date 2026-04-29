@@ -102,6 +102,9 @@ def load_bronze(path: pathlib.Path) -> pd.DataFrame:
 
 
 def load_vahi(path: pathlib.Path) -> pd.DataFrame:
+    if not path.exists():
+        print(f"  WARNING: VAHI file not found at {path} — running without benchmarks.")
+        return pd.DataFrame()
     df = pd.read_csv(path)
     df["quarter_start_utc"] = pd.to_datetime(df["quarter_start_utc"], utc=True)
     df["quarter_end_utc"]   = pd.to_datetime(df["quarter_end_utc"],   utc=True)
@@ -141,6 +144,9 @@ def load_aihw(path: pathlib.Path) -> pd.DataFrame:
     Period bounds are converted to UTC midnight; period_end gets +1 day
     so the range check ts < period_end_utc is inclusive of the last day.
     """
+    if not path.exists():
+        print(f"  WARNING: AIHW file not found at {path} — skipping AIHW fallback.")
+        return pd.DataFrame()
     df = pd.read_csv(path)
     df["hospital"] = df["hospital"].str.strip().replace(AIHW_NAME_MAP)
 
@@ -445,22 +451,30 @@ def build_silver(
     vahi = load_vahi(vahi_path)
     aihw = load_aihw(aihw_path)
 
-    _LOS_COLS = ["los_pct_under_4hr", "los_pct_over_24hr", "non_admitted_los_pct_under_4hr"]
-    vahi_los_means = vahi.groupby("hospital")[_LOS_COLS].mean().reset_index()
-
     # Feature engineering (no context yet)
     silver = add_silver_features(bronze)
 
-    # Context join
-    vahi_matched, unmatched = _join_vahi(silver, vahi)
-    print(f"  VAHI match : {len(vahi_matched):,} rows")
+    if vahi.empty:
+        # Bronze-only mode: VAHI reference files missing (e.g. bronze/ wiped).
+        # Pipeline keeps running; ctx columns are null until bronze is restored.
+        print("  WARNING: No VAHI data — ctx columns will be null (Bronze-only mode).")
+        for col in CTX_COLS:
+            silver[col] = None
+        silver["ctx_source"] = "NONE"
+    else:
+        _LOS_COLS = ["los_pct_under_4hr", "los_pct_over_24hr", "non_admitted_los_pct_under_4hr"]
+        vahi_los_means = vahi.groupby("hospital")[_LOS_COLS].mean().reset_index()
 
-    aihw_patched = _join_aihw_fallback(unmatched, aihw, vahi_los_means)
-    if not aihw_patched.empty:
-        print(f"  AIHW fallback applied to {len(aihw_patched):,} rows "
-              f"(timestamps outside VAHI coverage)")
+        vahi_matched, unmatched = _join_vahi(silver, vahi)
+        print(f"  VAHI match : {len(vahi_matched):,} rows")
 
-    silver = pd.concat([vahi_matched, aihw_patched], ignore_index=True)
+        aihw_patched = _join_aihw_fallback(unmatched, aihw, vahi_los_means)
+        if not aihw_patched.empty:
+            print(f"  AIHW fallback applied to {len(aihw_patched):,} rows "
+                  f"(timestamps outside VAHI coverage)")
+
+        silver = pd.concat([vahi_matched, aihw_patched], ignore_index=True)
+        _assert_no_ctx_nulls(silver)
 
     # Dedup consecutive no-change rows
     before = len(silver)
@@ -472,8 +486,7 @@ def build_silver(
     # Momentum (computed on deduped Silver so gaps are real observable intervals)
     silver = _add_wait_momentum(silver)
 
-    # QC
-    _assert_no_ctx_nulls(silver)
+    # Bounds QC (non-fatal)
     _assert_bounds(silver)
 
     # Final column order
