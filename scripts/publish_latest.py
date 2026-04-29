@@ -242,12 +242,13 @@ def main() -> None:
     print(f"  {'─'*26} {'─'*5}  {'─'*5}  {'─'*9}  {'─'*5}  {'─'*5}")
     for s in sites:
         sign = "+" if s["wait_momentum"] >= 0 else ""
+        strain_str = f"strain={s['strain_index']:.2f}" if s['strain_index'] is not None else "strain=—"
         print(
             f"  {s['site']:<26} {s['current_wait_min']:>4.0f}m "
             f" {s['predicted_wait_min']:>4.0f}m "
             f" {sign}{s['wait_momentum']:>+6.1f}/15m "
             f" {s['confidence_label']:<8} "
-            f" strain={s['strain_index']:.2f} "
+            f" {strain_str} "
             f" {colour_icon.get(s['color'], s['color'])}"
         )
     print(f"\n  latest.json → {args.out}")
