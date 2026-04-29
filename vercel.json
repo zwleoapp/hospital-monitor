@@ -1,5 +1,5 @@
 {
-  "ignoreCommand": "git diff HEAD^ HEAD --name-only | grep -qvE '(latest|history_timeline)\\.json$' && exit 1 || exit 0",
+  "ignoreCommand": "git diff HEAD^ HEAD --quiet index.html vercel.json",
   "headers": [
     {
       "source": "/latest.json",
