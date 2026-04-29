@@ -112,9 +112,7 @@ def push_to_data_branch(json_path: pathlib.Path,
     else:
         history_file = ""  # build_timeline failed this cycle; omit from commit
 
-    # ignoreCommand: skip Vercel build unless index.html or vercel.json changed
     vercel_config = {
-        "ignoreCommand": "git diff HEAD^ HEAD --quiet index.html vercel.json",
         "headers": [
             {
                 "source": "/latest.json",

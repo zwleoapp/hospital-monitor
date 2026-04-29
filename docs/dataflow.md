@@ -66,16 +66,10 @@ Operational hours gate: steps a–i only run 06:00–23:00 Melbourne time. Outsi
 **Production branch:** `data`
 Vercel serves `index.html` directly from the data branch root. It never reads `main`.
 
-**Ignored Build Step (`ignoreCommand` in `vercel.json`):**
-```
-git diff HEAD^ HEAD --quiet index.html vercel.json
-```
-`git diff --quiet` exits **0** (no diff) when only JSON data files changed → Vercel skips the build.
-Exits **1** (diff found) when `index.html` or `vercel.json` changed → Vercel builds.
-- Pi pushes (JSON-only) → `index.html`/`vercel.json` unchanged → exit 0 → **build skipped**
-- Code deploy (index.html changed) → exit 1 → **build runs**
-
-This means roughly 95 daily Pi pushes produce zero Vercel builds. Only a code deploy triggers one.
+**Build on every push** — no `ignoreCommand` is set. Vercel builds on every Pi push.
+Each build takes ~4 seconds. At 96 pushes/day that is ~6 min/day, well within Vercel's
+6,000 build-minutes/month free tier. Skipping builds via `ignoreCommand` was tried but
+causes Vercel to keep serving the previous build's JSON files rather than the fresh ones.
 
 **Cache-Control headers (set in `vercel.json`):**
 
@@ -106,7 +100,7 @@ Go to **Vercel → Project Settings → Git**:
 | Setting | Value |
 |---|---|
 | Production Branch | `data` |
-| Ignored Build Step | *(leave blank — handled by `ignoreCommand` in `vercel.json`)* |
+| Ignored Build Step | *(leave blank — Vercel must build on every push to serve fresh JSON)* |
 | Root Directory | *(leave blank — files are at the repo root on the `data` branch)* |
 
 ---
