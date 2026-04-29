@@ -25,32 +25,42 @@ Diversion logic is scoped within-network only (`publish_latest.py::annotate_dive
 ## ED Data Pipeline Workflow
 
 ### Reference data files (bronze/)
-- `vahi_history_merged.csv` — quarterly VAHI benchmarks for all 6 hospitals (Oct 2024–). Rebuilt by `scripts/process_vahi_history.py`. 2026 proxy quarters (VAHI_PROXY) are forward-filled from the last real quarter.
-- `eastern_hospital_historical_context.csv` — annual AIHW baseline 2011–2025. Currently covers Eastern Health only; Monash backfill pending via `fetch_aihw.py`.
+- `vahi_history_merged.csv` — quarterly VAHI benchmarks for all 6 hospitals (Oct 2024–). Rebuilt by `scripts/fetch_vahi.py` from the 6 raw VAHI source CSVs in `bronze/`. 2026 proxy quarters (VAHI_PROXY) are forward-filled from the last real quarter.
+- `eastern_hospital_historical_context.csv` — AIHW annual baseline (backfill for pre-Oct-2024 rows only). All current Bronze data falls within VAHI coverage so this file is **optional** — `transform_silver.py` skips it gracefully if absent or malformed.
+
+**Bronze backup:** All bronze files are mirrored to the SSD at `/mnt/router_ssd/Data_Hub/bronze_backup/`. If `bronze/` is ever wiped (git clean, etc.), restore with:
+```bash
+cp /mnt/router_ssd/Data_Hub/bronze_backup/* /home/pi-zwapp/hospital-monitor/bronze/
+python3 scripts/transform_silver.py
+```
+Refresh the SSD backup after any VAHI update: `cp bronze/* /mnt/router_ssd/Data_Hub/bronze_backup/`
 
 ### Fetch Script (run from laptop — Pi cannot reach myhospitals.gov.au)
 ```bash
-# Step 1 — verify H-codes resolve correctly before fetching any data
+# Step 1 — verify H-codes still resolve (API URL may change; see script header)
 python3 scripts/fetch_aihw.py --list-only
 
-# Step 2 — fetch to a separate file for review
-python3 scripts/fetch_aihw.py --out bronze/monash_aihw_context.csv
+# Step 2 — fetch to a temp file for review
+python3 scripts/fetch_aihw.py --out bronze/check_aihw.csv
 
 # Step 3 — merge into main file once row counts look sane
 python3 scripts/fetch_aihw.py --append
 ```
 
-**H-codes to verify (run --list-only first):**
-| Hospital | Code in script | Status |
-|---|---|---|
-| Box Hill Hospital | H0330 | Confirmed from existing file |
-| Maroondah Hospital | H0332 | Confirmed from existing file |
-| Angliss Hospital | H0333 | Confirmed from existing file |
-| Monash Medical Centre - Clayton | H0326 | Unverified — check with --list-only |
-| Dandenong Hospital | H0329 | Unverified — check with --list-only |
-| Casey Hospital | H0345 | Unverified — check with --list-only |
+`--append` handles a wrong-schema existing file (starts fresh rather than crashing).
+Deduplicates on `(hospital, period_start, measure_code, triage_category)` so re-running is safe.
 
-**Validation**: `--append` deduplicates on `(hospital, period_start, measure_code, triage_category)` so re-running is safe.
+**H-codes (verify with --list-only if API gives 404s):**
+| Hospital | Code | Last verified |
+|---|---|---|
+| Box Hill Hospital | H0330 | 2026-04 |
+| Maroondah Hospital | H0332 | 2026-04 |
+| Angliss Hospital | H0333 | 2026-04 |
+| Monash Medical Centre - Clayton | H0326 | unverified |
+| Dandenong Hospital | H0329 | unverified |
+| Casey Hospital | H0345 | unverified |
+
+**If the API URL changes:** update `BASE` in `fetch_aihw.py` and follow the checklist in that file's docstring.
 
 ### Silver Transform
 Run after any change to Bronze or VAHI/AIHW reference files:

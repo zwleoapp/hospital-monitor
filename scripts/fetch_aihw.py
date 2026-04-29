@@ -2,18 +2,28 @@
 """
 fetch_aihw.py — Fetch ED measures from the AIHW MyHospitals public API.
 
-⚠  RUN FROM LAPTOP — myhospitals.gov.au does not resolve from the Pi.
+⚠  RUN FROM LAPTOP — myhospitals.gov.au does not resolve from the Pi (DNS/firewall).
 
-Outputs a CSV in the same schema as bronze/eastern_hospital_historical_context.csv
-so the two files can be concatenated directly.
+The AIHW file is a backfill for Bronze rows older than Oct 2024.
+All current Bronze data falls within VAHI quarterly coverage so transform_silver.py
+runs fine without it (skips gracefully if file is missing or has wrong schema).
 
 Usage (run from repo root on a laptop with internet access):
-  python3 scripts/fetch_aihw.py --list-only         # verify H-codes first
-  python3 scripts/fetch_aihw.py --out bronze/monash_aihw_context.csv
-  python3 scripts/fetch_aihw.py --append            # merge into main file
+  python3 scripts/fetch_aihw.py --list-only         # verify H-codes still resolve
+  python3 scripts/fetch_aihw.py --out bronze/check_aihw.csv   # preview before writing
+  python3 scripts/fetch_aihw.py --append            # merge into eastern_hospital_historical_context.csv
 
-After --append, copy the updated bronze/ file to the Pi and run:
-  python3 scripts/transform_silver.py               # rebuild Silver with full context
+After --append, copy bronze/ to the Pi and run:
+  python3 scripts/transform_silver.py               # rebuild Silver with AIHW backfill
+
+If the API URL or response schema changes (myhospitals.gov.au restructures periodically):
+  1. Update the BASE constant below
+  2. Run --list-only to confirm H-codes still resolve
+  3. Check fetch_measures() key names match the new API (periodStart vs period_start, etc.)
+  4. Update NAME_OVERRIDES if facility names changed
+  5. Run --out to a temp file and inspect rows before --append
+
+Current API base: https://myhospitals.gov.au/api/v1
 """
 
 import sys
@@ -196,18 +206,30 @@ def main() -> None:
     df = df[col_order]
 
     if args.append:
-        existing = pd.read_csv(EXISTING_FILE)
+        _DEDUP_COLS = ["hospital", "period_start", "measure_code", "triage_category"]
+        existing = pd.DataFrame()
+        if EXISTING_FILE.exists():
+            try:
+                _ex = pd.read_csv(EXISTING_FILE)
+                if set(_DEDUP_COLS).issubset(_ex.columns):
+                    existing = _ex
+                else:
+                    print(f"  NOTE: {EXISTING_FILE.name} has unexpected schema — starting fresh.")
+            except Exception as e:
+                print(f"  NOTE: could not read existing file ({e}) — starting fresh.")
+
         combined = (
             pd.concat([existing, df], ignore_index=True)
-            .drop_duplicates(subset=["hospital", "period_start", "measure_code", "triage_category"])
+            .drop_duplicates(subset=_DEDUP_COLS)
             .sort_values(["hospital", "period_start", "measure_code"])
             .reset_index(drop=True)
         )
         combined.to_csv(EXISTING_FILE, index=False)
-        print(f"\nAppended to {EXISTING_FILE}: {len(existing)} → {len(combined)} rows")
-        new_hospitals = set(combined["hospital"].unique()) - set(existing["hospital"].unique())
+        prev = len(existing)
+        print(f"\nWritten to {EXISTING_FILE}: {prev} existing → {len(combined)} rows")
+        new_hospitals = set(combined["hospital"].unique()) - set(existing["hospital"].unique()) if not existing.empty else set(combined["hospital"].unique())
         if new_hospitals:
-            print(f"New hospitals added: {sorted(new_hospitals)}")
+            print(f"Hospitals in file: {sorted(new_hospitals)}")
     else:
         args.out.parent.mkdir(parents=True, exist_ok=True)
         df.to_csv(args.out, index=False)
