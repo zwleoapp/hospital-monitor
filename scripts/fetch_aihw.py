@@ -2,7 +2,8 @@
 """
 fetch_aihw.py — Fetch ED measures from the AIHW MyHospitals public API.
 
-⚠  RUN FROM LAPTOP — myhospitals.gov.au does not resolve from the Pi (DNS/firewall).
+ℹ  Can be run from the Pi — myhospitalsapi.aihw.gov.au resolves fine (new domain).
+   The old myhospitals.gov.au was blocked; this new domain is not.
 
 The AIHW file is a backfill for Bronze rows older than Oct 2024.
 All current Bronze data falls within VAHI quarterly coverage so transform_silver.py
@@ -23,8 +24,9 @@ If the API URL or response schema changes (myhospitals.gov.au restructures perio
   4. Update NAME_OVERRIDES if facility names changed
   5. Run --out to a temp file and inspect rows before --append
 
-Current API base: https://myhospitalsapi.aihw.gov.au/api/v0  (v0 legacy — preserves facilities/{code}/statistics/{measure} structure)
-v1 endpoint exists but uses reporting-units/{code}/data-items (bulk dump, needs full rewrite to filter).
+Current API base: https://myhospitalsapi.aihw.gov.au/api/v1
+Endpoint: GET /reporting-units/{code}/data-items (bulk dump filtered locally by measure_code).
+Period info fetched from GET /datasets/{dataset_id} (cached across hospitals).
 API docs / Swagger: https://myhospitalsapi.aihw.gov.au/index.html
 """
 
@@ -46,6 +48,7 @@ from config.hospitals import HOSPITAL_CODES  # canonical name → H-code
 NAME_OVERRIDES = {
     "maroondah hospital [east ringwood]": "Maroondah Hospital",
     "maroondah hospital":                 "Maroondah Hospital",
+    "monash medical centre [clayton]":    "Monash Medical Centre - Clayton",
     "monash medical centre":              "Monash Medical Centre - Clayton",
     "monash medical centre - clayton":    "Monash Medical Centre - Clayton",
 }
@@ -61,9 +64,11 @@ MEASURES = {
 }
 
 # ── API ───────────────────────────────────────────────────────────────────────
-BASE = "https://myhospitalsapi.aihw.gov.au/api/v0"   # v0 legacy: keeps facilities/{code}/statistics/{measure} structure
+BASE = "https://myhospitalsapi.aihw.gov.au/api/v1"
 SESSION = requests.Session()
 SESSION.headers.update({"Accept": "application/json", "User-Agent": "hospital-monitor/1.0"})
+
+_DATASET_CACHE: dict[int, dict] = {}  # dataset_id → {period_start, period_end, triage_category, measure_name}
 
 
 def api_get(path: str, params: dict | None = None) -> dict | list:
@@ -74,9 +79,10 @@ def api_get(path: str, params: dict | None = None) -> dict | list:
 
 
 def resolve_code(code: str) -> dict | None:
-    """Return the API facility object for a given H-code, or None if not found."""
+    """Return the API reporting-unit object for a given H-code, or None if not found."""
     try:
-        return api_get(f"facilities/{code}")
+        resp = api_get(f"reporting-units/{code}")
+        return resp.get("result", resp) if isinstance(resp, dict) else resp
     except requests.HTTPError as e:
         if e.response.status_code == 404:
             return None
@@ -88,53 +94,78 @@ def canonical_name(api_name: str, code: str) -> str:
     key = api_name.strip().lower()
     if key in NAME_OVERRIDES:
         return NAME_OVERRIDES[key]
-    # Fall back to reverse-lookup in HOSPITAL_CODES
     for canon, hcode in HOSPITAL_CODES.items():
         if hcode == code:
             return canon
     return api_name.strip()
 
 
-def fetch_measures(code: str, hospital_name: str) -> list[dict]:
-    """Fetch all target measures for one facility and return normalised rows."""
-    rows = []
-    fetched_utc = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-
-    for measure_code, measure_alias in MEASURES.items():
+def _dataset_info(dataset_id: int) -> dict:
+    """Fetch and cache period + triage info for a dataset_id."""
+    if dataset_id not in _DATASET_CACHE:
         try:
-            data = api_get(f"facilities/{code}/statistics/{measure_code}")
-            time.sleep(0.15)  # be polite
-        except requests.HTTPError as e:
-            print(f"  WARN: {hospital_name} / {measure_code} → {e.response.status_code}, skipping")
+            ds = api_get(f"datasets/{dataset_id}")["result"]
+            rms = ds.get("reported_measure_summary", {})
+            ms  = rms.get("measure_summary", {})
+            _DATASET_CACHE[dataset_id] = {
+                "period_start":    ds["reporting_start_date"],
+                "period_end":      ds["reporting_end_date"],
+                "triage_category": rms.get("reported_measure_name", ""),
+                "measure_name":    ms.get("measure_name", ""),
+            }
+            time.sleep(0.1)
+        except Exception as e:
+            _DATASET_CACHE[dataset_id] = {}  # mark as failed so we don't retry
+    return _DATASET_CACHE[dataset_id]
+
+
+def fetch_measures(code: str, hospital_name: str) -> list[dict]:
+    """
+    Fetch all target measures for one reporting unit via the v1 bulk data-items endpoint.
+    Filters to MEASURES codes, resolves period/triage via cached dataset lookups.
+    """
+    fetched_utc = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    rows = []
+
+    try:
+        data = api_get(f"reporting-units/{code}/data-items")
+    except requests.HTTPError as e:
+        print(f"  WARN: {hospital_name} data-items → {e.response.status_code}, skipping")
+        return rows
+
+    items = data.get("result", []) if isinstance(data, dict) else data
+
+    # Pre-collect unique dataset_ids for our target measures to show progress
+    target_items = [i for i in items if i.get("measure_code") in MEASURES]
+    unique_ds    = {i["data_set_id"] for i in target_items}
+    print(f"  {len(target_items)} target items across {len(unique_ds)} datasets — resolving periods…")
+
+    for item in target_items:
+        measure_code = item["measure_code"]
+        ds_id        = item["data_set_id"]
+        value        = item.get("value")
+
+        if value is None:
             continue
 
-        # API returns a list of annual records
-        records = data if isinstance(data, list) else data.get("data", [])
-        for rec in records:
-            period_start = rec.get("periodStart") or rec.get("period_start") or rec.get("year")
-            period_end   = rec.get("periodEnd")   or rec.get("period_end")
-            triage_cat   = rec.get("patientType") or rec.get("triage_category") or "All patients"
-            value        = rec.get("value")
-            units        = rec.get("unit") or rec.get("units") or ""
-            measure_name = rec.get("measureName") or rec.get("name") or ""
+        ds = _dataset_info(ds_id)
+        if not ds:
+            continue
 
-            if value is None or period_start is None:
-                continue
-
-            rows.append({
-                "period_start":   period_start,
-                "period_end":     period_end,
-                "hospital_code":  code,
-                "hospital":       hospital_name,
-                "triage_category": triage_cat,
-                "measure_code":   measure_code,
-                "measure_name":   measure_name,
-                "measure_alias":  measure_alias,
-                "value":          value,
-                "units":          units,
-                "source":         "AIHW MyHospitals API",
-                "fetched_utc":    fetched_utc,
-            })
+        rows.append({
+            "period_start":    ds["period_start"],
+            "period_end":      ds["period_end"],
+            "hospital_code":   code,
+            "hospital":        hospital_name,
+            "triage_category": ds["triage_category"],
+            "measure_code":    measure_code,
+            "measure_name":    ds["measure_name"],
+            "measure_alias":   MEASURES[measure_code],
+            "value":           value,
+            "units":           "",
+            "source":          "AIHW MyHospitals API v1",
+            "fetched_utc":     fetched_utc,
+        })
 
     return rows
 
@@ -164,7 +195,7 @@ def main() -> None:
         if facility is None:
             print(f"  ✗ {code} ({canon_name}) — not found; check HOSPITAL_CODES")
             continue
-        api_name = facility.get("name") or facility.get("facilityName") or code
+        api_name = facility.get("reporting_unit_name") or facility.get("name") or facility.get("facilityName") or code
         norm = canonical_name(api_name, code)
         print(f"  ✓ {code} → '{api_name}' → canonical: '{norm}'")
         resolved[norm] = code
