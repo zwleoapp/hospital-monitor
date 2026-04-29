@@ -29,19 +29,24 @@ Each card renders top-to-bottom in this order:
 ```
 1.  Hospital name + status dot
 2.  Hero split: URGENT | MINOR | Waiting | In Treatment
-3.  Command-centre row: All · Now [Xm] → 60m [🔮 Xm]  [HH:MM AEST]
-4.  Confidence badge + 72h accuracy badge
-5.  9-in-10 row: [P90 badge · VAHI Qly] [Max wait pairing]
-6.  Crisis headline OR trend arrow
-7.  ← breathing gap → Triage benchmark chips (Urgent LEFT, Minor RIGHT)
-8.  History accuracy badge (history mode only)
+3.  Truth row: All · Now [Xm] | Max [Xm]  [HH:MM AEST]
+4.  AI row: Next 60m ⏱ [Xm]
+5.  Confidence badge + 72h accuracy badge
+6.  9-in-10 row: [P90 badge · VAHI Qly]
+7.  Crisis headline OR trend arrow
+8.  ← breathing gap → Triage benchmark chips (Urgent LEFT, Minor RIGHT)
+9.  History accuracy badge (history mode only)
 ────────────────────────────────────────
-9.  ▸ Metrics & Index Insights (collapsible)
+10. ▸ Metrics & Index Insights (collapsible)
 ────────────────────────────────────────
-10. Data Heartbeat footer
+11. Data Heartbeat footer
 ```
 
-The **Command-centre row** (row 3) is the primary "Brain" signal. Current and 60-minute forecast values render at `1.5rem/800` weight alongside the hospital data timestamp, anchoring freshness to the forecast in a single glance.
+The **Two-Row Command Centre** (rows 3–4) separates observables from predictions:
+- **Truth row** (`.cmd-row`): Current wait + max wait + per-campus timestamp — what the hospital is publishing right now
+- **AI row** (`.cmd-ai-row`): 60-minute forecast — what the model predicts
+
+Both rows use `1.75rem/800` weight to match the First Line hero values (Urgent/Minor), creating a unified visual hierarchy. The stopwatch icon (⏱ `&#9201;`) on the AI row replaces the old crystal ball, signaling that this is a time-based extrapolation, not magic.
 
 ---
 
@@ -51,9 +56,9 @@ The **Command-centre row** (row 3) is the primary "Brain" signal. Current and 60
 |---------|-----------|-----------|--------|-------|
 | Hero wait value | `.hero-val` | 1.75rem | 800 | Urgent/Minor wait time |
 | Crisis headline | `.crisis-headline` | 1.75rem | 800 | LONG WAIT / VERY LONG WAIT |
-| **Command-centre current** | `.cmd-val` | **1.5rem** | **800** | All-categories current wait — command row |
-| **Command-centre forecast** | `.cmd-forecast-val` | **1.5rem** | **800** | 60m forecast — indigo, command row |
-| **Median anchor value** | `.tb-median-val` | **1.3rem** | **900** | e.g., "10m" in triage chip — visual anchor |
+| **Command-centre current** | `.cmd-val` | **1.75rem** | **800** | All-categories current wait — truth row (matches First Line) |
+| **Command-centre forecast** | `.cmd-forecast-val` | **1.75rem** | **800** | 60m forecast — indigo, AI row (matches First Line) |
+| **Median anchor value** | `.tb-median-val` | **2.6rem** | **900** | e.g., "10m" in triage chip — dominant visual anchor (2× original) |
 | Count value (Waiting/Treating) | `.count-hero` | 1.75rem | 800 | Grey (#6b7280) to distinguish from times |
 | Hospital name | `.hosp` | .96rem | 700 | |
 | 9-in-10 badge text | `.p90-badge` | .75rem | 700 | Dark pill with P90 value + VAHI Qly label |
@@ -96,7 +101,7 @@ Two chips, side-by-side:
 └──────────────────────────┘  └───────────────────────────┘
 ```
 
-The numeric value (e.g., `10m`, `34m`) uses `.tb-median-val` at 1.3rem/900 weight, making it the dominant visual element in the chip. The "Median" label and VAHI source caption are small supporting text.
+The numeric value (e.g., `10m`, `34m`) uses `.tb-median-val` at **2.6rem/900** weight (doubled from original 1.3rem), making it the dominant visual anchor in the chip. The "Median" label and VAHI source caption are small supporting text.
 
 **Chip colour states:**
 | Class | Meaning | Background | Text |
@@ -107,31 +112,42 @@ The numeric value (e.g., `10m`, `34m`) uses `.tb-median-val` at 1.3rem/900 weigh
 
 ---
 
-## Command-Centre Row
+## Two-Row Command Centre
 
+**Truth Row:**
 ```
-All · Now  45m  →  60m  🔮 52m                         🕐 07:56 AEST
+All · Now  45m  |  Max 3hr 12m                          🕐 20:31 AEST
 ```
 
-The primary "Brain" signal. Replaces the old "All-categories row" at a much larger size:
-- Current wait: `.cmd-val` at `1.5rem/800`, dark navy (`#1a1a2e`)
-- 60-minute forecast: `.cmd-forecast-val` at `1.5rem/800`, indigo (`#5b72b5`)
-- Hospital data timestamp: `.cmd-time` at `.62rem`, pushed right via `margin-left:auto`
+**AI Row:**
+```
+Next 60m  ⏱ 52m
+```
 
-Positioned immediately after the hero split (row 3), making the forecast the first data signal after triage times.
+The command centre is split into two distinct rows to separate observables from predictions:
+
+**Truth Row** (`.cmd-row`):
+- Current wait: `.cmd-val` at `1.75rem/800`, dark navy (`#1a1a2e`)
+- Max wait: `.cmd-max-val` at `.9rem/700`, grey (`#6a6a80`) — pulses red if > 5× P90
+- Per-campus timestamp: `.cmd-time` at `.62rem`, pushed right via `margin-left:auto`
+
+**AI Row** (`.cmd-ai-row`):
+- 60-minute forecast: `.cmd-forecast-val` at `1.75rem/800`, indigo (`#5b72b5`)
+- Stopwatch icon (⏱ `&#9201;`) signals time-based extrapolation
+
+Both rows positioned immediately after the hero split (rows 3–4), matching First Line font size to create visual unity across observables and predictions.
 
 ---
 
 ## 9-in-10 Row
 
 ```
-[🛡 89m · VAHI Qly]    Max 3hr 12m (2.2×)
+[🛡 89m · VAHI Qly]
 ```
 
 - P90 badge: dark navy pill, `.75rem` text, P90 value in `.p90-badge-val` at `.85rem`/900
 - Badge label: "(9-in-10 · VAHI Qly)" — attributes the benchmark to VAHI quarterly data
-- Max wait pairing: inline, `.85rem`/700, immediately to the right of the badge
-- If Max wait is > 5× P90: critical pulse animation on the warning chip
+- Max wait moved to Truth Row (row 3) — no longer paired with P90
 
 ---
 

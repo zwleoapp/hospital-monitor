@@ -166,6 +166,52 @@ grep -o '"hospital":"[^"]*"' /mnt/router_ssd/Data_Hub/Waiting_Live_time/damping_
 
 ---
 
+## Data Integrity
+
+### Monash Health — Per-Campus Timestamp Extraction
+
+Monash Health requires per-campus timestamp extraction due to independent Power BI report refresh cycles. Casey, Dandenong, and Clayton each run separate Power BI refresh jobs and may show different `LastUpdatedDisplay` values at any given scrape.
+
+**Power BI Data Source:** `CurrentPatients` entity
+
+**Clinical Properties Extracted:**
+| Property | Power BI Column | Scraper Mapping | Purpose |
+|----------|----------------|-----------------|---------|
+| Total Waiting | `TotalWaiting` | `col_waiting` (G1) | Patient count waiting to be seen |
+| Total Being Treated | `TotalBeingTreated` | `col_treating` (G2) | Patient count currently in treatment |
+| Estimated Time | `Estimated Time` | `col_wait_str` (G3) | Wait range string (e.g., "2 hr 46 min - 6 hr 50 min") |
+| Last Updated Display | `LastUpdatedDisplay` | `col_last_updated` (G4) | Per-campus data freshness timestamp (e.g., "20:31") |
+| Adult/Paed Group | `AdultPaed` | `group_col` (G0) | Patient category grouping — scraper targets "Adult" group |
+| Campus Filter | `Campus` | `hospital_col` (WHERE clause) | Campus name filter (Casey/Clayton/Dandenong) |
+
+The scraper sends one grouped query per campus in the batch POST (`_scrape_powerbi_source()`). Each query groups by `AdultPaed` and selects columns G0–G4. The DSR response returns all patient-category rows (Adult + Paediatric) for that campus.
+
+The scraper:
+1. Extracts G4 (`LastUpdatedDisplay`) from each campus's DSR result
+2. Writes per-campus timestamps to sidecar JSON: `{"Casey Hospital": "20:41", "Dandenong Hospital": "20:31", "Monash Medical Centre - Clayton": "20:01"}`
+3. Scans ALL patient groups (Adult + Paed) for the highest wait upper-bound — this becomes the campus's `max_wait_mins`
+
+`publish_latest.py` reads this sidecar and maps each timestamp to the matching site's `last_updated_display` field in `latest.json`. The frontend `isStale` check then compares each campus's reported time against current Melbourne time independently — a single stale campus does not affect the others.
+
+**Eastern Health** uses an HTTP `Date` response header fallback (prefixed `~`) since its pages do not embed a native published timestamp.
+
+### Data Validation Policy — The "Published Truth" Standard
+
+**Primary source:** Data values must align with what is visually published on the hospital's public-facing webpage, not with raw internal Power BI query output.
+
+**Why this matters:** The internal Power BI query engine and the public dashboard UI operate on independent refresh cycles. At any moment the raw `SemanticQueryDataShapeCommand` response may reflect a model state that has not yet propagated to the rendered tiles a patient would see. If the public webpage shows 40 minutes and this monitor shows 32 minutes sourced from an internal query, users lose trust in the tool — and rightly so, because the hospital's official public statement is 40 minutes.
+
+**Implications for scraper design:**
+
+| Source | Standard | Notes |
+|--------|----------|-------|
+| Eastern Health | UI-scraped (`patientCounts` + `predictedWaitMinutes` JS variables embedded by the page renderer) | Matches exactly what the public page displays |
+| Monash Health | Power BI batch API (`/querydata`) — the same data that populates the rendered tiles | Acceptable because the API is the render-time data source for the public tiles, not a pre-render internal feed |
+
+When discrepancies appear between monitor values and values a user sees on the hospital website, the website value is Ground Truth. Investigate whether the scraper is hitting a pre-render endpoint, a cached layer, or a different entity/column than the one driving the public tile.
+
+---
+
 ## Data Flow Summary
 
 ```

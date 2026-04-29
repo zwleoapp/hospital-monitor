@@ -443,6 +443,15 @@ def _scrape_powerbi_source(source_key: str, cfg: dict, timestamp: str) -> list:
         print(f"   [SCRAPED] {formal_name}: waiting={waiting}, treating={treating}, wait={wait_str}"
               + (f", updated={last_upd}" if last_upd else ""))
 
+    # If every campus returned the same timestamp, LastUpdatedDisplay is report-global
+    # (not per-campus). Tag with '^' so the frontend skips per-campus stale checks.
+    # Self-correcting: once a real per-campus column is configured and returns differing
+    # values, the '^' is not applied.
+    values = list(last_updated_map.values())
+    if len(values) > 1 and len(set(values)) == 1:
+        last_updated_map = {k: "^" + v for k, v in last_updated_map.items()}
+        print(f"  [{source_key}] LastUpdatedDisplay is report-global (all campuses same) — tagged '^'")
+
     _merge_last_updated_sidecar(last_updated_map)
 
     return rows
