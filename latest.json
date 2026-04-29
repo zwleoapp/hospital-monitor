@@ -1,5 +1,5 @@
 {
-  "generated_utc": "2026-04-29T03:01:03Z",
+  "generated_utc": "2026-04-29T03:05:26Z",
   "horizon_min": 60,
   "vahi_p90_all_mins": 89,
   "vahi_qly_label": "Q2 2026",
@@ -21,9 +21,9 @@
       "vahi_median_cat123_mins": 6,
       "vahi_median_cat45_mins": 6,
       "color": "green",
-      "heartbeat_age_mins": 0.8,
+      "heartbeat_age_mins": 5.2,
       "strain_index": 0.48,
-      "last_updated_display": "~13:00"
+      "last_updated_display": "~13:05"
     },
     {
       "site": "Maroondah Hospital",
@@ -42,9 +42,9 @@
       "vahi_median_cat123_mins": 6,
       "vahi_median_cat45_mins": 6,
       "color": "amber",
-      "heartbeat_age_mins": 0.8,
+      "heartbeat_age_mins": 5.2,
       "strain_index": 0.75,
-      "last_updated_display": "~13:00"
+      "last_updated_display": "~13:05"
     },
     {
       "site": "Box Hill Hospital",
@@ -63,18 +63,39 @@
       "vahi_median_cat123_mins": 5,
       "vahi_median_cat45_mins": 6,
       "color": "green",
-      "heartbeat_age_mins": 0.8,
+      "heartbeat_age_mins": 5.2,
       "strain_index": 0.212,
-      "last_updated_display": "~13:00"
+      "last_updated_display": "~13:05"
+    },
+    {
+      "site": "Monash Medical Centre - Clayton",
+      "network": "Monash Health",
+      "latest_obs_utc": "2026-04-29T03:05:22Z",
+      "waiting_count": 41,
+      "treating_count": 75,
+      "current_wait_min": 42.0,
+      "max_wait_min": 186,
+      "predicted_wait_min": 21.0,
+      "wait_momentum": -23.3,
+      "confidence": 0.569,
+      "confidence_label": "Moderate",
+      "ctx_source": "VAHI",
+      "vahi_p90_mins": 34,
+      "vahi_median_cat123_mins": 10,
+      "vahi_median_cat45_mins": 11,
+      "color": "green",
+      "heartbeat_age_mins": 0.1,
+      "strain_index": 0.618,
+      "last_updated_display": "Last Updated: 29 Apr 26 13:01"
     },
     {
       "site": "Casey Hospital",
       "network": "Monash Health",
-      "latest_obs_utc": "2026-04-29T03:00:13Z",
-      "waiting_count": 15,
-      "treating_count": 43,
+      "latest_obs_utc": "2026-04-29T03:05:22Z",
+      "waiting_count": 17,
+      "treating_count": 42,
       "current_wait_min": 36.0,
-      "max_wait_min": 112,
+      "max_wait_min": 117,
       "predicted_wait_min": 36.0,
       "wait_momentum": 0.0,
       "confidence": 0.792,
@@ -84,39 +105,18 @@
       "vahi_median_cat123_mins": 10,
       "vahi_median_cat45_mins": 10,
       "color": "amber",
-      "heartbeat_age_mins": 0.8,
+      "heartbeat_age_mins": 0.1,
       "strain_index": 1.161,
-      "last_updated_display": "Last Updated: 29 Apr 26 12:56"
-    },
-    {
-      "site": "Monash Medical Centre - Clayton",
-      "network": "Monash Health",
-      "latest_obs_utc": "2026-04-29T03:00:13Z",
-      "waiting_count": 40,
-      "treating_count": 75,
-      "current_wait_min": 50.0,
-      "max_wait_min": 181,
-      "predicted_wait_min": 60.0,
-      "wait_momentum": 5.0,
-      "confidence": 0.705,
-      "confidence_label": "High",
-      "ctx_source": "VAHI",
-      "vahi_p90_mins": 34,
-      "vahi_median_cat123_mins": 10,
-      "vahi_median_cat45_mins": 11,
-      "color": "amber",
-      "heartbeat_age_mins": 0.8,
-      "strain_index": 1.765,
-      "last_updated_display": "Last Updated: 29 Apr 26 12:56"
+      "last_updated_display": "Last Updated: 29 Apr 26 13:01"
     },
     {
       "site": "Dandenong Hospital",
       "network": "Monash Health",
-      "latest_obs_utc": "2026-04-29T03:00:13Z",
-      "waiting_count": 23,
-      "treating_count": 62,
+      "latest_obs_utc": "2026-04-29T03:05:22Z",
+      "waiting_count": 26,
+      "treating_count": 60,
       "current_wait_min": 21.0,
-      "max_wait_min": 91,
+      "max_wait_min": 96,
       "predicted_wait_min": 21.0,
       "wait_momentum": 0.0,
       "confidence": 0.853,
@@ -126,9 +126,9 @@
       "vahi_median_cat123_mins": 9,
       "vahi_median_cat45_mins": 9,
       "color": "green",
-      "heartbeat_age_mins": 0.8,
+      "heartbeat_age_mins": 0.1,
       "strain_index": 1.0,
-      "last_updated_display": "Last Updated: 29 Apr 26 12:56"
+      "last_updated_display": "Last Updated: 29 Apr 26 13:01"
     }
   ]
 }
