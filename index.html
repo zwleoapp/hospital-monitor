@@ -149,7 +149,7 @@
       opacity:.6;font-weight:700;line-height:1;
     }
     .tb-usual{font-size:.65rem;font-weight:700;line-height:1.25}
-    .tb-median-val{font-size:1.3rem;font-weight:900;line-height:1;display:inline-block}
+    .tb-median-val{font-size:2.6rem;font-weight:900;line-height:1;display:inline-block}
     .tb-tag{font-size:.6rem;font-weight:700;margin-top:.06rem}
     .tb-qsrc{font-size:.5rem;font-weight:400;opacity:.65;display:block;margin-top:.02rem}
     /* Calm palette: ochre (above usual), slate teal (below), neutral blue-gray (near) */
@@ -198,11 +198,13 @@
     .overall-forecast-row .overall-metric{margin-bottom:0}
     .forecast-inline{font-size:.75rem;font-weight:700;color:#5b72b5;white-space:nowrap}
 
-    /* ── Command-centre row: large current + 60m values with inline timestamp ── */
-    .cmd-row{display:flex;align-items:center;gap:.55rem;margin:.35rem 0 .55rem;flex-wrap:wrap}
+    /* ── Command-centre rows: truth (now+max) above AI forecast ─────────────── */
+    .cmd-row{display:flex;align-items:center;gap:.55rem;margin:.35rem 0 .2rem;flex-wrap:wrap}
+    .cmd-ai-row{display:flex;align-items:center;gap:.45rem;margin:.1rem 0 .55rem}
     .cmd-label{font-size:.62rem;color:#9090a8;font-weight:600;text-transform:uppercase;letter-spacing:.05em;white-space:nowrap}
-    .cmd-val{font-size:1.5rem;font-weight:800;color:#1a1a2e;line-height:1}
-    .cmd-forecast-val{font-size:1.5rem;font-weight:800;color:#5b72b5;line-height:1}
+    .cmd-val{font-size:1.75rem;font-weight:800;color:#1a1a2e;line-height:1}
+    .cmd-max-val{font-size:.9rem;font-weight:700;color:#6a6a80;white-space:nowrap}
+    .cmd-forecast-val{font-size:1.75rem;font-weight:800;color:#5b72b5;line-height:1}
     .cmd-sep{font-size:.7rem;color:#bbb;white-space:nowrap}
     .cmd-time{font-size:.62rem;color:#bbb;margin-left:auto;white-space:nowrap}
 
@@ -717,9 +719,12 @@ function renderCard(s) {
           <div class="cmd-row">
             <span class="cmd-label">All &middot; Now</span>
             <span class="cmd-val">${fmtShort(current) ?? current + "m"}</span>
-            <span class="cmd-sep">&rarr;&nbsp;60m</span>
-            <span class="cmd-forecast-val">&#128302;&nbsp;${Math.round(predicted)}m</span>
+            ${s.max_wait_min != null ? `<span class="cmd-sep">|</span><span class="cmd-max-val${_maxCritical ? " max-warn-critical" : ""}">Max&nbsp;${fmtShort(s.max_wait_min) ?? s.max_wait_min + "m"}</span>` : ""}
             ${hospTimeParsed ? `<span class="cmd-time">&#128336;&thinsp;${hospTimeParsed.time}&thinsp;${hospTimeParsed.global ? "Refreshed" : "AEST"}</span>` : ""}
+          </div>
+          <div class="cmd-ai-row">
+            <span class="cmd-label">Next&nbsp;60m</span>
+            <span class="cmd-forecast-val">&#9201;&thinsp;${Math.round(predicted)}m</span>
           </div>
           <div class="obs-meta" style="margin-bottom:.4rem">
             <span class="badge ${confCls(s.confidence_label)}">${s.confidence_label} confidence &nbsp;${(conf * 100).toFixed(0)}%</span>
@@ -727,7 +732,6 @@ function renderCard(s) {
           </div>
           <div class="p90-maxwait-row">
             ${p90Mins != null ? `<div class="p90-badge">&#128737; <span class="p90-badge-val">${p90Mins}m</span> (9&#8209;in&#8209;10 &middot; VAHI&nbsp;Qly)</div>` : ""}
-            ${maxWaitPairingHtml}
           </div>
           ${crisisHtml || `<div class="trend"><span class="${a.cls}">${a.sym}</span> ${a.lbl}</div>`}
           ${triageBenchHtml}
