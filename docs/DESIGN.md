@@ -1,6 +1,6 @@
 # DESIGN — Predictive ED Wait Time Engine
 
-**Version:** 1.6 · **Updated:** 2026-04-29 · **Owner:** G
+**Version:** 1.7 · **Updated:** 2026-04-29 · **Owner:** G
 
 > This document is the **Single Source of Truth (SSOT)**. Every architectural change updates this doc *before* the code is merged. Both Gemini (strategy) and Claude (DS co-design / tactical execution) read it on every session.
 >
@@ -278,6 +278,7 @@ The triage benchmark chips ("Median Xm") displayed on each hospital card are sou
 - **1.4 (2026-04-28)** — §11 extended: clarified that triage chip "Usual" values are sourced from seasonal YoY averages, comparing current quarter-of-year against the same historical quarter.
 - **1.5 (2026-04-28)** — Command Center layout finalised (§13 updated). Hero hierarchy: times → Confidence + 72h Accuracy badges → 🛡️ p90 (9-in-10 possibility) → All-categories current → Crisis headline (LONG WAIT / VERY LONG WAIT, hero-sized) or trend arrow → Median triage chips. System Insights now has a "System Metrics" subgroup (Strain Index, Clearing Speed). Timeline nav requires >1 snapshot to unlock. "Usual" → "Median" in triage chips.
 - **1.6 (2026-04-29)** — Decoupled data pipeline: data branch capped to 4 files, `ignoreCommand` added to suppress Vercel builds on Pi pushes, `raw.githubusercontent.com` reference removed from §6. DATA HEARTBEAT footer removed from card UI. Companion [dataflow.md](dataflow.md) created for pipeline/Vercel operational detail.
+- **1.7 (2026-04-29)** — Pipeline hardening and AIHW restoration. Full session summary in §14.
 
 ---
 
@@ -341,7 +342,7 @@ A sidebar panel (desktop) / top horizontal slider (mobile) ranks the top 3 hospi
 - Production branch: `data`
 - Pi force-pushes exactly 4 files to `data` on every cycle: `index.html`, `latest.json`, `history_timeline.json`, `vercel.json`
 - `vercel.json` sets `Cache-Control: no-cache` on `/latest.json`; 15-min cache on `/history_timeline.json`
-- `ignoreCommand` in `vercel.json` tells Vercel to skip builds when only data JSON files change — ~95 Pi pushes/day produce zero Vercel deployments
+- Vercel builds on every Pi push (~4 s/build). `ignoreCommand` was tried but caused Vercel to keep serving stale JSON — removed.
 - Browser receives fresh JSON within ~30 s of Pi push, not the 5-min CDN lag of raw GitHub URLs
 - Dashboard auto-refreshes every 5 min; stale-check re-runs every 60 s against the in-memory object
 - Full settings checklist: see [dataflow.md](dataflow.md)
@@ -354,3 +355,26 @@ A sidebar panel (desktop) / top horizontal slider (mobile) ranks the top 3 hospi
 | `NETWORK_ORDER` | `docs/index.html` | Fixed network display order |
 | `OPERATIONAL_START_H / END_H` | `scripts/publish_latest.py` | Publish hours gate (06:00–23:00 Melbourne) |
 | `MOMENTUM_DAMPING` | `scripts/predict_next.py` | Dampens trend extrapolation |
+
+---
+
+## 14. Session Log — 2026-04-29 Pipeline Hardening
+
+### Issues resolved
+
+| # | Root cause | Fix |
+|---|---|---|
+| 1 | `bronze/` wiped by `git clean` in a Gemini session | `transform_silver.py` now runs in Bronze-only mode (null ctx columns, warns) when VAHI files missing — pipeline stays alive |
+| 2 | `history_timeline.json` contained bare `NaN` (pandas → `json.dumps`) | `get_history.py`: explicit `pd.isna()` guards on `forecast_accuracy`, `actual_60m_wait_min`, `predicted_wait_min`; `allow_nan=False` on both JSON writes |
+| 3 | Data branch contaminated with source code (40+ files from Gemini push) | `push_to_data_branch()` now strips index (`git rm --cached`) + working tree (`git clean -fdx`) before each commit — data branch locked to exactly 4 files forever |
+| 4 | `ignoreCommand` caused Vercel to serve stale JSON | Removed. Vercel builds on every push (~4 s, ~6 min/day, within free tier) |
+| 5 | AIHW API: old `myhospitals.gov.au` domain dead | Migrated to `myhospitalsapi.aihw.gov.au/api/v1`; new domain resolves from Pi |
+| 6 | AIHW v1 removed `/statistics/{measure}` endpoint | Rewrote `fetch_measures()`: bulk `/data-items` + local filter + `/datasets/{id}` cache for period/triage |
+| 7 | Monash H-codes wrong (H0326/H0329/H0345 → unrelated hospitals) | Corrected to H0331/H0348/H0353 via live `/reporting-units` search |
+| 8 | `load_aihw` crashed on wrong-schema CSV | Schema check added; returns empty DataFrame with warning |
+
+### State after session
+- `bronze/` fully restored: 6 VAHI source CSVs + `vahi_history_merged.csv` + `eastern_hospital_historical_context.csv` (2,688 rows, all 6 hospitals, 2011–2025)
+- SSD backup at `/mnt/router_ssd/Data_Hub/bronze_backup/` current
+- Dashboard live on Vercel, data branch clean (4 files), timeline buttons working
+- `fetch_aihw.py` runnable directly from Pi — no laptop required

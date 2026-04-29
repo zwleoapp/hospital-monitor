@@ -35,9 +35,9 @@ python3 scripts/transform_silver.py
 ```
 Refresh the SSD backup after any VAHI update: `cp bronze/* /mnt/router_ssd/Data_Hub/bronze_backup/`
 
-### Fetch Script (run from laptop — Pi cannot reach myhospitals.gov.au)
+### Fetch Script (can run from Pi or laptop — new API domain resolves from Pi)
 ```bash
-# Step 1 — verify H-codes still resolve (API URL may change; see script header)
+# Step 1 — verify H-codes still resolve
 python3 scripts/fetch_aihw.py --list-only
 
 # Step 2 — fetch to a temp file for review
@@ -45,22 +45,33 @@ python3 scripts/fetch_aihw.py --out bronze/check_aihw.csv
 
 # Step 3 — merge into main file once row counts look sane
 python3 scripts/fetch_aihw.py --append
+
+# After --append, refresh the SSD backup:
+cp bronze/eastern_hospital_historical_context.csv /mnt/router_ssd/Data_Hub/bronze_backup/
 ```
 
-`--append` handles a wrong-schema existing file (starts fresh rather than crashing).
+`--append` handles a wrong-schema existing file (starts fresh with a note).
 Deduplicates on `(hospital, period_start, measure_code, triage_category)` so re-running is safe.
+Current file: **2,688 rows**, all 6 hospitals, 2011–2025, all triage categories.
 
-**H-codes (verify with --list-only if API gives 404s):**
-| Hospital | Code | Last verified |
+**H-codes (verified 2026-04-29 against live API):**
+| Hospital | Code | API name |
 |---|---|---|
-| Box Hill Hospital | H0330 | 2026-04 |
-| Maroondah Hospital | H0332 | 2026-04 |
-| Angliss Hospital | H0333 | 2026-04 |
-| Monash Medical Centre - Clayton | H0326 | unverified |
-| Dandenong Hospital | H0329 | unverified |
-| Casey Hospital | H0345 | unverified |
+| Box Hill Hospital | H0330 | Box Hill Hospital |
+| Maroondah Hospital | H0332 | Maroondah Hospital [East Ringwood] |
+| Angliss Hospital | H0333 | Angliss Hospital |
+| Casey Hospital | **H0353** | Casey Hospital |
+| Dandenong Hospital | **H0348** | Dandenong Hospital |
+| Monash Medical Centre - Clayton | **H0331** | Monash Medical Centre [Clayton] |
 
-**API base URL (updated 2026-04-29):** `https://myhospitalsapi.aihw.gov.au/api/v0` — using v0 legacy endpoint which preserves the `facilities/{code}/statistics/{measure}` path structure the script is built for. v1 exists but uses a bulk `data-items` dump requiring a full rewrite. Swagger docs at `https://myhospitalsapi.aihw.gov.au/index.html`. If v0 is retired, update `BASE` in `fetch_aihw.py` and rewrite `fetch_measures()` for the v1 bulk response.
+Previous codes H0326/H0329/H0345 were wrong (pointed to unrelated regional hospitals).
+
+**API (updated 2026-04-29):**
+- Base: `https://myhospitalsapi.aihw.gov.au/api/v1` — migrated from defunct `myhospitals.gov.au`
+- Endpoint: `GET /reporting-units/{code}/data-items` (bulk dump, filtered locally by measure code)
+- Period/triage: `GET /datasets/{dataset_id}` per unique dataset ID (cached across hospitals)
+- Swagger: `https://myhospitalsapi.aihw.gov.au/index.html`
+- Old `myhospitals.gov.au` is DNS-dead; new domain resolves from both Pi and laptop
 
 ### Silver Transform
 Run after any change to Bronze or VAHI/AIHW reference files:
@@ -86,8 +97,8 @@ Silver is a full rebuild each run — never appended. Safe to run repeatedly.
 
 ## Network notes
 - Pi has egress-only internet. SSH deploy key scoped to this repo at `~/.ssh/hospital_monitor_deploy`.
-- `myhospitals.gov.au` does not resolve from the Pi (DNS/firewall). Run `fetch_aihw.py` from a laptop.
-- `raw.githubusercontent.com` (data branch) is reachable from browsers but has ~5 min CDN cache.
+- `myhospitals.gov.au` (old domain) does not resolve from the Pi — but `myhospitalsapi.aihw.gov.au` (new API domain) does. `fetch_aihw.py` can now run directly on the Pi.
+- `raw.githubusercontent.com` (data branch) is reachable from browsers but has ~5 min CDN cache. Dashboard fetches `/latest.json` from Vercel (no-cache) instead.
 
 ## Key constants (adjust at top of each script)
 | Constant | File | Purpose |
