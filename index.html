@@ -623,12 +623,23 @@ function renderCard(s) {
       ? `${minorNowStr}<span class="minor-range-sep">–</span><span class="minor-range-end">${minorFcastStr}</span>`
       : minorNowStr;
 
-    const isStale = ageMin > HOSPITAL_STALE_MINS && !s._is_historical;
+    const hospTimeParsed = parseHospDataTime(s.last_updated_display);
+
+    // Stale when hospital's own reported time is >60 min old (independent of scraper heartbeat)
+    let hospNativeStale = false;
+    if (hospTimeParsed) {
+      const [hh, mm] = hospTimeParsed.time.split(':').map(Number);
+      const melbNow  = new Date(new Date().toLocaleString('en-AU', {timeZone: 'Australia/Melbourne'}));
+      const hospT    = new Date(melbNow);
+      hospT.setHours(hh, mm, 0, 0);
+      if (hospT > melbNow) hospT.setDate(hospT.getDate() - 1);
+      hospNativeStale = (melbNow - hospT) / 60000 > HOSPITAL_STALE_MINS;
+    }
+
+    const isStale = (ageMin > HOSPITAL_STALE_MINS || hospNativeStale) && !s._is_historical;
     const c    = light(predicted, momentum);
     const a    = arrow(momentum);
     const sign = momentum >= 0 ? "+" : "";
-
-    const hospTimeParsed = parseHospDataTime(s.last_updated_display);
 
     const strainHtml = s.strain_index != null ? `
       <div class="insight">
