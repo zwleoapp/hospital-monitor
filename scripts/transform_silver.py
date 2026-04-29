@@ -148,6 +148,10 @@ def load_aihw(path: pathlib.Path) -> pd.DataFrame:
         print(f"  WARNING: AIHW file not found at {path} — skipping AIHW fallback.")
         return pd.DataFrame()
     df = pd.read_csv(path)
+    required = {"hospital", "triage_category", "measure_alias", "value", "period_start", "period_end"}
+    if not required.issubset(df.columns):
+        print(f"  WARNING: AIHW file has unexpected schema (columns: {list(df.columns)[:4]}…) — skipping.")
+        return pd.DataFrame()
     df["hospital"] = df["hospital"].str.strip().replace(AIHW_NAME_MAP)
 
     relevant = df[
