@@ -107,7 +107,6 @@
       border-left-color:var(--stale-border) !important;
       background:var(--stale-bg);
     }
-
     .patient-headline{padding:1.2rem 1.3rem .9rem}
     .card-header{display:flex;align-items:center;gap:.5rem;margin-bottom:.9rem}
     .dot{width:11px;height:11px;border-radius:50%;flex-shrink:0}
@@ -199,12 +198,10 @@
     .overall-forecast-row .overall-metric{margin-bottom:0}
     .forecast-inline{font-size:.75rem;font-weight:700;color:#5b72b5;white-space:nowrap}
 
-    /* ── Command-centre rows: truth (now + max) above AI forecast ─────────── */
-    .cmd-row{display:flex;align-items:center;gap:.55rem;margin:.35rem 0 .2rem;flex-wrap:wrap}
-    .cmd-ai-row{display:flex;align-items:center;gap:.45rem;margin:.1rem 0 .55rem}
+    /* ── Command-centre row: large current + 60m values with inline timestamp ── */
+    .cmd-row{display:flex;align-items:center;gap:.55rem;margin:.35rem 0 .55rem;flex-wrap:wrap}
     .cmd-label{font-size:.62rem;color:#9090a8;font-weight:600;text-transform:uppercase;letter-spacing:.05em;white-space:nowrap}
     .cmd-val{font-size:1.5rem;font-weight:800;color:#1a1a2e;line-height:1}
-    .cmd-max-val{font-size:.9rem;font-weight:700;color:#6a6a80;white-space:nowrap}
     .cmd-forecast-val{font-size:1.5rem;font-weight:800;color:#5b72b5;line-height:1}
     .cmd-sep{font-size:.7rem;color:#bbb;white-space:nowrap}
     .cmd-time{font-size:.62rem;color:#bbb;margin-left:auto;white-space:nowrap}
@@ -641,6 +638,9 @@ function renderCard(s) {
 
     const _maxRatio    = (p90Mins != null && s.max_wait_min != null) ? s.max_wait_min / p90Mins : null;
     const _maxCritical = _maxRatio != null && _maxRatio > 5;
+    const maxWaitPairingHtml = s.max_wait_min != null
+      ? `<span class="max-wait-pairing">Max&nbsp;${fmtShort(s.max_wait_min) ?? "—"}${_maxRatio != null ? `&thinsp;<small>(${_maxRatio.toFixed(1)}&times;)</small>` : ""}</span>`
+      : "";
     // Crisis triggered by current wait vs P90: amber ≥80%, red ≥100%
     const _crisisAmber    = p90Mins != null && current >= p90Mins * 0.80;
     const _crisisCritical = p90Mins != null && current >= p90Mins;
@@ -705,12 +705,9 @@ function renderCard(s) {
           <div class="cmd-row">
             <span class="cmd-label">All &middot; Now</span>
             <span class="cmd-val">${fmtShort(current) ?? current + "m"}</span>
-            ${s.max_wait_min != null ? `<span class="cmd-sep">|</span><span class="cmd-max-val${_maxCritical ? " max-warn-critical" : ""}">Max&nbsp;${fmtShort(s.max_wait_min) ?? s.max_wait_min + "m"}</span>` : ""}
+            <span class="cmd-sep">&rarr;&nbsp;60m</span>
+            <span class="cmd-forecast-val">&#128302;&nbsp;${Math.round(predicted)}m</span>
             ${hospTimeParsed ? `<span class="cmd-time">&#128336;&thinsp;${hospTimeParsed.time}&thinsp;AEST</span>` : ""}
-          </div>
-          <div class="cmd-ai-row">
-            <span class="cmd-label">Next&nbsp;60m</span>
-            <span class="cmd-forecast-val">&#9201;&thinsp;${Math.round(predicted)}m</span>
           </div>
           <div class="obs-meta" style="margin-bottom:.4rem">
             <span class="badge ${confCls(s.confidence_label)}">${s.confidence_label} confidence &nbsp;${(conf * 100).toFixed(0)}%</span>
@@ -718,6 +715,7 @@ function renderCard(s) {
           </div>
           <div class="p90-maxwait-row">
             ${p90Mins != null ? `<div class="p90-badge">&#128737; <span class="p90-badge-val">${p90Mins}m</span> (9&#8209;in&#8209;10 &middot; VAHI&nbsp;Qly)</div>` : ""}
+            ${maxWaitPairingHtml}
           </div>
           ${crisisHtml || `<div class="trend"><span class="${a.cls}">${a.sym}</span> ${a.lbl}</div>`}
           ${triageBenchHtml}
