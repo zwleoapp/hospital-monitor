@@ -43,7 +43,9 @@
     "col_wait_str":     "Estimated Time",
     "col_last_updated": "LastUpdatedDisplay",
 
-    "_max_wait_audit": "KNOWN DISCREPANCY (2026-04-28): Estimated Time for group_target=Adult gives a wait range (e.g. '2hr 46m - 6hr 50m'). The browser dashboard shows 8hr 51m for some campuses. This higher figure likely comes from (a) a separate 'Max Wait' visual querying all patients (not Adult-only), or (b) Paediatric patients included in an All-patients row. To investigate: in DevTools Network tab, filter POST /querydata after page load and inspect any SemanticQueryDataShapeCommand for a measure named MaxWait, LongestWait, or similar. A second query with group_target=All (removing the Where clause entirely) would capture the true ceiling.",
+    "_max_wait_audit": "KNOWN DISCREPANCY (2026-04-28): Estimated Time for group_target=Adult gives a wait range (e.g. '2hr 46m - 6hr 50m'). The browser dashboard shows 8hr 51m for some campuses. This higher figure likely comes from (a) a separate 'Max Wait' visual querying all patients (not Adult-only), or (b) Paediatric patients included in an All-patients row. RESOLVED 2026-04-28: Implemented _parse_grouped_dsr_maxwait to scan all patient groups (Adult+Paeds) and return the highest wait upper-bound.",
+
+    "_timestamp_limitation": "KNOWN LIMITATION (2026-04-30): LastUpdatedDisplay (G4) is a report-level property, NOT per-campus. Power BI returns the same timestamp for all three campuses (e.g., '18:31' for Casey, Clayton, AND Dandenong), but the webpage visual tiles show different per-campus values (e.g., Casey 18:26, Clayton 18:06, Dandenong 17:26). The visual tiles either: (a) compute timestamps client-side from a hidden measure, or (b) query a different entity. Current scraper extracts the report-level timestamp as the best available proxy. ValueDicts.D2 in the Power BI response contains only ONE timestamp value, confirming this is not a scraper bug. See /tmp/powerbi_debug_response.json for raw API evidence.",
 
     "hospitals": {
       "Casey":     "Casey Hospital",

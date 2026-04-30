@@ -198,10 +198,12 @@ The scraper sends one grouped query per campus in the batch POST (`_scrape_power
 
 The scraper:
 1. Extracts G4 (`LastUpdatedDisplay`) from each campus's DSR result
-2. Writes per-campus timestamps to sidecar JSON: `{"Casey Hospital": "20:41", "Dandenong Hospital": "20:31", "Monash Medical Centre - Clayton": "20:01"}`
+2. Writes per-campus timestamps to sidecar JSON
 3. Scans ALL patient groups (Adult + Paed) for the highest wait upper-bound — this becomes the campus's `max_wait_mins`
 
-`publish_latest.py` reads this sidecar and maps each timestamp to the matching site's `last_updated_display` field in `latest.json`. The frontend `isStale` check then compares each campus's reported time against current Melbourne time independently — a single stale campus does not affect the others.
+**KNOWN LIMITATION (2026-04-30):** `LastUpdatedDisplay` (G4) is a **report-level property**, not per-campus. Power BI returns the same timestamp for all three Monash campuses (e.g., all show "18:31"), but the webpage visual tiles display different per-campus timestamps (Casey 18:26, Clayton 18:06, Dandenong 17:26). Evidence: The Power BI API's `ValueDicts.D2` array contains only **one timestamp value**, confirming all campuses reference the same report-level refresh time. The visual tiles either compute timestamps client-side from a hidden measure or query a different entity not exposed in the `CurrentPatients` table. Current scraper extracts the report-level timestamp as the best available proxy.
+
+`publish_latest.py` reads this sidecar and maps each timestamp to the matching site's `last_updated_display` field in `latest.json`. When all campuses return identical timestamps, the scraper tags them with `^` prefix to signal report-level (not per-campus) freshness.
 
 **Eastern Health** uses an HTTP `Date` response header fallback (prefixed `~`) since its pages do not embed a native published timestamp.
 

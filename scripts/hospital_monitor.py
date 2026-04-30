@@ -22,8 +22,8 @@ LAST_UPDATED_SIDECAR = "/mnt/router_ssd/Data_Hub/Waiting_Live_time/monash_last_u
 
 # Clinical Raw persistence: dual-timestamp scrape log for ML momentum
 BRONZE_RAW_PATH = "/mnt/router_ssd/Data_Hub/Waiting_Live_time/bronze_raw_scrapes.csv"
-BRONZE_RAW_HEADER = ["scrape_timestamp_utc", "site", "reported_timestamp_str",
-                     "waiting", "treating", "wait_str", "source_type"]
+BRONZE_RAW_HEADER = ["site", "scrape_timestamp_utc", "reported_timestamp_str",
+                     "waiting", "treating", "wait_str", "max_wait_min", "source_type"]
 
 
 _MELB = ZoneInfo("Australia/Melbourne")
@@ -142,8 +142,8 @@ def _scrape_html_source(source_key: str, cfg: dict, timestamp: str) -> tuple[lis
         wait_str = f"{min_fmt} - {max_fmt}" if min_fmt != "N/A" else "N/A"
         rows.append([timestamp, formal_name, waiting, treating,
                      wait_str, min_raw, max_raw])
-        # Clinical raw: scrape_timestamp_utc, site, reported_timestamp_str, waiting, treating, wait_str, source_type
-        raw_rows.append([timestamp, formal_name, page_ts or "", waiting, treating, wait_str, "html_js"])
+        # Clinical raw: site, scrape_timestamp_utc, reported_timestamp_str, waiting, treating, wait_str, max_wait_min, source_type
+        raw_rows.append([formal_name, timestamp, page_ts or "", waiting, treating, wait_str, max_raw, "html_js"])
         if page_ts:
             last_updated_map[formal_name] = page_ts
 
@@ -422,6 +422,17 @@ def _scrape_powerbi_source(source_key: str, cfg: dict, timestamp: str) -> tuple[
         return [], []
 
     results = resp.json().get("results", [])
+
+    # DEBUG: Save raw Power BI response to inspect schema
+    if results and len(results) > 0:
+        debug_path = pathlib.Path("/tmp/powerbi_debug_response.json")
+        try:
+            with open(debug_path, "w") as df:
+                json.dump({"timestamp": timestamp, "results": results}, df, indent=2)
+            print(f"  [DEBUG] Raw Power BI response → {debug_path}")
+        except Exception:
+            pass
+
     rows = []
     raw_rows = []
     last_updated_map: dict[str, str] = {}
@@ -453,10 +464,10 @@ def _scrape_powerbi_source(source_key: str, cfg: dict, timestamp: str) -> tuple[
 
         rows.append([timestamp, formal_name, waiting, treating,
                      wait_str, min_mins, max_mins])
-        # Clinical raw: scrape_timestamp_utc, site, reported_timestamp_str, waiting, treating, wait_str, source_type
-        raw_rows.append([timestamp, formal_name, last_upd, waiting, treating, wait_str, "powerbi"])
-        print(f"   [SCRAPED] {formal_name}: waiting={waiting}, treating={treating}, wait={wait_str}"
-              + (f", updated={last_upd}" if last_upd else ""))
+        # Clinical raw: site, scrape_timestamp_utc, reported_timestamp_str, waiting, treating, wait_str, max_wait_min, source_type
+        raw_rows.append([formal_name, timestamp, last_upd, waiting, treating, wait_str, max_mins, "powerbi"])
+        print(f"   [SCRAPED] {formal_name}: waiting={waiting}, treating={treating}, wait={wait_str}, max={max_mins}m"
+              + (f", G4={last_upd}" if last_upd else ", G4=∅"))
 
     # If every campus returned the same timestamp, LastUpdatedDisplay is report-global
     # (not per-campus). Tag with '^' so the frontend skips per-campus stale checks.
