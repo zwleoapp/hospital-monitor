@@ -20,6 +20,11 @@ CSV_HEADER = ["timestamp", "hospital", "waiting", "treating",
               "wait_time", "min_wait_mins", "max_wait_mins"]
 LAST_UPDATED_SIDECAR = "/mnt/router_ssd/Data_Hub/Waiting_Live_time/monash_last_updated.json"
 
+# Clinical Raw persistence: dual-timestamp scrape log for ML momentum
+BRONZE_RAW_PATH = "/mnt/router_ssd/Data_Hub/Waiting_Live_time/bronze_raw_scrapes.csv"
+BRONZE_RAW_HEADER = ["scrape_timestamp_utc", "site", "reported_timestamp_str",
+                     "waiting", "treating", "wait_str", "source_type"]
+
 
 _MELB = ZoneInfo("Australia/Melbourne")
 
@@ -100,19 +105,22 @@ def _parse_wait_str(s) -> int:
 
 # ── Eastern Health scraper (HTML + embedded JS) ───────────────────────────────
 
-def _scrape_html_source(source_key: str, cfg: dict, timestamp: str) -> list:
-    """GET the dashboard page; parse JS-embedded patientCounts + predictedWaitMinutes."""
+def _scrape_html_source(source_key: str, cfg: dict, timestamp: str) -> tuple[list, list]:
+    """
+    GET the dashboard page; parse JS-embedded patientCounts + predictedWaitMinutes.
+    Returns (bronze_rows, raw_scrape_rows) for dual persistence.
+    """
     resp = requests.get(cfg["url"], impersonate="chrome120", timeout=20)
     if resp.status_code != 200:
         print(f"  [{source_key}] HTTP {resp.status_code}")
-        return []
+        return [], []
 
     html = resp.text
     counts_m = re.search(r'const patientCounts\s*=\s*(\{.*?\});', html, re.DOTALL)
     waits_m  = re.search(r'const predictedWaitMinutes\s*=\s*(\{.*?\});', html, re.DOTALL)
     if not counts_m or not waits_m:
         print(f"  [{source_key}] Data variables not found in HTML.")
-        return []
+        return [], []
 
     counts = json.loads(counts_m.group(1))
     waits  = json.loads(waits_m.group(1))
@@ -120,6 +128,7 @@ def _scrape_html_source(source_key: str, cfg: dict, timestamp: str) -> list:
     page_ts = _extract_eh_page_timestamp(html, resp)
 
     rows = []
+    raw_rows = []
     last_updated_map: dict[str, str] = {}
     for js_key, formal_name in cfg["hospitals"].items():
         c = counts.get(js_key, {})
@@ -133,6 +142,8 @@ def _scrape_html_source(source_key: str, cfg: dict, timestamp: str) -> list:
         wait_str = f"{min_fmt} - {max_fmt}" if min_fmt != "N/A" else "N/A"
         rows.append([timestamp, formal_name, waiting, treating,
                      wait_str, min_raw, max_raw])
+        # Clinical raw: scrape_timestamp_utc, site, reported_timestamp_str, waiting, treating, wait_str, source_type
+        raw_rows.append([timestamp, formal_name, page_ts or "", waiting, treating, wait_str, "html_js"])
         if page_ts:
             last_updated_map[formal_name] = page_ts
 
@@ -143,7 +154,7 @@ def _scrape_html_source(source_key: str, cfg: dict, timestamp: str) -> list:
     else:
         print(f"  [{source_key}] No page timestamp found.")
 
-    return rows
+    return rows, raw_rows
 
 
 # ── Monash Health scraper (Power BI Embedded batch API) ───────────────────────
@@ -342,13 +353,14 @@ def _parse_grouped_dsr_maxwait(result_obj: dict) -> int | None:
     return max_mins
 
 
-def _scrape_powerbi_source(source_key: str, cfg: dict, timestamp: str) -> list:
+def _scrape_powerbi_source(source_key: str, cfg: dict, timestamp: str) -> tuple[list, list]:
     """
     Single POST to the Power BI batch API: one grouped query per campus.
 
     Each query groups by group_col (AdultPaed) so we can pick the Adult row.
     The 'Estimated Time' column returns "X hr Y min - X hr Y min" which the
     Silver transform parses identically to Eastern Health's wait_time strings.
+    Returns (bronze_rows, raw_scrape_rows) for dual persistence.
     """
     endpoint     = cfg.get("endpoint")
     model_id     = cfg.get("model_id")
@@ -358,7 +370,7 @@ def _scrape_powerbi_source(source_key: str, cfg: dict, timestamp: str) -> list:
                                    "model_id": model_id,
                                    "resource_key": resource_key}.items() if not v]
         print(f"  [{source_key}] Power BI not configured — set {missing} in config/hospitals.py")
-        return []
+        return [], []
 
     entity           = cfg.get("entity",           "CurrentPatients")
     hospital_col     = cfg.get("hospital_col",     "Campus")
@@ -407,10 +419,11 @@ def _scrape_powerbi_source(source_key: str, cfg: dict, timestamp: str) -> list:
     )
     if resp.status_code != 200:
         print(f"  [{source_key}] Power BI API HTTP {resp.status_code}: {resp.text[:200]}")
-        return []
+        return [], []
 
     results = resp.json().get("results", [])
     rows = []
+    raw_rows = []
     last_updated_map: dict[str, str] = {}
 
     for i, (campus_filter, formal_name) in enumerate(campus_order):
@@ -440,6 +453,8 @@ def _scrape_powerbi_source(source_key: str, cfg: dict, timestamp: str) -> list:
 
         rows.append([timestamp, formal_name, waiting, treating,
                      wait_str, min_mins, max_mins])
+        # Clinical raw: scrape_timestamp_utc, site, reported_timestamp_str, waiting, treating, wait_str, source_type
+        raw_rows.append([timestamp, formal_name, last_upd, waiting, treating, wait_str, "powerbi"])
         print(f"   [SCRAPED] {formal_name}: waiting={waiting}, treating={treating}, wait={wait_str}"
               + (f", updated={last_upd}" if last_upd else ""))
 
@@ -454,7 +469,7 @@ def _scrape_powerbi_source(source_key: str, cfg: dict, timestamp: str) -> list:
 
     _merge_last_updated_sidecar(last_updated_map)
 
-    return rows
+    return rows, raw_rows
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────
@@ -463,6 +478,7 @@ def scrape_hospital():
     try:
         timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
         all_rows  = []
+        all_raw_rows = []
 
         for source_key, cfg in SOURCES.items():
             parser = cfg.get("parser", "html_js")
@@ -472,25 +488,27 @@ def scrape_hospital():
                 if not cfg.get("url"):
                     print(f"  [{source_key}] url not set — skipping.")
                     continue
-                rows = _scrape_html_source(source_key, cfg, timestamp)
+                rows, raw_rows = _scrape_html_source(source_key, cfg, timestamp)
 
             elif parser == "powerbi":
                 if not cfg.get("endpoint"):
                     print(f"  [{source_key}] Power BI endpoint not configured — skipping.")
                     continue
-                rows = _scrape_powerbi_source(source_key, cfg, timestamp)
+                rows, raw_rows = _scrape_powerbi_source(source_key, cfg, timestamp)
 
             else:
                 print(f"  [{source_key}] Unknown parser '{parser}' — skipping.")
                 continue
 
             all_rows.extend(rows)
+            all_raw_rows.extend(raw_rows)
 
         if not all_rows:
             print("No data rows collected.")
             update_status("hospital_monitor", "FAIL")
             return
 
+        # Write to Reported Truth CSV (existing Bronze for UI)
         os.makedirs(os.path.dirname(CSV_PATH), exist_ok=True)
         file_exists = os.path.isfile(CSV_PATH)
         with open(CSV_PATH, "a", newline="") as f:
@@ -499,7 +517,17 @@ def scrape_hospital():
                 writer.writerow(CSV_HEADER)
             writer.writerows(all_rows)
 
-        print(f"[{timestamp}] Success! {len(all_rows)} rows written.")
+        # Write to Clinical Raw CSV (new persistence for ML momentum)
+        os.makedirs(os.path.dirname(BRONZE_RAW_PATH), exist_ok=True)
+        raw_exists = os.path.isfile(BRONZE_RAW_PATH)
+        with open(BRONZE_RAW_PATH, "a", newline="") as f:
+            writer = csv.writer(f)
+            if not raw_exists:
+                writer.writerow(BRONZE_RAW_HEADER)
+            writer.writerows(all_raw_rows)
+
+        print(f"[{timestamp}] Success! {len(all_rows)} rows written to Bronze (Reported Truth).")
+        print(f"[{timestamp}] {len(all_raw_rows)} rows written to Bronze Raw (Clinical Stream).")
         for row in all_rows:
             print(f" -> {row[1]}: {row[2]} waiting, {row[3]} treating. Est wait: {row[4]}")
         update_status("hospital_monitor", "PASS")

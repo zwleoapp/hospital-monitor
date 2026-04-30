@@ -210,6 +210,28 @@ scripts/
 
 Monash campuses return rows for both Adult and Paeds populations. The engine builds a **grouped query** (SemanticQueryDataShapeCommand with `group_col = "AdultPaed"`) and picks only the `group_target = "Adult"` row. This uses DSR delta-decoding to handle compressed repeat rows. Column G4 (`LastUpdatedDisplay`) carries the native hospital freshness timestamp, written to a sidecar JSON at publish time.
 
+### Clinical Split & Persistence — Dual Timestamp Architecture
+
+**Problem:** Hospital dashboards publish data on their own refresh schedule (`LastUpdatedDisplay`), which may lag behind real-time system pressure. To capture true ED dynamics for ML momentum, we need both the **scrape timestamp** (when the Pi queried the endpoint) and the **reported timestamp** (when the hospital last refreshed their display).
+
+**Solution:** Dual persistence layer introduced 2026-04-30:
+
+| Stream | File | Purpose | Timestamp Source |
+|---|---|---|---|
+| **Reported Truth (UI)** | `eastern_hospital.csv` | Official wait times displayed on the dashboard | Hospital's `LastUpdatedDisplay` (Monash) or page `Date` header (Eastern Health) |
+| **Clinical Raw (ML)** | `bronze_raw_scrapes.csv` | Raw scrapes for momentum calculation | System scrape timestamp (UTC, when Pi executed the query) |
+
+Both streams are written on every scrape cycle by `hospital_monitor.py`. The Clinical Raw stream is never deduplicated — every scrape is a new row, even if the hospital's reported timestamp hasn't changed. This ensures ML momentum (`M15`) reflects the true rate of change in wait times, not the hospital's publishing cadence.
+
+**Schema — `bronze_raw_scrapes.csv`:**
+```
+scrape_timestamp_utc, site, reported_timestamp_str, waiting, treating, wait_str, source_type
+```
+
+**Fallback logic:** If the Power BI query fails to return a specific campus value, the scraper will replicate the most recent "Reported" data from `eastern_hospital.csv` as a proxy, ensuring the dashboard never shows blank values during transient scraper failures.
+
+**UI integration:** The dashboard's **Metrics & Index Insights** panel includes a "Scraper Sync" field showing how many minutes ago the Pi last successfully queried the raw Power BI endpoint for that hospital. This is computed from the latest `scrape_timestamp_utc` in `bronze_raw_scrapes.csv` and published to `latest.json` as `scraper_sync_mins`.
+
 ---
 
 ## 10. Seasonal Benchmark Computation
@@ -332,6 +354,7 @@ Collapsible **System Insights** panel:
 - Row 1: 60-min Forecast · Max Wait (if available)
 - Subheader: System Metrics
 - Row 2: Strain Index · Clearing Speed
+- Row 3: Scraper Sync (minutes since Pi last queried raw endpoint — Clinical Stream freshness)
 
 ### Trend Leaderboard
 

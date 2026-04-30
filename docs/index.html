@@ -749,6 +749,12 @@ function renderCard(s) {
                 <span class="iv ${a.cls}">${a.sym} ${sign}${momentum.toFixed(1)}<small style="font-weight:400;font-size:.65rem"> /15m</small></span>
               </div>
             </div>
+            <div class="insights-row">
+              <div class="insight">
+                <span class="il">Scraper Sync</span>
+                <span class="iv" style="color:#6b7280">${s.scraper_sync_mins != null ? s.scraper_sync_mins + " min ago" : "—"}</span>
+              </div>
+            </div>
           </div>
         </details>
 

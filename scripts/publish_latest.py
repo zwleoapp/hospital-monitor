@@ -42,6 +42,7 @@ DEFAULT_JSON_OUT      = pathlib.Path("/tmp/hospital_monitor_latest.json")
 DEFAULT_HISTORY_OUT   = pathlib.Path("/tmp/history_timeline.json")
 PUBLISHER_TMPDIR      = pathlib.Path("/tmp/publisher")   # staging clone for data branch
 LAST_UPDATED_SIDECAR  = _SSD / "monash_last_updated.json"  # written by hospital_monitor.py
+BRONZE_RAW_PATH       = _SSD / "bronze_raw_scrapes.csv"    # clinical raw scrapes for ML
 
 _MELB                  = ZoneInfo("Australia/Melbourne")
 OPERATIONAL_START_H    = 6     # 06:00 Melbourne — before this, skip and exit
@@ -199,6 +200,29 @@ def main() -> None:
         except Exception:
             pass
 
+    # Scraper sync times: how long ago did the Pi last successfully query the raw endpoint?
+    scraper_sync_map: dict[str, int] = {}
+    if BRONZE_RAW_PATH.exists():
+        try:
+            import csv
+            with open(BRONZE_RAW_PATH, "r", newline="") as f:
+                reader = csv.DictReader(f)
+                latest_scrapes = {}
+                for row in reader:
+                    site = row.get("site", "")
+                    scrape_ts_str = row.get("scrape_timestamp_utc", "")
+                    if site and scrape_ts_str:
+                        latest_scrapes[site] = scrape_ts_str
+                for site, scrape_ts_str in latest_scrapes.items():
+                    try:
+                        scrape_dt = datetime.fromisoformat(scrape_ts_str.replace("Z", "+00:00"))
+                        delta_mins = round((generated_utc_dt - scrape_dt).total_seconds() / 60)
+                        scraper_sync_map[site] = delta_mins
+                    except Exception:
+                        pass
+        except Exception:
+            pass
+
     sites = []
     for _, row in silver.iterrows():
         outlook = build_outlook(row)
@@ -216,6 +240,7 @@ def main() -> None:
             else None
         )
         outlook["last_updated_display"] = last_updated_map.get(outlook["site"], "")
+        outlook["scraper_sync_mins"] = scraper_sync_map.get(outlook["site"])
         sites.append(outlook)
 
     quarter = (generated_utc_dt.month - 1) // 3 + 1

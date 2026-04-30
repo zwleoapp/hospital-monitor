@@ -18,9 +18,19 @@ W60 = Wnow + (M15 × 4 × D)
 |--------|---------|
 | `W60` | Projected minimum wait in 60 minutes |
 | `Wnow` | Current minimum wait (minutes, from live Bronze) |
-| `M15` | Wait-time momentum per 15-minute cadence (computed in `transform_silver.py`) |
+| `M15` | Wait-time momentum per 15-minute cadence (computed from **Clinical Stream**) |
 | `4` | Horizon steps: 60 min ÷ 15 min cadence |
 | `D` | Damping Factor (bounded [0.5, 1.2], self-evolving via ML loop) |
+
+### Momentum Calculation — Clinical Stream Formula
+
+Momentum is calculated from the **Clinical Stream** (`bronze_raw_scrapes.csv`), using system scrape timestamps rather than hospital-reported timestamps:
+
+```
+M15 = (Wscrape_t − Wscrape_t−15) / 15
+```
+
+**Rationale:** The hospital's `LastUpdatedDisplay` timestamp reflects when the hospital refreshed their public dashboard, not when real-time system pressure changed. To capture actual ED dynamics, momentum must be computed from the **scrape timestamp** (when we queried the raw Power BI endpoint). This ensures momentum reflects the true rate of change in wait times, not the hospital's publishing cadence.
 
 **Constraints:**
 - Floor: `W60 ≥ Wnow × 0.50` — a single momentum spike cannot predict near-zero wait when the system is clearly still busy
