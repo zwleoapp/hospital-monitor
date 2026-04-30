@@ -20,10 +20,12 @@ CSV_HEADER = ["timestamp", "hospital", "waiting", "treating",
               "wait_time", "min_wait_mins", "max_wait_mins"]
 LAST_UPDATED_SIDECAR = "/mnt/router_ssd/Data_Hub/Waiting_Live_time/monash_last_updated.json"
 
-# Clinical Raw persistence: dual-timestamp scrape log for ML momentum
+# Clinical Raw persistence: Trust vs. Pulse dual-stream architecture
 BRONZE_RAW_PATH = "/mnt/router_ssd/Data_Hub/Waiting_Live_time/bronze_raw_scrapes.csv"
 BRONZE_RAW_HEADER = ["site", "scrape_timestamp_utc", "reported_timestamp_str",
-                     "waiting", "treating", "wait_str", "max_wait_min", "source_type"]
+                     "reported_waiting", "reported_wait_str",
+                     "raw_query_waiting", "raw_query_treating", "raw_query_max_wait",
+                     "is_adult_filtered"]
 
 
 _MELB = ZoneInfo("Australia/Melbourne")
@@ -77,6 +79,51 @@ def _extract_eh_page_timestamp(html: str, resp) -> str:
         except Exception:
             pass
     return ""
+
+
+def _extract_monash_webpage_timestamps(html: str) -> dict[str, str]:
+    """
+    Extract per-campus 'Last Updated' timestamps from Monash Health webpage HTML.
+
+    The webpage embeds campus-specific timestamps in visual tiles that don't match
+    the Power BI API's report-level timestamp. This function scrapes the HTML to
+    get the "Webpage Published" truth that users actually see.
+
+    Returns: {formal_name: timestamp_str} e.g., {"Casey Hospital": "18:26"}
+    """
+    timestamps = {}
+
+    # Pattern 1: Look for "Last Updated: DD MMM YY HH:MM" near campus names
+    # Example: <div class="campus">Casey</div>...<div class="timestamp">Last Updated: 30 Apr 26 18:26</div>
+    campus_patterns = {
+        "Casey Hospital": r'Casey.*?(?:Last Updated|last updated)[:\s]*([0-9]{1,2}\s+[A-Za-z]{3}\s+[0-9]{2}\s+[0-9]{1,2}:[0-9]{2})',
+        "Monash Medical Centre - Clayton": r'Clayton.*?(?:Last Updated|last updated)[:\s]*([0-9]{1,2}\s+[A-Za-z]{3}\s+[0-9]{2}\s+[0-9]{1,2}:[0-9]{2})',
+        "Dandenong Hospital": r'Dandenong.*?(?:Last Updated|last updated)[:\s]*([0-9]{1,2}\s+[A-Za-z]{3}\s+[0-9]{2}\s+[0-9]{1,2}:[0-9]{2})',
+    }
+
+    for formal_name, pattern in campus_patterns.items():
+        m = re.search(pattern, html, re.IGNORECASE | re.DOTALL)
+        if m:
+            timestamps[formal_name] = m.group(1).strip()
+
+    # Pattern 2: Reverse search - find timestamps first, then map to nearest campus label
+    # This handles cases where the HTML structure doesn't follow a predictable order
+    if not timestamps:
+        all_timestamps = re.findall(r'([0-9]{1,2}\s+[A-Za-z]{3}\s+[0-9]{2}\s+[0-9]{1,2}:[0-9]{2})', html)
+        campus_labels = re.findall(r'(Casey|Clayton|Dandenong)', html, re.IGNORECASE)
+
+        # Simple heuristic: match timestamps to campuses in order of appearance
+        formal_map = {
+            "Casey": "Casey Hospital",
+            "Clayton": "Monash Medical Centre - Clayton",
+            "Dandenong": "Dandenong Hospital"
+        }
+        for i, label in enumerate(campus_labels[:3]):  # Take first 3 campus mentions
+            if i < len(all_timestamps):
+                formal_name = formal_map.get(label, label)
+                timestamps[formal_name] = all_timestamps[i]
+
+    return timestamps
 
 
 # ── Shared helpers ────────────────────────────────────────────────────────────
@@ -142,8 +189,21 @@ def _scrape_html_source(source_key: str, cfg: dict, timestamp: str) -> tuple[lis
         wait_str = f"{min_fmt} - {max_fmt}" if min_fmt != "N/A" else "N/A"
         rows.append([timestamp, formal_name, waiting, treating,
                      wait_str, min_raw, max_raw])
-        # Clinical raw: site, scrape_timestamp_utc, reported_timestamp_str, waiting, treating, wait_str, max_wait_min, source_type
-        raw_rows.append([formal_name, timestamp, page_ts or "", waiting, treating, wait_str, max_raw, "html_js"])
+        # Clinical raw: site, scrape_timestamp_utc, reported_timestamp_str,
+        #               reported_waiting, reported_wait_str,
+        #               raw_query_waiting, raw_query_treating, raw_query_max_wait,
+        #               is_adult_filtered
+        raw_rows.append([
+            formal_name,
+            timestamp,
+            page_ts or "",
+            waiting,        # reported_waiting
+            wait_str,       # reported_wait_str
+            waiting,        # raw_query_waiting (same as reported for html_js)
+            treating,       # raw_query_treating (same as reported for html_js)
+            max_raw,        # raw_query_max_wait
+            "All"           # is_adult_filtered (Eastern Health doesn't split Adult/Paeds)
+        ])
         if page_ts:
             last_updated_map[formal_name] = page_ts
 
@@ -355,22 +415,44 @@ def _parse_grouped_dsr_maxwait(result_obj: dict) -> int | None:
 
 def _scrape_powerbi_source(source_key: str, cfg: dict, timestamp: str) -> tuple[list, list]:
     """
-    Single POST to the Power BI batch API: one grouped query per campus.
+    Hybrid scraper: Power BI API for metrics + HTML scraping for per-campus timestamps.
 
-    Each query groups by group_col (AdultPaed) so we can pick the Adult row.
-    The 'Estimated Time' column returns "X hr Y min - X hr Y min" which the
-    Silver transform parses identically to Eastern Health's wait_time strings.
+    ARCHITECTURE (Trust vs. Pulse):
+    - Power BI API: raw_query_* columns (ML momentum, real-time pressure)
+    - Webpage HTML: reported_* columns (UI truth, what users see)
+
+    Power BI LastUpdatedDisplay (G4) is report-level, not per-campus. To match the
+    webpage, we scrape HTML to extract the visual tile timestamps.
+
     Returns (bronze_rows, raw_scrape_rows) for dual persistence.
     """
     endpoint     = cfg.get("endpoint")
     model_id     = cfg.get("model_id")
     resource_key = cfg.get("resource_key")
+    webpage_url  = cfg.get("url")
+
     if not all([endpoint, model_id, resource_key]):
         missing = [k for k, v in {"endpoint": endpoint,
                                    "model_id": model_id,
                                    "resource_key": resource_key}.items() if not v]
         print(f"  [{source_key}] Power BI not configured — set {missing} in config/hospitals.py")
         return [], []
+
+    # Step 1: Scrape webpage HTML to get per-campus "Webpage Published" timestamps
+    webpage_timestamps: dict[str, str] = {}
+    if webpage_url:
+        try:
+            resp_html = requests.get(webpage_url, impersonate="chrome120", timeout=20)
+            if resp_html.status_code == 200:
+                webpage_timestamps = _extract_monash_webpage_timestamps(resp_html.text)
+                if webpage_timestamps:
+                    print(f"  [{source_key}] Webpage timestamps extracted: {len(webpage_timestamps)} campuses")
+                else:
+                    print(f"  [{source_key}] WARNING: No per-campus timestamps found in HTML — using Power BI fallback")
+            else:
+                print(f"  [{source_key}] Webpage HTTP {resp_html.status_code} — using Power BI fallback")
+        except Exception as e:
+            print(f"  [{source_key}] Webpage scrape failed: {e} — using Power BI fallback")
 
     entity           = cfg.get("entity",           "CurrentPatients")
     hospital_col     = cfg.get("hospital_col",     "Campus")
@@ -458,16 +540,40 @@ def _scrape_powerbi_source(source_key: str, cfg: dict, timestamp: str) -> tuple[
         if all_max and all_max > adult_max:
             print(f"   [MAX-WAIT] {formal_name}: all-group max {all_max}m > adult max {adult_max}m")
 
-        last_upd = row.get("last_updated", "")
-        if last_upd:
-            last_updated_map[formal_name] = last_upd
+        # Webpage Published timestamp (Trust) — what users see on the visual tiles
+        webpage_ts = webpage_timestamps.get(formal_name, "")
+
+        # Power BI API timestamp (fallback if HTML scrape failed)
+        pbi_ts = row.get("last_updated", "")
+
+        # Use webpage timestamp if available, else fall back to Power BI report-level timestamp
+        reported_ts = webpage_ts if webpage_ts else pbi_ts
+
+        if reported_ts:
+            last_updated_map[formal_name] = reported_ts
 
         rows.append([timestamp, formal_name, waiting, treating,
                      wait_str, min_mins, max_mins])
-        # Clinical raw: site, scrape_timestamp_utc, reported_timestamp_str, waiting, treating, wait_str, max_wait_min, source_type
-        raw_rows.append([formal_name, timestamp, last_upd, waiting, treating, wait_str, max_mins, "powerbi"])
+
+        # Clinical raw: site, scrape_timestamp_utc, reported_timestamp_str (webpage),
+        #               reported_waiting, reported_wait_str (for UI),
+        #               raw_query_waiting, raw_query_treating, raw_query_max_wait (for ML),
+        #               is_adult_filtered
+        raw_rows.append([
+            formal_name,
+            timestamp,
+            reported_ts,
+            waiting,        # reported_waiting (same as raw for now)
+            wait_str,       # reported_wait_str (same as raw for now)
+            waiting,        # raw_query_waiting (from Power BI API)
+            treating,       # raw_query_treating (from Power BI API)
+            max_mins,       # raw_query_max_wait (all-group scan)
+            "Adult"         # is_adult_filtered (group_target applied)
+        ])
+
+        source_label = "webpage" if webpage_ts else "pbi_fallback"
         print(f"   [SCRAPED] {formal_name}: waiting={waiting}, treating={treating}, wait={wait_str}, max={max_mins}m"
-              + (f", G4={last_upd}" if last_upd else ", G4=∅"))
+              + (f", timestamp={reported_ts} ({source_label})" if reported_ts else ", timestamp=∅"))
 
     # If every campus returned the same timestamp, LastUpdatedDisplay is report-global
     # (not per-campus). Tag with '^' so the frontend skips per-campus stale checks.

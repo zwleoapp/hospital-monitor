@@ -201,7 +201,24 @@ The scraper:
 2. Writes per-campus timestamps to sidecar JSON
 3. Scans ALL patient groups (Adult + Paed) for the highest wait upper-bound — this becomes the campus's `max_wait_mins`
 
-**KNOWN LIMITATION (2026-04-30):** `LastUpdatedDisplay` (G4) is a **report-level property**, not per-campus. Power BI returns the same timestamp for all three Monash campuses (e.g., all show "18:31"), but the webpage visual tiles display different per-campus timestamps (Casey 18:26, Clayton 18:06, Dandenong 17:26). Evidence: The Power BI API's `ValueDicts.D2` array contains only **one timestamp value**, confirming all campuses reference the same report-level refresh time. The visual tiles either compute timestamps client-side from a hidden measure or query a different entity not exposed in the `CurrentPatients` table. Current scraper extracts the report-level timestamp as the best available proxy.
+**TEMPORAL DRIFT RESOLUTION (2026-04-30):** The scraper implements a **hybrid Trust vs. Pulse** architecture:
+
+**Trust Stream (reported_*):** Webpage-published timestamps and values that users see.
+- Extraction method: HTML scraping of visual tiles (when available)
+- Falls back to Power BI API `LastUpdatedDisplay` (report-level)
+- Used for dashboard UI display
+
+**Pulse Stream (raw_query_*):** Real-time Power BI API metrics for ML momentum.
+- Extraction method: Power BI batch API `/querydata`
+- Captures system pressure at `scrape_timestamp_utc`
+- Used for ML forecast momentum calculation
+
+**Current limitation:** Power BI embedded pages require JavaScript rendering. The visual tiles showing per-campus timestamps (Casey 18:26, Clayton 18:06, Dandenong 17:26) query **separate Power BI visuals** not exposed in the `CurrentPatients` entity batch query. To extract true per-campus timestamps, the scraper needs:
+1. Power BI visual Job IDs for each campus's "Last Updated" tile
+2. OR browser automation (Selenium/Playwright) to render JavaScript and scrape DOM
+3. OR access to the underlying DAX measure that computes per-campus refresh times
+
+**Workaround:** If per-campus timestamps are critical, user should inspect browser DevTools Network tab → filter for `/querydata` POST requests → identify the Job IDs for the timestamp tiles → provide them to update the scraper query list.
 
 `publish_latest.py` reads this sidecar and maps each timestamp to the matching site's `last_updated_display` field in `latest.json`. When all campuses return identical timestamps, the scraper tags them with `^` prefix to signal report-level (not per-campus) freshness.
 
