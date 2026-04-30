@@ -81,51 +81,6 @@ def _extract_eh_page_timestamp(html: str, resp) -> str:
     return ""
 
 
-def _extract_monash_webpage_timestamps(html: str) -> dict[str, str]:
-    """
-    Extract per-campus 'Last Updated' timestamps from Monash Health webpage HTML.
-
-    The webpage embeds campus-specific timestamps in visual tiles that don't match
-    the Power BI API's report-level timestamp. This function scrapes the HTML to
-    get the "Webpage Published" truth that users actually see.
-
-    Returns: {formal_name: timestamp_str} e.g., {"Casey Hospital": "18:26"}
-    """
-    timestamps = {}
-
-    # Pattern 1: Look for "Last Updated: DD MMM YY HH:MM" near campus names
-    # Example: <div class="campus">Casey</div>...<div class="timestamp">Last Updated: 30 Apr 26 18:26</div>
-    campus_patterns = {
-        "Casey Hospital": r'Casey.*?(?:Last Updated|last updated)[:\s]*([0-9]{1,2}\s+[A-Za-z]{3}\s+[0-9]{2}\s+[0-9]{1,2}:[0-9]{2})',
-        "Monash Medical Centre - Clayton": r'Clayton.*?(?:Last Updated|last updated)[:\s]*([0-9]{1,2}\s+[A-Za-z]{3}\s+[0-9]{2}\s+[0-9]{1,2}:[0-9]{2})',
-        "Dandenong Hospital": r'Dandenong.*?(?:Last Updated|last updated)[:\s]*([0-9]{1,2}\s+[A-Za-z]{3}\s+[0-9]{2}\s+[0-9]{1,2}:[0-9]{2})',
-    }
-
-    for formal_name, pattern in campus_patterns.items():
-        m = re.search(pattern, html, re.IGNORECASE | re.DOTALL)
-        if m:
-            timestamps[formal_name] = m.group(1).strip()
-
-    # Pattern 2: Reverse search - find timestamps first, then map to nearest campus label
-    # This handles cases where the HTML structure doesn't follow a predictable order
-    if not timestamps:
-        all_timestamps = re.findall(r'([0-9]{1,2}\s+[A-Za-z]{3}\s+[0-9]{2}\s+[0-9]{1,2}:[0-9]{2})', html)
-        campus_labels = re.findall(r'(Casey|Clayton|Dandenong)', html, re.IGNORECASE)
-
-        # Simple heuristic: match timestamps to campuses in order of appearance
-        formal_map = {
-            "Casey": "Casey Hospital",
-            "Clayton": "Monash Medical Centre - Clayton",
-            "Dandenong": "Dandenong Hospital"
-        }
-        for i, label in enumerate(campus_labels[:3]):  # Take first 3 campus mentions
-            if i < len(all_timestamps):
-                formal_name = formal_map.get(label, label)
-                timestamps[formal_name] = all_timestamps[i]
-
-    return timestamps
-
-
 # ── Shared helpers ────────────────────────────────────────────────────────────
 
 def format_time(minutes: int) -> str:
@@ -226,6 +181,61 @@ def _extract_dsr_value(result_obj: dict):
                           ["DS"][0]["PH"][0]["DM0"][0]["M0"])
     except (KeyError, IndexError, TypeError):
         return None
+
+
+def _extract_dsr_timestamp(result_obj: dict) -> str | None:
+    """
+    Extract timestamp from Power BI DSR response for timestamp-only queries.
+
+    Timestamp queries return: result.data.dsr.DS[0].PH[0].DM0[0].G0
+    (different from metric queries which use M0)
+    """
+    try:
+        return (result_obj["result"]["data"]["dsr"]
+                          ["DS"][0]["PH"][0]["DM0"][0]["G0"])
+    except (KeyError, IndexError, TypeError):
+        return None
+
+
+def _build_pbi_timestamp_query(job_id: str, entity: str, hospital_col: str,
+                                hospital_filter: str, col_last_updated: str) -> dict:
+    """
+    Build a timestamp-only query for a specific campus.
+
+    Separate from the grouped query to extract per-campus LastUpdatedDisplay
+    without grouping by AdultPaed, which can cause report-level aggregation.
+    """
+    def _col(prop):
+        return {"Column": {"Expression": {"SourceRef": {"Source": "t"}}, "Property": prop}}
+
+    return {
+        "Query": {
+            "Commands": [{
+                "SemanticQueryDataShapeCommand": {
+                    "Query": {
+                        "Version": 2,
+                        "From": [{"Name": "t", "Entity": entity, "Type": 0}],
+                        "Select": [{**_col(col_last_updated), "Name": "T0"}],
+                        "Where": [{
+                            "Condition": {
+                                "Comparison": {
+                                    "ComparisonKind": 0,
+                                    "Left": _col(hospital_col),
+                                    "Right": {"Literal": {"Value": f"'{hospital_filter}'"}}
+                                }
+                            }
+                        }],
+                    },
+                    "Binding": {
+                        "Primary": {"Groupings": [{"Projections": [0]}]},
+                        "DataReduction": {"DataVolume": 4, "Primary": {"Top": {}}},
+                        "Version": 1,
+                    },
+                }
+            }]
+        },
+        "QueryId": job_id,
+    }
 
 
 def _build_pbi_grouped_query(job_id: str, entity: str, hospital_col: str,
@@ -429,7 +439,6 @@ def _scrape_powerbi_source(source_key: str, cfg: dict, timestamp: str) -> tuple[
     endpoint     = cfg.get("endpoint")
     model_id     = cfg.get("model_id")
     resource_key = cfg.get("resource_key")
-    webpage_url  = cfg.get("url")
 
     if not all([endpoint, model_id, resource_key]):
         missing = [k for k, v in {"endpoint": endpoint,
@@ -437,22 +446,6 @@ def _scrape_powerbi_source(source_key: str, cfg: dict, timestamp: str) -> tuple[
                                    "resource_key": resource_key}.items() if not v]
         print(f"  [{source_key}] Power BI not configured — set {missing} in config/hospitals.py")
         return [], []
-
-    # Step 1: Scrape webpage HTML to get per-campus "Webpage Published" timestamps
-    webpage_timestamps: dict[str, str] = {}
-    if webpage_url:
-        try:
-            resp_html = requests.get(webpage_url, impersonate="chrome120", timeout=20)
-            if resp_html.status_code == 200:
-                webpage_timestamps = _extract_monash_webpage_timestamps(resp_html.text)
-                if webpage_timestamps:
-                    print(f"  [{source_key}] Webpage timestamps extracted: {len(webpage_timestamps)} campuses")
-                else:
-                    print(f"  [{source_key}] WARNING: No per-campus timestamps found in HTML — using Power BI fallback")
-            else:
-                print(f"  [{source_key}] Webpage HTTP {resp_html.status_code} — using Power BI fallback")
-        except Exception as e:
-            print(f"  [{source_key}] Webpage scrape failed: {e} — using Power BI fallback")
 
     entity           = cfg.get("entity",           "CurrentPatients")
     hospital_col     = cfg.get("hospital_col",     "Campus")
@@ -464,7 +457,56 @@ def _scrape_powerbi_source(source_key: str, cfg: dict, timestamp: str) -> tuple[
     col_last_updated = cfg.get("col_last_updated")   # optional; None for non-PBI sources
     hospitals        = cfg["hospitals"]
 
-    # One grouped query per campus — responses come back in the same order
+    # Step 1: Query Power BI for per-campus timestamps (separate queries per campus)
+    pbi_timestamps: dict[str, str] = {}
+    if col_last_updated:
+        timestamp_queries = []
+        timestamp_order = []  # Track (campus_filter, formal_name) order
+
+        for campus_filter, formal_name in hospitals.items():
+            job_id = f"timestamp_{campus_filter}_{uuid.uuid4().hex[:8]}"
+            timestamp_queries.append(_build_pbi_timestamp_query(
+                job_id=job_id,
+                entity=entity,
+                hospital_col=hospital_col,
+                hospital_filter=campus_filter,
+                col_last_updated=col_last_updated
+            ))
+            timestamp_order.append((campus_filter, formal_name))
+
+        # Send timestamp queries in a separate batch
+        ts_payload = {
+            "version": "1.0.0",
+            "queries": timestamp_queries,
+            "cancelQueries": [],
+            "modelId": model_id,
+            "clientRequestId": f"timestamps_{uuid.uuid4().hex}",
+        }
+
+        try:
+            ts_resp = requests.post(
+                endpoint, json=ts_payload,
+                headers={"Content-Type": "application/json",
+                         "X-PowerBI-ResourceKey": resource_key},
+                impersonate="chrome120", timeout=30,
+            )
+            if ts_resp.status_code == 200:
+                ts_results = ts_resp.json().get("results", [])
+                for i, (campus_filter, formal_name) in enumerate(timestamp_order):
+                    if i < len(ts_results):
+                        ts_val = _extract_dsr_timestamp(ts_results[i])
+                        if ts_val is not None:
+                            pbi_timestamps[formal_name] = str(ts_val)
+                if pbi_timestamps:
+                    print(f"  [{source_key}] Per-campus timestamps extracted via separate queries: {len(pbi_timestamps)} campuses")
+                else:
+                    print(f"  [{source_key}] WARNING: Timestamp queries returned no values — using report-level fallback")
+            else:
+                print(f"  [{source_key}] Timestamp query HTTP {ts_resp.status_code} — using report-level fallback")
+        except Exception as e:
+            print(f"  [{source_key}] Timestamp query failed: {e} — using report-level fallback")
+
+    # Step 2: Query Power BI for patient metrics (grouped by AdultPaed)
     queries      = []
     campus_order = []   # preserves (filter, formal_name) order for result mapping
 
@@ -540,14 +582,14 @@ def _scrape_powerbi_source(source_key: str, cfg: dict, timestamp: str) -> tuple[
         if all_max and all_max > adult_max:
             print(f"   [MAX-WAIT] {formal_name}: all-group max {all_max}m > adult max {adult_max}m")
 
-        # Webpage Published timestamp (Trust) — what users see on the visual tiles
-        webpage_ts = webpage_timestamps.get(formal_name, "")
+        # Per-campus Power BI timestamp (Trust Stream — from separate timestamp query)
+        pbi_campus_ts = pbi_timestamps.get(formal_name, "")
 
-        # Power BI API timestamp (fallback if HTML scrape failed)
-        pbi_ts = row.get("last_updated", "")
+        # Report-level timestamp from grouped query (fallback)
+        pbi_report_ts = row.get("last_updated", "")
 
-        # Use webpage timestamp if available, else fall back to Power BI report-level timestamp
-        reported_ts = webpage_ts if webpage_ts else pbi_ts
+        # Use per-campus timestamp if available, else fall back to report-level
+        reported_ts = pbi_campus_ts if pbi_campus_ts else pbi_report_ts
 
         if reported_ts:
             last_updated_map[formal_name] = reported_ts
@@ -571,7 +613,7 @@ def _scrape_powerbi_source(source_key: str, cfg: dict, timestamp: str) -> tuple[
             "Adult"         # is_adult_filtered (group_target applied)
         ])
 
-        source_label = "webpage" if webpage_ts else "pbi_fallback"
+        source_label = "per-campus" if pbi_campus_ts else "report-level"
         print(f"   [SCRAPED] {formal_name}: waiting={waiting}, treating={treating}, wait={wait_str}, max={max_mins}m"
               + (f", timestamp={reported_ts} ({source_label})" if reported_ts else ", timestamp=∅"))
 
