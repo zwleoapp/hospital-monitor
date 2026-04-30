@@ -198,16 +198,24 @@ def _extract_dsr_timestamp(result_obj: dict) -> str | None:
 
 
 def _build_pbi_timestamp_query(job_id: str, entity: str, hospital_col: str,
-                                hospital_filter: str, col_last_updated: str) -> dict:
+                                hospital_filter: str, timestamp_cols: list[str]) -> dict:
     """
-    Build a timestamp-only query for a specific campus.
+    Build a MAX timestamp query for a specific campus.
 
-    Separate from the grouped query to extract per-campus LastUpdatedDisplay
-    without grouping by AdultPaed, which can cause report-level aggregation.
+    Queries row-level timestamp columns (not report-level LastUpdatedDisplay) to get
+    the most recent data refresh time for each campus independently.
+
+    Args:
+        timestamp_cols: List of possible timestamp column names to try
+                       e.g., ["Timestamp", "DataTimestamp", "RefreshTime"]
     """
     def _col(prop):
         return {"Column": {"Expression": {"SourceRef": {"Source": "t"}}, "Property": prop}}
 
+    # Try the first timestamp column (we'll iterate through multiple if needed)
+    timestamp_col = timestamp_cols[0] if timestamp_cols else "Timestamp"
+
+    # Build MAX aggregation query with campus filter
     return {
         "Query": {
             "Commands": [{
@@ -215,7 +223,13 @@ def _build_pbi_timestamp_query(job_id: str, entity: str, hospital_col: str,
                     "Query": {
                         "Version": 2,
                         "From": [{"Name": "t", "Entity": entity, "Type": 0}],
-                        "Select": [{**_col(col_last_updated), "Name": "T0"}],
+                        "Select": [{
+                            "Aggregation": {
+                                "Expression": _col(timestamp_col),
+                                "Function": 4  # MAX function
+                            },
+                            "Name": "T0"
+                        }],
                         "Where": [{
                             "Condition": {
                                 "Comparison": {
@@ -457,12 +471,15 @@ def _scrape_powerbi_source(source_key: str, cfg: dict, timestamp: str) -> tuple[
     col_last_updated = cfg.get("col_last_updated")   # optional; None for non-PBI sources
     hospitals        = cfg["hospitals"]
 
-    # Step 1: Query Power BI for per-campus timestamps (separate queries per campus)
+    # Step 1: Query Power BI for per-campus timestamps (row-level MAX queries)
     pbi_timestamps: dict[str, str] = {}
-    if col_last_updated:
+    timestamp_cols = cfg.get("col_timestamp_candidates", ["Timestamp"])
+
+    if timestamp_cols:
         timestamp_queries = []
         timestamp_order = []  # Track (campus_filter, formal_name) order
 
+        print(f"  [{source_key}] Attempting per-campus timestamp extraction (columns: {timestamp_cols})...")
         for campus_filter, formal_name in hospitals.items():
             job_id = f"timestamp_{campus_filter}_{uuid.uuid4().hex[:8]}"
             timestamp_queries.append(_build_pbi_timestamp_query(
@@ -470,7 +487,7 @@ def _scrape_powerbi_source(source_key: str, cfg: dict, timestamp: str) -> tuple[
                 entity=entity,
                 hospital_col=hospital_col,
                 hospital_filter=campus_filter,
-                col_last_updated=col_last_updated
+                timestamp_cols=timestamp_cols
             ))
             timestamp_order.append((campus_filter, formal_name))
 

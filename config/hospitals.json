@@ -43,6 +43,7 @@
     "col_treating":     "TotalBeingTreated",
     "col_wait_str":     "Estimated Time",
     "col_last_updated": "LastUpdatedDisplay",
+    "col_timestamp_candidates": ["Timestamp", "DataTimestamp", "RefreshTime", "LastUpdated", "RecordTimestamp"],
 
     "_max_wait_audit": "KNOWN DISCREPANCY (2026-04-28): Estimated Time for group_target=Adult gives a wait range (e.g. '2hr 46m - 6hr 50m'). The browser dashboard shows 8hr 51m for some campuses. This higher figure likely comes from (a) a separate 'Max Wait' visual querying all patients (not Adult-only), or (b) Paediatric patients included in an All-patients row. RESOLVED 2026-04-28: Implemented _parse_grouped_dsr_maxwait to scan all patient groups (Adult+Paeds) and return the highest wait upper-bound.",
 
