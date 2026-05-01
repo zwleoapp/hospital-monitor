@@ -1,82 +1,7 @@
 {
-  "generated_utc": "2026-05-01T09:00:21Z",
+  "generated_utc": "2026-05-01T09:15:30Z",
   "history_hours": 24,
   "snapshots": [
-    {
-      "bucket_utc": "2026-04-30T09:15:00Z",
-      "sites": [
-        {
-          "site": "Angliss Hospital",
-          "timestamp_utc": "2026-04-30T09:15:04Z",
-          "current_wait_min": 13.0,
-          "max_wait_min": 68,
-          "waiting_count": 5,
-          "treating_count": 23,
-          "wait_momentum": 3.0,
-          "predicted_wait_min": 19.0,
-          "confidence": 0.852,
-          "confidence_label": "High",
-          "forecast_accuracy": 82.6,
-          "actual_60m_wait_min": 23.0
-        },
-        {
-          "site": "Box Hill Hospital",
-          "timestamp_utc": "2026-04-30T09:15:04Z",
-          "current_wait_min": 64.0,
-          "max_wait_min": 231,
-          "waiting_count": 33,
-          "treating_count": 45,
-          "wait_momentum": 8.0,
-          "predicted_wait_min": 80.0,
-          "confidence": 0.695,
-          "confidence_label": "Moderate",
-          "forecast_accuracy": 0.0,
-          "actual_60m_wait_min": 6.0
-        },
-        {
-          "site": "Casey Hospital",
-          "timestamp_utc": "2026-04-30T09:15:04Z",
-          "current_wait_min": 39.0,
-          "max_wait_min": 123,
-          "waiting_count": 8,
-          "treating_count": 44,
-          "wait_momentum": 5.0,
-          "predicted_wait_min": 49.0,
-          "confidence": 0.722,
-          "confidence_label": "High",
-          "forecast_accuracy": 74.4,
-          "actual_60m_wait_min": 39.0
-        },
-        {
-          "site": "Dandenong Hospital",
-          "timestamp_utc": "2026-04-30T09:15:15Z",
-          "current_wait_min": 51.0,
-          "max_wait_min": 179,
-          "waiting_count": 17,
-          "treating_count": 70,
-          "wait_momentum": 135.0,
-          "predicted_wait_min": 321.0,
-          "confidence": 0.353,
-          "confidence_label": "Low",
-          "forecast_accuracy": 0.0,
-          "actual_60m_wait_min": 65.0
-        },
-        {
-          "site": "Monash Medical Centre - Clayton",
-          "timestamp_utc": "2026-04-30T09:15:15Z",
-          "current_wait_min": 42.0,
-          "max_wait_min": 280,
-          "waiting_count": 28,
-          "treating_count": 69,
-          "wait_momentum": -135.0,
-          "predicted_wait_min": 21.0,
-          "confidence": 0.502,
-          "confidence_label": "Moderate",
-          "forecast_accuracy": 75.0,
-          "actual_60m_wait_min": 28.0
-        }
-      ]
-    },
     {
       "bucket_utc": "2026-04-30T09:30:00Z",
       "sites": [
@@ -7588,8 +7513,8 @@
           "predicted_wait_min": 52.0,
           "confidence": 0.688,
           "confidence_label": "Moderate",
-          "forecast_accuracy": 51.4,
-          "actual_60m_wait_min": 35.0
+          "forecast_accuracy": 70.0,
+          "actual_60m_wait_min": 40.0
         },
         {
           "site": "Dandenong Hospital",
@@ -7602,8 +7527,8 @@
           "predicted_wait_min": 25.0,
           "confidence": 0.533,
           "confidence_label": "Moderate",
-          "forecast_accuracy": 43.1,
-          "actual_60m_wait_min": 58.0
+          "forecast_accuracy": 38.5,
+          "actual_60m_wait_min": 65.0
         },
         {
           "site": "Monash Medical Centre - Clayton",
@@ -7635,8 +7560,8 @@
           "predicted_wait_min": 15.0,
           "confidence": 0.602,
           "confidence_label": "Moderate",
-          "forecast_accuracy": null,
-          "actual_60m_wait_min": null
+          "forecast_accuracy": 37.5,
+          "actual_60m_wait_min": 40.0
         },
         {
           "site": "Dandenong Hospital",
@@ -7649,8 +7574,8 @@
           "predicted_wait_min": 73.2,
           "confidence": 0.572,
           "confidence_label": "Moderate",
-          "forecast_accuracy": null,
-          "actual_60m_wait_min": null
+          "forecast_accuracy": 87.4,
+          "actual_60m_wait_min": 65.0
         },
         {
           "site": "Monash Medical Centre - Clayton",
@@ -7663,8 +7588,8 @@
           "predicted_wait_min": 46.0,
           "confidence": 0.779,
           "confidence_label": "High",
-          "forecast_accuracy": null,
-          "actual_60m_wait_min": null
+          "forecast_accuracy": 90.2,
+          "actual_60m_wait_min": 51.0
         }
       ]
     },
@@ -7753,6 +7678,53 @@
           "max_wait_min": 165,
           "waiting_count": 20,
           "treating_count": 69,
+          "wait_momentum": 0.0,
+          "predicted_wait_min": 51.0,
+          "confidence": 0.749,
+          "confidence_label": "High",
+          "forecast_accuracy": null,
+          "actual_60m_wait_min": null
+        }
+      ]
+    },
+    {
+      "bucket_utc": "2026-05-01T09:15:00Z",
+      "sites": [
+        {
+          "site": "Casey Hospital",
+          "timestamp_utc": "2026-05-01T09:15:23Z",
+          "current_wait_min": 40.0,
+          "max_wait_min": 316,
+          "waiting_count": 25,
+          "treating_count": 50,
+          "wait_momentum": 4.9,
+          "predicted_wait_min": 49.8,
+          "confidence": 0.717,
+          "confidence_label": "High",
+          "forecast_accuracy": null,
+          "actual_60m_wait_min": null
+        },
+        {
+          "site": "Dandenong Hospital",
+          "timestamp_utc": "2026-05-01T09:15:23Z",
+          "current_wait_min": 65.0,
+          "max_wait_min": 204,
+          "waiting_count": 29,
+          "treating_count": 68,
+          "wait_momentum": 6.9,
+          "predicted_wait_min": 78.8,
+          "confidence": 0.584,
+          "confidence_label": "Moderate",
+          "forecast_accuracy": null,
+          "actual_60m_wait_min": null
+        },
+        {
+          "site": "Monash Medical Centre - Clayton",
+          "timestamp_utc": "2026-05-01T09:15:23Z",
+          "current_wait_min": 51.0,
+          "max_wait_min": 164,
+          "waiting_count": 20,
+          "treating_count": 70,
           "wait_momentum": 0.0,
           "predicted_wait_min": 51.0,
           "confidence": 0.749,
