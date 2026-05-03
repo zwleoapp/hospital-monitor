@@ -1,4 +1,5 @@
-from .base import (_MELB, _parse_wait_str, _calculate_cache_lag, _write_ingest_alert)
+from .base import (_MELB, _parse_wait_str, _calculate_cache_lag,
+                   _merge_last_updated_sidecar, _write_ingest_alert)
 
 from curl_cffi import requests
 import re
@@ -87,11 +88,29 @@ def scrape_html_regex_source(source_key: str, cfg: dict, timestamp: str,
         elif busy_idx:
             wait_str = f"Busy: {busy_idx}"
 
-        # Normalize portal timestamp: extract HH:MM from any format so
-        # _calculate_cache_lag can use the existing ~HH:MM branch.
-        hm_match = re.search(r'\b(\d{1,2}:\d{2})\b', updated_raw)
-        normalized_ts = f"~{hm_match.group(1)}" if hm_match else updated_raw
-        cache_lag, fidelity_status = _calculate_cache_lag(timestamp, normalized_ts)
+        # Normalize portal timestamp to 24h "~HH:MM" so:
+        #   (a) _calculate_cache_lag uses the existing ~HH:MM branch
+        #   (b) the UI's parseHospDataTime shows the correct hour (e.g. 17:45 not 5:45)
+        # html_regex pages may use 12h am/pm format ("5:45pm") unlike Eastern Health
+        # which always returns 24h from its HTTP Date header or native page clock.
+        _ts_normalized = ""
+        hm = re.search(r'(\d{1,2}):(\d{2})\s*([ap]m)?', updated_raw or '', re.IGNORECASE)
+        if hm:
+            h, m, ampm = int(hm.group(1)), int(hm.group(2)), (hm.group(3) or '').lower()
+            if ampm == 'pm' and h != 12:
+                h += 12
+            elif ampm == 'am' and h == 12:
+                h = 0
+            _ts_normalized = f"~{h:02d}:{m:02d}"
+
+        cache_lag, fidelity_status = _calculate_cache_lag(
+            timestamp, _ts_normalized or updated_raw or ""
+        )
+
+        # Write to sidecar so publish_latest.py populates last_updated_display in Gold.
+        # This keeps html_regex consistent with html_js (eastern.py) and powerbi.
+        if _ts_normalized:
+            _merge_last_updated_sidecar({formal_name: _ts_normalized})
 
         # ── Bronze CSV row (full Silver pipeline) ──────────────────────────────
         # Only written when a real wait time was extracted.

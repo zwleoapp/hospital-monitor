@@ -1,33 +1,266 @@
 # Dataflow — Hospital Monitor Pipeline
 
-**Updated:** 2026-04-29
+**Updated:** 2026-05-03
 
-> Companion to [DESIGN.md](DESIGN.md). This page covers *how data moves* — branch structure, file inventory, Pi pipeline steps, and Vercel configuration. For architecture decisions and ML lifecycle, see DESIGN.md.
+> Companion to [DESIGN.md](DESIGN.md). This page covers *how data moves* — scraper types, Bronze → Silver → Gold pipeline, timestamp provenance, branch structure, and Vercel configuration.
 
 ---
 
-## Branch Responsibilities
+## Hospital Registry
 
-| Branch | Purpose | What lives here |
+| Hospital | Network | Parser | Pipeline |
+|---|---|---|---|
+| Box Hill Hospital | Eastern Health | `html_js` | full |
+| Angliss Hospital | Eastern Health | `html_js` | full |
+| Maroondah Hospital | Eastern Health | `html_js` | full |
+| Casey Hospital | Monash Health | `powerbi` | full |
+| Dandenong Hospital | Monash Health | `powerbi` | full |
+| Monash Medical Centre - Clayton | Monash Health | `powerbi` | full |
+| Royal Melbourne Hospital | Melbourne Health | `html_regex` | full |
+| Royal Childrens Hospital | Royal Childrens Hospital | `html_regex` | raw_only |
+
+**full pipeline** → Bronze CSV + Bronze Raw → Silver → Gold (`latest.json`)  
+**raw_only** → Bronze Raw only → `status_sites[]` in Gold (no forecast)
+
+All hospital names, URLs, credentials, and extraction patterns live in **`config/hospitals.json`** and **`config/hospitals.csv`**. No hospital-specific values are hardcoded in scraper scripts.
+
+---
+
+## Scraper Types
+
+### `html_js` — Eastern Health
+Extracts two JS objects embedded in the page `<script>` block:
+```
+const patientCounts        = { BoxHill: {waiting, beingTreated}, ... }
+const predictedWaitMinutes = { BoxHill: {min, max}, ... }
+```
+One HTTP fetch covers all three campuses. JS variable names (`patientCounts`, `predictedWaitMinutes`) and JSON field names (`waiting`, `beingTreated`, `min`, `max`) are configured in `hospitals.json` under `js_data_vars` and `js_field_map`.
+
+**Portal timestamp:** Native "Last Updated" extracted from page HTML; falls back to HTTP `Date` response header (`~HH:MM`, marked approximate). Always 24h format.
+
+### `powerbi` — Monash Health
+Power BI Embedded DSR batch API. One authenticated POST per campus, returning typed result columns. Per-campus per-cohort visual IDs (timestamp, waiting, treating, wait_str) configured in `hospitals.json → visual_ids`.
+
+**Portal timestamp:** `LastUpdatedDisplay` field from the DSR response. Report-level (same value returned for all three campuses), reflects Power BI dataset refresh time — **not** underlying hospital system update time.
+
+### `html_regex` — Royal Melbourne Hospital, RCH
+Generic regex extraction from plain HTML. Patterns configured in `hospitals.json → regex_patterns`.
+
+| Pattern key | RMH | RCH |
 |---|---|---|
-| `main` | Source code | All Python scripts, `docs/index.html`, config, CLAUDE.md |
-| `data` | Live data output | **Exactly 4 files** (see below) |
+| `wait_time` | ✓ "00 hr 34 min - 01 hr 52 min" | — |
+| `patients_waiting` | ✓ sibling-div pattern | — |
+| `patients_treating` | ✓ sibling-div pattern | — |
+| `updated_time` | ✓ "5:45pm on 03 May 2026" | ✓ timestamp only |
+| `busy_index` | — | — (removed from RCH page 2026-05) |
 
-The `data` branch is machine-written on every publish cycle. Never commit source code to `data` manually.
+If `wait_time` matched → Bronze CSV row written → full Silver/Gold pipeline.  
+If only `busy_index` or `updated_time` → Bronze Raw row only → `raw_only` pipeline.
+
+**Portal timestamp normalization:** RMH uses 12h am/pm format. The scraper normalizes "5:45pm" → "~17:45" (24h, approximate prefix) before passing to `_calculate_cache_lag` and writing to the sidecar. This ensures the UI displays "17:45 AEST" correctly.
 
 ---
 
-## Data Branch File Inventory
+## Timestamp Provenance
+
+Every row captured by the scraper carries two timestamps with distinct meanings:
+
+| Field | When set | What it measures |
+|---|---|---|
+| `scrape_timestamp_utc` | When the Pi executed the scrape | **Scrape Truth** — always accurate, set by our clock |
+| `reported_timestamp_str` | Value parsed from the source portal | **Portal Truth** — measures how fresh the portal's own data is |
+
+These are recorded separately so error analysis can distinguish "our scraper was slow" from "the hospital didn't update their portal".
+
+### `cache_lag_minutes` and `fidelity_status`
+
+`cache_lag = scrape_timestamp − reported_timestamp` (in minutes, Melbourne local).
+
+| Source | What lag actually measures |
+|---|---|
+| `html_js` (Eastern Health) | Time since hospital last pushed new data to their public page. Direct measure of hospital publishing latency. |
+| `powerbi` (Monash Health) | Time since Power BI last refreshed its embedded dataset. **Indirect** — reflects PBI caching layer, not hospital system freshness. Always non-zero (PBI refreshes on its own schedule). |
+| `html_regex` (RMH) | Time since RMH last updated the "Wait time updated at" display on their page. Direct measure, same semantics as Eastern Health. |
+
+Fidelity thresholds (configurable in `config/ui_config.json`):
+
+| `fidelity_status` | Lag | Meaning |
+|---|---|---|
+| `SYNCED` | < 15 min | Portal recently refreshed |
+| `API_LEAD_ACTIVE` | 15–60 min | Portal lagging behind our scrape cadence |
+| `PORTAL_STALE_WARNING` | > 60 min | Portal significantly stale; forecast may use old data |
+
+`cache_lag_minutes` is a **diagnostic column only** — it explains forecast errors in hindsight but is NOT an input to the forecast model.
+
+### Timestamp → Sidecar → `last_updated_display`
+
+All three scraper types write the normalized portal timestamp to a shared JSON sidecar (`monash_last_updated.json` on the SSD). `publish_latest.py` reads this sidecar into `last_updated_display` on each site's Gold payload. The UI card uses `parseHospDataTime(last_updated_display)` to show "⏰ 17:45 AEST" next to the wait time.
 
 ```
-data/
-  index.html            ← copied from docs/index.html on main at publish time
-  latest.json           ← current 6-hospital outlook (generated_utc, sites[])
-  history_timeline.json ← last 24 h of 15-min snapshots (96 buckets × 6 sites)
-  vercel.json           ← Vercel cache-control headers + ignoreCommand
+Scraper                          SSD sidecar                    Gold (latest.json)
+─────────                        ───────────                    ──────────────────
+html_js   ──► "~17:45"          ──► last_updated_sidecar.json  ──► last_updated_display
+powerbi   ──► "^18:31"          ──►       (per site)           ──► (rendered by UI card)
+html_regex ──► "~17:45" (norm'd) ──►
 ```
 
-`latest.json` and `history_timeline.json` are **gitignored on main** — they only exist on the `data` branch.
+`^` prefix = report-level Power BI refresh time (not per-campus data time).  
+`~` prefix = approximate time (from HTTP header or normalized am/pm time).
+
+---
+
+## Bronze Layer
+
+### `bronze_raw_scrapes.csv` (all scrapers — Adult + Paeds + raw_only)
+
+The primary audit trail per scrape event. Every row represents one scraper call for one hospital/cohort.
+
+| Column | Source | Notes |
+|---|---|---|
+| `site` | Hospital formal name | |
+| `scrape_timestamp_utc` | Pi clock at scrape time | Scrape Truth |
+| `location_timestamp` | Pi clock, Melbourne local | Display only |
+| `reported_timestamp_str` | Portal "Last Updated" raw text | Portal Truth |
+| `reported_waiting` | Extracted patient count | As shown on portal |
+| `reported_wait_str` | Extracted wait range string | "00 hr 34 min - 01 hr 52 min" |
+| `raw_query_waiting` | API/scrape waiting count | May differ from reported |
+| `raw_query_treating` | API/scrape treating count | |
+| `raw_query_max_wait` | API/scrape max wait | |
+| `cohort` | "Adult" / "Paeds" / "All" | "All" = no split (Eastern, RMH) |
+| `cache_lag_minutes` | Computed from above two timestamps | Diagnostic only |
+| `fidelity_status` | SYNCED / API_LEAD_ACTIVE / PORTAL_STALE_WARNING / UNKNOWN_FORMAT | |
+
+### `melbourne_southeast.csv` (full-pipeline hospitals only — Adult/All)
+
+Append-only Bronze CSV used as input to Silver. Only `full` pipeline hospitals write here.
+
+| Column | Notes |
+|---|---|
+| `timestamp` | Scrape UTC |
+| `hospital` | Formal name |
+| `waiting`, `treating` | Patient counts |
+| `wait_time` | Range string (e.g. "00 hr 34 min - 01 hr 52 min") |
+| `min_wait_mins`, `max_wait_mins` | Parsed minutes |
+| `location_timestamp` | Melbourne local time |
+
+Paediatric cohort (Monash only) goes to `bronze_raw_scrapes.csv` only — not to this file.
+
+---
+
+## Silver Layer
+
+`melbourne_southeast_silver.csv` — full rebuild from Bronze on every pipeline cycle.
+
+Silver enriches Bronze with three tiers of contextual benchmarks (LEFT join — every Bronze row is preserved):
+
+1. **VAHI quarterly** — `ctx_source = "VAHI"` — quarterly wait benchmarks (Oct 2024–, extended with VAHI_PROXY rows)
+2. **AIHW annual fallback** — `ctx_source = "AIHW"` — for Bronze rows before VAHI coverage
+3. **ctx_defaults** — `ctx_source = "ESTIMATE"` — proxy values from `config/hospitals.json` for newly onboarded hospitals without VAHI/AIHW data yet (e.g. Royal Melbourne Hospital)
+
+Additional Silver columns: `wait_momentum` (change per 15-min cadence), `load_ratio`, `hour`, `day_of_week`, `is_weekend`, `is_holiday`, `day_type`, `season`.
+
+`wait_momentum` is NaN for the **first-ever row** per hospital (no prior row to diff against). All downstream consumers use `pd.notna` guards on this field.
+
+---
+
+## Gold Layer
+
+### `latest.json` schema
+
+```json
+{
+  "generated_utc": "...",
+  "horizon_min": 60,
+  "vahi_p90_all_mins": 89,
+  "vahi_qly_label": "Q2 2026",
+  "sites": [
+    {
+      "site":                    "Royal Melbourne Hospital",
+      "network":                 "Melbourne Health",
+      "latest_obs_utc":          "...",
+      "waiting_count":           10,
+      "treating_count":          34,
+      "current_wait_min":        34.0,
+      "max_wait_min":            112,
+      "predicted_wait_min":      32.0,
+      "wait_momentum":           -1.0,
+      "confidence":              0.81,
+      "confidence_label":        "High",
+      "color":                   "amber",
+      "heartbeat_age_mins":      0.4,
+      "strain_index":            0.36,
+      "last_updated_display":    "~17:45",
+      "scraper_sync_mins":       0,
+      "ctx_source":              "ESTIMATE",
+      "vahi_p90_mins":           90,
+      "vahi_median_cat123_mins": 30,
+      "vahi_median_cat45_mins":  60,
+      "paediatric": {
+        "waiting": 3, "treating": 9,
+        "wait_str": "0 hr 46 min - 0 hr 56 min",
+        "heartbeat_age_mins": 0.4
+      },
+      "metadata": {
+        "cache_lag_minutes":  15,
+        "fidelity_status":    "API_LEAD_ACTIVE",
+        "is_stale":           false,
+        "last_portal_update": "17:45",
+        "scrape_timestamp":   "2026-05-03T08:00:03Z"
+      }
+    }
+  ],
+  "status_sites": [
+    {
+      "site":                  "Royal Childrens Hospital",
+      "scrape_timestamp_utc":  "...",
+      "heartbeat_age_mins":    0.4,
+      "reported_wait_str":     "",
+      "busy_index":            null,
+      "fidelity_status":       "API_LEAD_ACTIVE",
+      "last_portal_update":    "03 May 2026 17:03:06 +AEST"
+    }
+  ]
+}
+```
+
+`paediatric` sub-object is present only for Monash campuses (Casey, Clayton) — Dandenong has no Paeds ward. RCH (paediatric specialist hospital) is in `status_sites`, not `sites`.
+
+`ctx_source` on each site:
+- `"VAHI"` — real VAHI quarterly benchmarks (best quality)
+- `"AIHW"` — AIHW annual data (pre-VAHI coverage)
+- `"ESTIMATE"` — proxy from `ctx_defaults` (Royal Melbourne Hospital, pending VAHI onboarding)
+
+### `history_timeline.json` schema
+
+Last 3 hours of 15-min snapshots (window configurable via `UI_DISPLAY_WINDOW_MINS` in `config/ui_config.json`). Used by the UI time-navigation arrows.
+
+```json
+{
+  "generated_utc": "...",
+  "history_hours": 3.0,
+  "snapshots": [
+    {
+      "bucket_utc": "2026-05-03T05:00:00Z",
+      "sites": [{ "site": "...", "current_wait_min": 45.0, ... }]
+    }
+  ]
+}
+```
+
+Full historical accuracy data lives in `forecast_audit.csv` (SSD, never filtered by UI window).
+
+### `forecast_audit.csv` (SSD, ML input)
+
+Written by `get_history.py` whenever a T+60 observation is available to compare against a prior forecast. Powers `evolve_model.py`'s per-hospital per-segment damping optimization.
+
+| Key columns | Notes |
+|---|---|
+| `bucket_utc` | Forecast time |
+| `hospital`, `cohort`, `source_type` | Identifiers |
+| `day_type`, `time_band` | Segmentation for ML (weekday/weekend/public_holiday × overnight/morning/afternoon/evening) |
+| `current_wait_min`, `wait_momentum`, `treating_count` | Model inputs |
+| `actual_wait_min`, `predicted_wait_min`, `error_pct` | Accuracy |
+| `cache_lag_minutes`, `fidelity_status` | Diagnostic — correlate errors with data staleness |
 
 ---
 
@@ -37,39 +270,64 @@ data/
 run_monitor.sh
   │
   ├── 1. hospital_monitor.py
-  │       Scrapes Eastern Health (HTML/JS) and Monash Health (Power BI API)
-  │       Appends raw rows → Bronze CSV on /mnt/router_ssd/
+  │       Dispatches to scrapers/ package by parser type:
+  │         html_js    → scrapers/eastern.py
+  │         powerbi    → scrapers/monash.py
+  │         html_regex → scrapers/html_regex.py
+  │       Writes:
+  │         • Bronze CSV (full-pipeline hospitals, Adult/All cohort)
+  │         • Bronze Raw CSV (all hospitals, all cohorts, includes Paeds + raw_only)
+  │         • Sidecar JSON (portal timestamps, read by publish_latest.py)
+  │         • ingest_alerts.csv (data quality issues: PARSE_ERROR, HTTP_ERROR, NULL_ALL_MEASURES)
   │
   ├── 2. transform_silver.py
-  │       Full rebuild of Silver CSV from Bronze + VAHI/AIHW reference files
-  │       Adds seasonal benchmarks, triage splits, momentum columns
+  │       Full rebuild of Silver CSV from Bronze + VAHI/AIHW/ctx_defaults reference files
+  │       Adds: temporal features, wait_momentum, load_ratio, ctx benchmarks
+  │       Deduplicates consecutive no-change rows
   │
   └── 3. publish_latest.py --push
           a. Load latest Silver row per hospital
-          b. Compute 60-min outlook via predict_next.py
-          c. Write /tmp/hospital_monitor_latest.json
-          d. Build 24h history timeline via get_history.py
+          b. Read Bronze Raw for Paeds data (Monash campuses) and status_sites (raw_only)
+          c. Compute 60-min outlook via predict_next.py (effective damping from model_config.json)
+          d. Apply UI_DISPLAY_WINDOW_MINS filter (default 180 min)
+          e. Write /tmp/hospital_monitor_latest.json
+          f. Build 3h history timeline via get_history.py
              → write /tmp/history_timeline.json
-          e. Clone/fetch data branch into /tmp/publisher
-          f. Strip index clean (git rm --cached + git clean)
-          g. Copy 4 files into /tmp/publisher
-          h. Commit "data: outlook <UTC stamp>"
-          i. Force-push → origin/data
+             → append completed forecasts to forecast_audit.csv
+          g. Clone/fetch data branch into /tmp/publisher
+          h. Strip data branch clean (git rm --cached + git clean)
+          i. Copy 4 files: index.html, latest.json, history_timeline.json, vercel.json
+          j. Commit "data: outlook <UTC stamp>"
+          k. Force-push → origin/data → Vercel rebuild (4 sec, ≤6 min/day)
 ```
 
-Operational hours gate: steps a–i only run 06:00–23:00 Melbourne time. Outside those hours `publish_latest.py` exits 0 with no push.
+Operational hours gate: steps a–k only run 06:00–23:00 Melbourne time (configurable in `config/ui_config.json`). Outside those hours `publish_latest.py` exits 0 with no push.
+
+---
+
+## Branch Responsibilities
+
+| Branch | Purpose | What lives here |
+|---|---|---|
+| `main` | Source code | All Python scripts, `docs/index.html`, config, CLAUDE.md, docs/ |
+| `data` | Live data output | **Exactly 4 files** (see below) |
+
+```
+data/
+  index.html            ← copied from docs/index.html on main at publish time
+  latest.json           ← current 7-hospital outlook + RCH status_sites
+  history_timeline.json ← last 3h of 15-min snapshots
+  vercel.json           ← Vercel cache-control headers
+```
+
+The `data` branch is machine-written on every publish cycle. Never commit source code to `data` manually.
 
 ---
 
 ## Vercel Configuration
 
-**Production branch:** `data`
-Vercel serves `index.html` directly from the data branch root. It never reads `main`.
-
-**Build on every push** — no `ignoreCommand` is set. Vercel builds on every Pi push.
-Each build takes ~4 seconds. At 96 pushes/day that is ~6 min/day, well within Vercel's
-6,000 build-minutes/month free tier. Skipping builds via `ignoreCommand` was tried but
-causes Vercel to keep serving the previous build's JSON files rather than the fresh ones.
+**Production branch:** `data`  
+Vercel serves `index.html` from the data branch root. It never reads `main`.
 
 **Cache-Control headers (set in `vercel.json`):**
 
@@ -78,24 +336,7 @@ causes Vercel to keep serving the previous build's JSON files rather than the fr
 | `/latest.json` | `no-cache, no-store, must-revalidate` | Browser always fetches fresh on every dashboard poll |
 | `/history_timeline.json` | `public, max-age=900` | 15-min browser cache; stable between pushes |
 
----
-
-## Browser Fetch Paths
-
-`index.html` uses root-relative URLs served by Vercel — **not** raw GitHub CDN:
-
-```js
-const DATA_URL    = "/latest.json";           // no-cache — always fresh
-const HISTORY_URL = "/history_timeline.json"; // 15-min cache — stable
-```
-
-Using Vercel's served URLs (not `raw.githubusercontent.com`) ensures the `Cache-Control: no-cache` header on `latest.json` is respected. The raw GitHub CDN has a ~5 min cache and ignores custom headers.
-
----
-
-## Vercel Settings Checklist
-
-Go to **Vercel → Project Settings → Git**:
+**Vercel Settings:**
 
 | Setting | Value |
 |---|---|
@@ -107,10 +348,8 @@ Go to **Vercel → Project Settings → Git**:
 
 ## SSH Deploy Key
 
-The Pi pushes via a deploy key scoped to this repo only:
-
 ```
 ~/.ssh/hospital_monitor_deploy   (mode 600)
 ```
 
-The key has **write access to the data branch only**. It cannot push to `main`. `publish_latest.py` uses the system SSH config; no `GIT_SSH_COMMAND` override is needed if `~/.ssh/config` routes `github.com` to this key.
+Write access to the `data` branch only. Cannot push to `main`. `publish_latest.py` uses the system SSH config; no `GIT_SSH_COMMAND` override is needed if `~/.ssh/config` routes `github.com` to this key.
