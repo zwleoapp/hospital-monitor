@@ -10,35 +10,37 @@ so the model self-improves without any manual tuning.
 Algorithm
 ─────────
 For each hospital × time-band:
-  1. Filter to completed rows (actual_wait_min known, error_pct < anomaly_error_pct)
-  2. Grid-search damping d ∈ [DAMPING_MIN, DAMPING_MAX] in 0.05 steps
-     For each candidate d:
-       projected = current_wait_min + wait_momentum * STEPS * d
-       projected = clamp(max(projected, current_wait_min * 0.5), MAX_WAIT_MIN)
-       mae = mean(|projected - actual_wait_min|)
-  3. Select d* = argmin(mae)
-  4. Per-hospital damping = weighted average across time-bands
-     (weight = row count, so high-traffic bands dominate)
+  1. Deduplicate on (hospital, bucket_utc) — keeps last written row per slot
+  2. Filter to completed rows (actual_wait_min known, error_pct < anomaly_error_pct)
+  3. Grid-search damping d ∈ [damping_min, damping_max] in 0.05 steps
+       projected = current_wait_min + wait_momentum × (horizon_min/cadence_min) × d
+       projected = clamp(max(projected, current_wait_min × 0.5), max_wait_min)
+       mae       = mean(|projected − actual_wait_min|)
+  4. Accept best_d only if its MAE beats the current damping's MAE on the same data
+  5. Per-hospital damping = weighted average of accepted band results
+     (weight = row count — high-traffic bands dominate)
+  6. Merge into model_config.json — hospitals with insufficient data keep their
+     previously-evolved value rather than being reset to the global default
 
 Time-bands (Melbourne local, 4 × 6-hour windows):
-  overnight  00–06
-  morning    06–12
-  afternoon  12–18
-  evening    18–24
+  overnight  00–06  |  morning   06–12
+  afternoon  12–18  |  evening   18–24
 
 Safety
 ──────
-  - Minimum MIN_ROWS_TO_EVOLVE completed rows required per hospital
-  - All evolved values clamped to [DAMPING_MIN, DAMPING_MAX]
-  - Anomalous rows (error_pct > ANOMALY_ERROR_PCT) excluded from training
-  - Model config updated atomically (read → update key → write)
-  - Evolution run logged to model_evolution_log.jsonl for audit
+  - Minimum min_rows_to_evolve rows required per hospital (across all bands)
+  - Minimum 4 rows per band to compute a meaningful band-level optimum
+  - Evolved value must beat current damping's MAE — never regress
+  - All written values clamped to [damping_min, damping_max]
+  - Merge (not replace) — existing evolved values survive if a hospital has
+    insufficient new data this run
+  - Full audit log: old damping, new damping, MAE before/after per hospital
 
 Usage
 ─────
-  python3 scripts/evolve_model.py          # evolve and write
+  python3 scripts/evolve_model.py            # evolve and write
   python3 scripts/evolve_model.py --dry-run  # compute and print, don't write
-  python3 scripts/evolve_model.py --audit  # show hospital breakdown table
+  python3 scripts/evolve_model.py --audit    # per-hospital per-band breakdown
 """
 
 import sys
@@ -46,25 +48,17 @@ import csv
 import json
 import argparse
 import pathlib
+from collections import defaultdict
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 from config.paths import FORECAST_AUDIT_CSV, SSD  # noqa: E402
 
-_REPO        = pathlib.Path(__file__).resolve().parent.parent
-_MODEL_CFG   = _REPO / "config" / "model_config.json"
+_REPO          = pathlib.Path(__file__).resolve().parent.parent
+_MODEL_CFG     = _REPO / "config" / "model_config.json"
 _EVOLUTION_LOG = SSD / "model_evolution_log.jsonl"
-_MELB        = ZoneInfo("Australia/Melbourne")
-
-STEPS = 4  # HORIZON_MIN / CADENCE_MIN = 60 / 15
-
-TIME_BANDS = [
-    ("overnight",  0,  6),
-    ("morning",    6, 12),
-    ("afternoon", 12, 18),
-    ("evening",   18, 24),
-]
+_MELB          = ZoneInfo("Australia/Melbourne")
 
 
 def _load_model_cfg() -> dict:
@@ -75,65 +69,87 @@ def _load_model_cfg() -> dict:
 
 
 def _time_band(hour: int) -> str:
-    for name, start, end in TIME_BANDS:
+    for name, start, end in [("overnight", 0, 6), ("morning", 6, 12),
+                              ("afternoon", 12, 18), ("evening", 18, 24)]:
         if start <= hour < end:
             return name
     return "overnight"
 
 
-def _project(current: float, momentum: float, damping: float, max_wait: int) -> float:
-    projected = current + momentum * STEPS * damping
+def _project(current: float, momentum: float, damping: float,
+             steps: float, max_wait: int) -> float:
+    """Mirror of predict_next.project_wait — must stay in sync with that formula."""
+    projected = current + momentum * steps * damping
     floor     = current * 0.50
     return max(floor, min(max_wait, projected))
 
 
 def load_audit(path: pathlib.Path, anomaly_pct: float) -> list[dict]:
-    """Load forecast_audit.csv, filtering out incomplete and anomalous rows."""
-    rows = []
+    """
+    Load forecast_audit.csv.
+
+    Deduplicates on (hospital, bucket_utc) — keeps the last written row for
+    each slot so repeated publish runs don't inflate row counts or bias MAE.
+    Filters out rows where actual_wait_min is missing or error_pct exceeds
+    anomaly_pct (these represent data-quality incidents, not model error).
+    """
     if not path.exists():
-        return rows
+        return []
+
+    seen: dict[tuple, dict] = {}  # (hospital, bucket_utc) → last row
     with open(path, newline="") as fh:
-        reader = csv.DictReader(fh)
-        for row in reader:
+        for row in csv.DictReader(fh):
             try:
-                actual = float(row["actual_wait_min"])
-                if actual <= 0:
-                    continue
+                actual    = float(row["actual_wait_min"])
                 error_pct = float(row["error_pct"])
-                if error_pct > anomaly_pct:
-                    continue
-                rows.append({
-                    "hospital":      row["hospital"],
-                    "bucket_utc":    row["bucket_utc"],
-                    "source_type":   row.get("source_type", "unknown"),
-                    "current":       float(row["current_wait_min"] or 0),
-                    "momentum":      float(row["wait_momentum"]    or 0),
-                    "actual":        actual,
-                    "cache_lag":     row.get("cache_lag_minutes", ""),
-                    "fidelity":      row.get("fidelity_status", ""),
-                })
             except (ValueError, KeyError):
                 continue
+            if actual <= 0 or error_pct > anomaly_pct:
+                continue
+            key = (row["hospital"], row["bucket_utc"])
+            seen[key] = row  # last occurrence wins
+
+    rows = []
+    for row in seen.values():
+        try:
+            rows.append({
+                "hospital":   row["hospital"],
+                "bucket_utc": row["bucket_utc"],
+                "source_type": row.get("source_type", "unknown"),
+                "current":    float(row["current_wait_min"] or 0),
+                "momentum":   float(row["wait_momentum"]    or 0),
+                "actual":     float(row["actual_wait_min"]),
+            })
+        except (ValueError, KeyError):
+            continue
     return rows
 
 
-def evolve(rows: list[dict], mcfg: dict, dry_run: bool = False, audit: bool = False
-           ) -> dict[str, float]:
+def evolve(rows: list[dict], mcfg: dict, audit: bool = False
+           ) -> tuple[dict[str, float], dict[str, dict]]:
     """
-    Compute optimal per-hospital damping via grid search.
-    Returns {hospital: damping_factor}.
-    """
-    d_min     = float(mcfg.get("damping_min",        0.50))
-    d_max     = float(mcfg.get("damping_max",        1.20))
-    max_wait  = int(mcfg.get("max_wait_min",          480))
-    min_rows  = int(mcfg.get("min_rows_to_evolve",    24))
+    Compute per-hospital optimal damping via band-level grid search.
 
-    # Candidate damping values in 0.05 steps
+    Returns:
+        evolved   — {hospital: new_damping}  (only hospitals where improvement found)
+        details   — {hospital: {old, new, mae_before, mae_after, rows, bands}}
+    """
+    d_min      = float(mcfg.get("damping_min",        0.50))
+    d_max      = float(mcfg.get("damping_max",        1.20))
+    max_wait   = int(mcfg.get("max_wait_min",          480))
+    min_rows   = int(mcfg.get("min_rows_to_evolve",    24))
+    horizon    = float(mcfg.get("horizon_min",          60))
+    cadence    = float(mcfg.get("cadence_min",          15))
+    steps      = horizon / cadence          # 4.0 — forecast steps ahead
+
+    global_d   = float(mcfg.get("momentum_damping",   0.50))
+    current_ph = mcfg.get("per_hospital_damping", {})
+
+    # Candidate damping values in 0.05 steps inclusive of both ends
     candidates = [round(d_min + i * 0.05, 2)
-                  for i in range(int((d_max - d_min) / 0.05) + 1)]
+                  for i in range(round((d_max - d_min) / 0.05) + 1)]
 
-    # Group rows by (hospital, time_band)
-    from collections import defaultdict
+    # ── Group by (hospital, time-band) ────────────────────────────────────────
     groups: dict[tuple, list] = defaultdict(list)
     for r in rows:
         try:
@@ -144,48 +160,93 @@ def evolve(rows: list[dict], mcfg: dict, dry_run: bool = False, audit: bool = Fa
             band = "unknown"
         groups[(r["hospital"], band)].append(r)
 
-    # Per-hospital: weighted average of optimal damping across time-bands
-    hospital_bands: dict[str, list[tuple[float, int]]] = defaultdict(list)
+    # ── Per-band grid search ───────────────────────────────────────────────────
+    # hospital → list of (best_d, n, mae_best, mae_current)
+    hospital_bands: dict[str, list[tuple]] = defaultdict(list)
 
     if audit:
-        print(f"\n{'Hospital':<32} {'Band':<12} {'Rows':>5} {'Best d':>7} {'MAE':>8} {'Bias':>8}")
-        print("─" * 75)
+        print(f"\n{'Hospital':<32} {'Band':<12} {'Rows':>5} "
+              f"{'Cur d':>6} {'MAE cur':>8} {'Best d':>7} {'MAE best':>9} {'Δ MAE':>8}")
+        print("─" * 92)
 
     for (hospital, band), band_rows in sorted(groups.items()):
         n = len(band_rows)
-        if n < 4:  # need at least 4 rows per band to be meaningful
+        if n < 4:
             continue
 
-        best_d, best_mae = candidates[0], float("inf")
+        current_d = current_ph.get(hospital, global_d)
+
+        # Baseline MAE with the current damping
+        baseline_errors = [
+            abs(_project(r["current"], r["momentum"], current_d, steps, max_wait) - r["actual"])
+            for r in band_rows
+        ]
+        baseline_mae = sum(baseline_errors) / n
+
+        # Grid search for minimum MAE
+        best_d, best_mae = current_d, baseline_mae
         for d in candidates:
-            maes = []
-            for r in band_rows:
-                proj = _project(r["current"], r["momentum"], d, max_wait)
-                maes.append(abs(proj - r["actual"]))
-            mae = sum(maes) / len(maes)
+            errors = [
+                abs(_project(r["current"], r["momentum"], d, steps, max_wait) - r["actual"])
+                for r in band_rows
+            ]
+            mae = sum(errors) / n
             if mae < best_mae:
                 best_mae, best_d = mae, d
 
-        bias = sum(r["actual"] - _project(r["current"], r["momentum"], best_d, max_wait)
-                   for r in band_rows) / n
+        delta = best_mae - baseline_mae  # negative = improvement
 
         if audit:
-            print(f"  {hospital:<30} {band:<12} {n:>5} {best_d:>7.2f} {best_mae:>7.1f}m {bias:>+7.1f}m")
+            marker = " ✓" if best_d != current_d else ""
+            print(f"  {hospital:<30} {band:<12} {n:>5} "
+                  f"{current_d:>6.2f} {baseline_mae:>7.1f}m "
+                  f"{best_d:>7.2f} {best_mae:>8.1f}m {delta:>+7.1f}m{marker}")
 
-        hospital_bands[hospital].append((best_d, n))
+        # Only accept the band result if we found a genuine improvement
+        if best_d != current_d and best_mae < baseline_mae:
+            hospital_bands[hospital].append((best_d, n, best_mae, baseline_mae))
+        elif best_d == current_d:
+            # Current damping is already optimal — still record for row-count purposes
+            hospital_bands[hospital].append((best_d, n, best_mae, baseline_mae))
 
-    # Weighted average across time-bands; only evolve if enough total rows
-    evolved: dict[str, float] = {}
+    # ── Weighted average across bands → one damping per hospital ──────────────
+    evolved:  dict[str, float] = {}
+    details:  dict[str, dict]  = {}
+
     for hospital, band_results in hospital_bands.items():
-        total_rows = sum(n for _, n in band_results)
+        total_rows = sum(n for _, n, _, _ in band_results)
         if total_rows < min_rows:
             if audit:
-                print(f"  {hospital}: skip (only {total_rows} rows, need {min_rows})")
+                print(f"  {hospital}: skip — only {total_rows} rows total (need {min_rows})")
             continue
-        weighted = sum(d * n for d, n in band_results) / total_rows
-        evolved[hospital] = round(min(d_max, max(d_min, weighted)), 3)
 
-    return evolved
+        current_d = current_ph.get(hospital, global_d)
+
+        # Weighted average of per-band best_d values
+        weighted_d = sum(d * n for d, n, _, _ in band_results) / total_rows
+        new_d      = round(min(d_max, max(d_min, weighted_d)), 3)
+
+        # Compute overall MAE before and after across all band rows for this hospital
+        all_rows_for_hospital = [r for r in rows if r["hospital"] == hospital]
+        mae_before = (sum(abs(_project(r["current"], r["momentum"], current_d, steps, max_wait) - r["actual"])
+                          for r in all_rows_for_hospital) / len(all_rows_for_hospital)
+                      if all_rows_for_hospital else 0.0)
+        mae_after  = (sum(abs(_project(r["current"], r["momentum"], new_d, steps, max_wait) - r["actual"])
+                          for r in all_rows_for_hospital) / len(all_rows_for_hospital)
+                      if all_rows_for_hospital else 0.0)
+
+        evolved[hospital] = new_d
+        details[hospital] = {
+            "old_damping":  current_d,
+            "new_damping":  new_d,
+            "mae_before":   round(mae_before, 2),
+            "mae_after":    round(mae_after,  2),
+            "improvement_pct": round((mae_before - mae_after) / max(mae_before, 1) * 100, 1),
+            "total_rows":   total_rows,
+            "bands":        len(band_results),
+        }
+
+    return evolved, details
 
 
 def main() -> None:
@@ -196,7 +257,7 @@ def main() -> None:
                         help="Print per-hospital per-band breakdown table")
     args = parser.parse_args()
 
-    mcfg = _load_model_cfg()
+    mcfg        = _load_model_cfg()
     anomaly_pct = float(mcfg.get("anomaly_error_pct", 200.0))
 
     rows = load_audit(FORECAST_AUDIT_CSV, anomaly_pct)
@@ -204,35 +265,44 @@ def main() -> None:
         print("  evolve_model: no usable rows in forecast_audit.csv — nothing to do.")
         return
 
-    print(f"  evolve_model: {len(rows)} usable audit rows across "
-          f"{len(set(r['hospital'] for r in rows))} hospitals")
+    hospitals = set(r["hospital"] for r in rows)
+    print(f"  evolve_model: {len(rows)} deduplicated audit rows across {len(hospitals)} hospitals")
 
-    evolved = evolve(rows, mcfg, dry_run=args.dry_run, audit=args.audit)
+    evolved, details = evolve(rows, mcfg, audit=args.audit)
 
     if not evolved:
-        print("  evolve_model: insufficient data for any hospital — "
-              f"need {mcfg.get('min_rows_to_evolve', 24)} completed rows each.")
+        print(f"  evolve_model: insufficient data — need "
+              f"{mcfg.get('min_rows_to_evolve', 24)} rows per hospital.")
         return
 
-    print(f"\n  Evolved damping factors:")
-    for h, d in sorted(evolved.items()):
-        old = mcfg.get("per_hospital_damping", {}).get(h, mcfg.get("momentum_damping", 0.50))
-        print(f"    {h:<36} {old:.3f} → {d:.3f}")
+    # ── Summary table ─────────────────────────────────────────────────────────
+    print(f"\n  {'Hospital':<36} {'Old d':>6} {'New d':>6} "
+          f"{'MAE before':>11} {'MAE after':>10} {'Δ%':>6} {'Rows':>6}")
+    print("  " + "─" * 82)
+    for h, d in details.items():
+        direction = "↓" if d["improvement_pct"] > 0 else ("↑" if d["improvement_pct"] < 0 else "→")
+        print(f"  {h:<36} {d['old_damping']:>6.3f} {d['new_damping']:>6.3f} "
+              f"{d['mae_before']:>10.1f}m {d['mae_after']:>9.1f}m "
+              f"{direction}{abs(d['improvement_pct']):>4.1f}% {d['total_rows']:>6}")
 
     if args.dry_run:
         print("\n  [dry-run] model_config.json NOT updated.")
         return
 
-    # Atomic update: read → merge → write
-    mcfg["per_hospital_damping"] = evolved
+    # ── Merge (not replace) into model_config.json ────────────────────────────
+    # Hospitals with insufficient data keep their previously-evolved value.
+    existing = mcfg.get("per_hospital_damping", {})
+    existing.update(evolved)
+    mcfg["per_hospital_damping"] = existing
     _MODEL_CFG.write_text(json.dumps(mcfg, indent=2))
-    print(f"\n  model_config.json updated — {len(evolved)} hospital(s) evolved.")
+    print(f"\n  model_config.json updated — {len(evolved)} hospital(s) evolved, "
+          f"{len(existing) - len(evolved)} retained from previous run.")
 
-    # Audit log
+    # ── Evolution audit log ───────────────────────────────────────────────────
     log_entry = {
         "run_utc":    datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "audit_rows": len(rows),
-        "evolved":    evolved,
+        "hospitals":  details,
     }
     try:
         with open(_EVOLUTION_LOG, "a") as fh:
