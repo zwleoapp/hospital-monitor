@@ -16,7 +16,9 @@ Reads:
 Join logic (LEFT — every Bronze row is preserved):
   1. VAHI quarterly match: quarter_start_utc ≤ ts < quarter_end_utc, same hospital.
   2. AIHW annual fallback (no VAHI match): period_start ≤ ts < period_end+1d, same hospital.
-  3. ctx_source == "VAHI" | "AIHW" on every output row.
+  3. ctx_defaults fallback (no VAHI or AIHW): proxy values from hospitals.json → ctx_source="ESTIMATE".
+     Used for newly-added hospitals without VAHI/AIHW benchmark history yet.
+  4. ctx_source == "VAHI" | "AIHW" | "ESTIMATE" on every output row.
 
 Semantic note:
   VAHI ctx columns measure *wait time to treatment start*.
@@ -34,6 +36,7 @@ Idempotency / duplicate protection:
 import re
 import sys
 import time
+import json
 import argparse
 import pathlib
 import pandas as pd
@@ -297,10 +300,13 @@ def _join_aihw_fallback(
     unmatched: pd.DataFrame,
     aihw: pd.DataFrame,
     vahi_los_means: pd.DataFrame,
-) -> pd.DataFrame:
+) -> tuple[pd.DataFrame, pd.DataFrame]:
     """
     Attach AIHW annual context to rows that had no VAHI quarter.
-    Raises ValueError if any row has no coverage in either source.
+
+    Returns (aihw_matched, no_coverage) — rows with no AIHW coverage are returned
+    separately rather than raising, so the caller can apply ctx_defaults for newly
+    onboarded hospitals.
 
     AIHW provides wait-time proxies (total departure times, ctx_source=="AIHW").
     LOS percentage columns have no AIHW equivalent; they are filled from
@@ -308,10 +314,13 @@ def _join_aihw_fallback(
     ctx_source=="AIHW" downstream signals that ctx values are lower-fidelity.
     """
     if unmatched.empty:
-        return unmatched
+        return unmatched, pd.DataFrame()
 
     u = unmatched.sort_values("timestamp").reset_index(drop=True)
-    a = aihw.sort_values("period_start_utc")
+    a = aihw.sort_values("period_start_utc") if not aihw.empty else aihw
+
+    if aihw.empty:
+        return pd.DataFrame(), unmatched.copy()
 
     merged = pd.merge_asof(
         u,
@@ -328,29 +337,83 @@ def _join_aihw_fallback(
         (merged["timestamp"] < merged["period_end_utc"])
     )
 
-    if not in_period.all():
-        gap_rows = merged.loc[~in_period, ["hospital", "timestamp"]]
-        raise ValueError(
-            f"{(~in_period).sum()} Bronze row(s) have no coverage in either "
-            f"VAHI or AIHW — add data or extend AIHW backfill:\n{gap_rows.head()}"
-        )
+    no_coverage = merged.loc[~in_period].drop(
+        columns=["period_start_utc", "period_end_utc",
+                 "aihw_p90_depart_min", "aihw_median_depart_min"],
+        errors="ignore",
+    ).copy()
 
-    merged["ctx_source"] = "AIHW"
-    merged = merged.rename(columns={
+    if not no_coverage.empty:
+        gap_hospitals = sorted(no_coverage["hospital"].unique())
+        print(f"  AIHW no-coverage: {len(no_coverage)} row(s) for {gap_hospitals} "
+              f"— will apply ctx_defaults if configured.")
+
+    matched = merged.loc[in_period].copy()
+    matched["ctx_source"] = "AIHW"
+    matched = matched.rename(columns={
         "aihw_p90_depart_min":    "ctx_wait_p90_mins",
         "aihw_median_depart_min": "ctx_wait_median_cat123_mins",
     })
-    merged["ctx_wait_median_cat45_mins"] = merged["ctx_wait_median_cat123_mins"]
-    merged = merged.drop(columns=["period_start_utc", "period_end_utc"])
+    matched["ctx_wait_median_cat45_mins"] = matched["ctx_wait_median_cat123_mins"]
+    matched = matched.drop(columns=["period_start_utc", "period_end_utc"])
 
     # LOS pct columns have no AIHW equivalent — use per-hospital VAHI means.
-    merged = merged.merge(vahi_los_means, on="hospital", how="left")
-    merged = merged.rename(columns={
+    matched = matched.merge(vahi_los_means, on="hospital", how="left")
+    matched = matched.rename(columns={
         "los_pct_under_4hr":               "ctx_los_pct_under_4hr",
         "los_pct_over_24hr":               "ctx_los_pct_over_24hr",
         "non_admitted_los_pct_under_4hr":  "ctx_non_admitted_los_pct_under_4hr",
     })
-    return merged
+    return matched, no_coverage
+
+
+_HOSPITALS_JSON = pathlib.Path(__file__).resolve().parent.parent / "config" / "hospitals.json"
+
+
+def _load_ctx_defaults() -> dict:
+    """Load per-hospital ctx fallback values from hospitals.json → ctx_defaults section."""
+    try:
+        return json.loads(_HOSPITALS_JSON.read_text()).get("ctx_defaults", {})
+    except Exception:
+        return {}
+
+
+def _apply_ctx_defaults(
+    no_coverage: pd.DataFrame,
+    ctx_defaults: dict,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """
+    Apply ctx_defaults (from hospitals.json) to rows with no VAHI or AIHW coverage.
+
+    Returns (patched, still_unmatched).
+    patched rows get ctx_source="ESTIMATE" — downstream signals lower-fidelity context.
+    """
+    if no_coverage.empty:
+        return pd.DataFrame(), pd.DataFrame()
+
+    patched_parts: list[pd.DataFrame] = []
+    still_unmatched_parts: list[pd.DataFrame] = []
+
+    for hospital, group in no_coverage.groupby("hospital"):
+        if hospital in ctx_defaults:
+            g = group.copy()
+            dft = ctx_defaults[hospital]
+            for col in CTX_COLS:
+                if col in dft:
+                    g[col] = dft[col]
+            g["ctx_source"] = "ESTIMATE"
+            patched_parts.append(g)
+            print(f"  ctx_defaults applied for {hospital} "
+                  f"({len(g)} row(s), ctx_source=ESTIMATE)")
+        else:
+            still_unmatched_parts.append(group)
+
+    patched = pd.concat(patched_parts, ignore_index=True) if patched_parts else pd.DataFrame()
+    still_unmatched = (
+        pd.concat(still_unmatched_parts, ignore_index=True)
+        if still_unmatched_parts else pd.DataFrame()
+    )
+    return patched, still_unmatched
 
 # ── Dedup ─────────────────────────────────────────────────────────────────────
 
@@ -405,10 +468,18 @@ def _add_wait_momentum(df: pd.DataFrame) -> pd.DataFrame:
 # ── QC assertions ─────────────────────────────────────────────────────────────
 
 def _assert_no_ctx_nulls(df: pd.DataFrame) -> None:
-    """Fail loudly rather than silently produce NaN-poisoned training rows."""
+    """
+    Fail loudly rather than silently produce NaN-poisoned training rows.
+    ctx_source values: VAHI (best) | AIHW (fallback) | ESTIMATE (proxy from ctx_defaults).
+    If nulls remain after all three tiers, the hospital needs a ctx_defaults entry in hospitals.json.
+    """
     null_counts = df[CTX_COLS].isna().sum()
     if null_counts.any():
-        raise ValueError(f"Null values found in ctx columns:\n{null_counts[null_counts > 0]}")
+        raise ValueError(
+            f"Null values found in ctx columns:\n{null_counts[null_counts > 0]}\n"
+            "Add VAHI data, run fetch_aihw.py --append, or add ctx_defaults "
+            "in hospitals.json for newly onboarded hospitals."
+        )
 
 
 def _assert_bounds(df: pd.DataFrame) -> None:
@@ -474,12 +545,28 @@ def build_silver(
         vahi_matched, unmatched = _join_vahi(silver, vahi)
         print(f"  VAHI match : {len(vahi_matched):,} rows")
 
-        aihw_patched = _join_aihw_fallback(unmatched, aihw, vahi_los_means)
+        aihw_patched, no_coverage = _join_aihw_fallback(unmatched, aihw, vahi_los_means)
         if not aihw_patched.empty:
             print(f"  AIHW fallback applied to {len(aihw_patched):,} rows "
                   f"(timestamps outside VAHI coverage)")
 
-        silver = pd.concat([vahi_matched, aihw_patched], ignore_index=True)
+        # ctx_defaults fallback for newly-onboarded hospitals with no VAHI/AIHW data yet
+        ctx_defaults = _load_ctx_defaults()
+        estimate_patched, truly_unmatched = _apply_ctx_defaults(no_coverage, ctx_defaults)
+
+        if not truly_unmatched.empty:
+            gap_hospitals = sorted(truly_unmatched["hospital"].unique())
+            raise ValueError(
+                f"{len(truly_unmatched)} Bronze row(s) have no VAHI, AIHW, or ctx_defaults "
+                f"coverage: {gap_hospitals}\n"
+                "Add VAHI data, run fetch_aihw.py --append, or add a ctx_defaults "
+                "entry in config/hospitals.json."
+            )
+
+        silver = pd.concat(
+            [df for df in [vahi_matched, aihw_patched, estimate_patched] if not df.empty],
+            ignore_index=True,
+        )
         _assert_no_ctx_nulls(silver)
 
     # Dedup consecutive no-change rows

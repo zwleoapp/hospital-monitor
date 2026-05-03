@@ -306,10 +306,15 @@ def build_timeline(silver_path: pathlib.Path, history_hours: int = HISTORY_HOURS
           .reset_index()
     )
 
-    # Compute 60-min projection for every row
+    # Compute 60-min projection for every row.
+    # wait_momentum is NaN for the first observation per hospital (no prior row to diff against).
+    # float(NaN) or 0 returns NaN because NaN is truthy — use pd.notna guard instead.
     def _project(row):
-        return project_wait(float(row["min_wait_mins"] or 0),
-                            float(row.get("wait_momentum") or 0))
+        _mom = row.get("wait_momentum")
+        return project_wait(
+            float(row["min_wait_mins"] or 0),
+            float(_mom) if pd.notna(_mom) else 0.0,
+        )
 
     df["predicted_wait_min"] = df.apply(_project, axis=1)
 
@@ -340,13 +345,16 @@ def build_timeline(silver_path: pathlib.Path, history_hours: int = HISTORY_HOURS
     for bucket, grp in df.groupby("bucket"):
         sites = []
         for _, row in grp.iterrows():
-            current = float(row["min_wait_mins"] or 0)
-            momentum = float(row.get("wait_momentum") or 0)
+            current  = float(row["min_wait_mins"] or 0)
+            _mom_raw = row.get("wait_momentum")
+            momentum = float(_mom_raw) if pd.notna(_mom_raw) else 0.0
             try:
+                _los = row.get("ctx_los_pct_under_4hr")
+                _p90 = row.get("ctx_wait_p90_mins")
                 conf, label = confidence_score(
                     current, momentum,
-                    float(row.get("ctx_los_pct_under_4hr") or 50),
-                    float(row.get("ctx_wait_p90_mins") or 60),
+                    float(_los) if pd.notna(_los) else 50.0,
+                    float(_p90) if pd.notna(_p90) else 60.0,
                 )
             except Exception:
                 conf, label = None, "—"

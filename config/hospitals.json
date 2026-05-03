@@ -15,9 +15,35 @@
     }
   },
 
+  "_comment_ctx_defaults": "Fallback ctx values for hospitals not yet in VAHI quarterly file. Applied by transform_silver.py as ctx_source=ESTIMATE. Update each field with real VAHI data once available.",
+  "ctx_defaults": {
+    "Royal Melbourne Hospital": {
+      "_comment": "Proxy estimates — replace with real VAHI benchmarks once available for Melbourne Health",
+      "ctx_network": "Melbourne Health",
+      "ctx_wait_p90_mins": 90,
+      "ctx_wait_median_cat123_mins": 30,
+      "ctx_wait_median_cat45_mins": 60,
+      "ctx_los_pct_under_4hr": 65.0,
+      "ctx_los_pct_over_24hr": 2.0,
+      "ctx_non_admitted_los_pct_under_4hr": 85.0
+    }
+  },
+
   "eastern_health": {
     "parser": "html_js",
     "url": "https://waittime.easternhealth.org.au/",
+    "_js_comment": "JS variable names embedded in the page. Update here if Eastern Health renames them.",
+    "js_data_vars": {
+      "counts": "patientCounts",
+      "waits":  "predictedWaitMinutes"
+    },
+    "_field_comment": "Map from the JS JSON keys to standard pipeline field names.",
+    "js_field_map": {
+      "waiting":  "waiting",
+      "treating": "beingTreated",
+      "min_wait": "min",
+      "max_wait": "max"
+    },
     "hospitals": {
       "BoxHill":   "Box Hill Hospital",
       "Angliss":   "Angliss Hospital",
@@ -96,6 +122,34 @@
       "Casey":     "Casey Hospital",
       "Clayton":   "Monash Medical Centre - Clayton",
       "Dandenong": "Dandenong Hospital"
+    }
+  },
+
+  "melbourne_health": {
+    "parser": "html_regex",
+    "url": "https://www.thermh.org.au/services/emergency/emergency-wait-times",
+    "_patterns_comment": "Patterns match the thermh.org.au ED wait page. Adjust if HTML structure changes.",
+    "regex_patterns": {
+      "wait_time":         "(\\d{1,2}\\s*hr\\s*\\d{2}\\s*min\\s*-\\s*\\d{1,2}\\s*hr\\s*\\d{2}\\s*min)",
+      "patients_waiting":  "(\\d+)\\s*(?:</[^>]+>\\s*)*Patients waiting",
+      "patients_treating": "(\\d+)\\s*(?:</[^>]+>\\s*)*Patients being treated",
+      "updated_time":      "Wait time updated at\\s*([^<]{5,60})"
+    },
+    "hospitals": {
+      "RoyalMelbourne": "Royal Melbourne Hospital"
+    }
+  },
+
+  "rch_health": {
+    "parser": "html_regex",
+    "url": "https://www.rch.org.au/emerg_rch/status/",
+    "_pipeline_comment": "RCH publishes only a busy_index — no patient counts or wait minutes. pipeline=raw_only in hospitals.csv: scraper writes to Bronze Raw only, not Bronze CSV or Silver.",
+    "regex_patterns": {
+      "busy_index":   "how busy we are:\\s*([0-9.]+)",
+      "updated_time": "Last updated\\s*([^<]+)"
+    },
+    "hospitals": {
+      "RoyalChildrens": "Royal Childrens Hospital"
     }
   }
 }

@@ -11,8 +11,9 @@ from zoneinfo import ZoneInfo
 from status import update_status
 from config.hospitals import SOURCES
 from config.paths import BRONZE_CSV as CSV_PATH, BRONZE_RAW_CSV as BRONZE_RAW_PATH
-from scrapers.eastern import scrape_html_source
-from scrapers.monash  import scrape_powerbi_source
+from scrapers.eastern    import scrape_html_source
+from scrapers.monash     import scrape_powerbi_source
+from scrapers.html_regex import scrape_html_regex_source
 
 _MELB = ZoneInfo("Australia/Melbourne")
 
@@ -50,6 +51,12 @@ def scrape_hospital():
                     print(f"  [{source_key}] Power BI endpoint not configured — skipping.")
                     continue
                 rows, raw_rows = scrape_powerbi_source(source_key, cfg, timestamp, location_timestamp)
+
+            elif parser == "html_regex":
+                if not cfg.get("url"):
+                    print(f"  [{source_key}] url not set — skipping.")
+                    continue
+                rows, raw_rows = scrape_html_regex_source(source_key, cfg, timestamp, location_timestamp)
 
             else:
                 print(f"  [{source_key}] Unknown parser '{parser}' — skipping.")

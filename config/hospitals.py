@@ -27,6 +27,14 @@ ACTIVE_HOSPITALS: list[str] = [
     r["name"] for r in REGISTRY if r["is_active"].strip().lower() == "true"
 ]
 
+# Hospitals whose pipeline column is "raw_only": scraper writes Bronze Raw only —
+# they skip Bronze CSV → Silver → predict pipeline and appear via status_sites.
+RAW_ONLY_HOSPITALS: set[str] = {
+    r["name"] for r in REGISTRY
+    if r.get("pipeline", "full").strip() == "raw_only"
+    and r["is_active"].strip().lower() == "true"
+}
+
 # ── Per-hospital metadata (all hospitals — used for historical joins) ──────────
 HOSPITAL_META: dict[str, dict] = {
     r["name"]: {"network": r["network_type"], "aihw_code": r["aihw_id"]}
@@ -40,13 +48,13 @@ HOSPITAL_CODES   = {h: m["aihw_code"] for h, m in HOSPITAL_META.items()}
 
 # ── Per-source scraper configuration (loaded from hospitals.json) ─────────────
 # Parser types:
-#   "html_js"  — page embeds `const patientCounts` + `const predictedWaitMinutes`
-#               (Eastern Health pattern). Requires "url".
-#   "powerbi"  — Power BI Embedded batch API. Requires "endpoint", "model_id",
-#               "resource_key". Fill from browser DevTools → Network tab:
-#               filter for the POST to /querydata; copy the URL, modelId from
-#               the request body, and X-PowerBI-ResourceKey from request headers.
-#               Verify entity/column names from SemanticQueryDataShapeCommand.
+#   "html_js"    — page embeds `const patientCounts` + `const predictedWaitMinutes`
+#                  (Eastern Health pattern). Requires "url".
+#   "powerbi"    — Power BI Embedded batch API. Requires "endpoint", "model_id",
+#                  "resource_key". Fill from browser DevTools → Network tab.
+#   "html_regex" — Standard HTML page with regex_patterns configured in hospitals.json.
+#                  If "wait_time" pattern present → full Bronze CSV + Silver pipeline.
+#                  If only "busy_index" → Bronze Raw only (set pipeline=raw_only in CSV).
 #
 # To add a new source: add an entry to hospitals.json and rows to hospitals.csv.
 # No Python changes required.

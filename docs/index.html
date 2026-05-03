@@ -170,6 +170,20 @@
       margin-bottom:.28rem;
     }
 
+    /* ── Status-only sites (raw_only pipeline — e.g. RCH) ────────────────────── */
+    #status-sites-block{margin-top:1.4rem}
+    .status-sites-label{font-size:.62rem;font-weight:700;text-transform:uppercase;
+      letter-spacing:.08em;color:#9ca3af;margin-bottom:.6rem}
+    .status-sites-grid{display:flex;flex-wrap:wrap;gap:.7rem}
+    .status-card{background:#fff;border-radius:.75rem;padding:.85rem 1rem;
+      border:1px solid #e5e7eb;min-width:200px;flex:0 0 auto}
+    .status-card-name{font-size:.72rem;font-weight:700;color:#374151;margin-bottom:.35rem}
+    .status-busy-row{display:flex;align-items:baseline;gap:.3rem}
+    .status-busy-label{font-size:.6rem;text-transform:uppercase;letter-spacing:.06em;color:#9ca3af;font-weight:600}
+    .status-busy-val{font-size:1.5rem;font-weight:800;color:#f59e0b}
+    .status-busy-unit{font-size:.6rem;color:#9ca3af}
+    .status-meta{font-size:.58rem;color:#b0b0bb;margin-top:.3rem}
+
     /* ── Legacy classes kept for historical-grid compatibility ───────────────── */
     .hero-split{display:flex;gap:0;margin-bottom:.75rem;align-items:flex-end}
     .hero-col{display:flex;flex-direction:column;flex:0 0 auto}
@@ -474,6 +488,7 @@
     </div>
   </aside>
   <div id="grid"><div class="loading">Loading data&hellip;</div></div>
+  <div id="status-sites-block"></div>
 </div>
 
 <footer class="global-footer">
@@ -984,7 +999,32 @@ function renderDashboard(outlook) {
   renderLeaderboard(outlook.sites);
   storeForecast(outlook.sites);
   checkStale(outlook);
+  renderStatusSites(outlook.status_sites ?? []);
   updateHistNav();
+}
+
+function renderStatusSites(statusSites) {
+  const block = document.getElementById("status-sites-block");
+  if (!block) return;
+  if (!statusSites || statusSites.length === 0) { block.innerHTML = ""; return; }
+  const cards = statusSites.map(s => {
+    const busyVal  = s.busy_index != null ? s.busy_index.toFixed(1) : "—";
+    const ageTxt   = s.heartbeat_age_mins != null ? `${Math.round(s.heartbeat_age_mins)}m ago` : "";
+    const portalTs = s.last_portal_update ? ` · Updated ${s.last_portal_update}` : "";
+    return `
+      <div class="status-card">
+        <div class="status-card-name">${s.site}</div>
+        <div class="status-busy-row">
+          <span class="status-busy-label">Busy Index</span>
+          <span class="status-busy-val">${busyVal}</span>
+          <span class="status-busy-unit">/ 100</span>
+        </div>
+        <div class="status-meta">${ageTxt}${portalTs}</div>
+      </div>`;
+  }).join("");
+  block.innerHTML = `
+    <div class="status-sites-label">Status-only sites</div>
+    <div class="status-sites-grid">${cards}</div>`;
 }
 
 function checkStale(outlook) {

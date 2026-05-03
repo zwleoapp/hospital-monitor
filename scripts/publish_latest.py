@@ -31,7 +31,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))  # repo 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 from predict_next import load_latest_silver, build_outlook   # noqa: E402
 from get_history import build_timeline                        # noqa: E402
-from config.hospitals import VAHI_BENCHMARKS                  # noqa: E402
+from config.hospitals import VAHI_BENCHMARKS, RAW_ONLY_HOSPITALS  # noqa: E402
 from config.paths import (                                    # noqa: E402
     SILVER_CSV            as DEFAULT_SILVER,
     LATEST_JSON_TMP       as DEFAULT_JSON_OUT,
@@ -336,6 +336,48 @@ def main() -> None:
         except Exception as e:
             print(f"  [DEBUG] Paeds attach failed for {s['site']}: {e}", file=sys.stderr)
 
+    # ── Status-only sites (raw_only pipeline — e.g. RCH busy index) ──────────────
+    # Read the latest Bronze Raw row per raw-only hospital and attach as status_sites.
+    # These hospitals have no Silver data; only Bronze Raw is written by their scraper.
+    status_sites: list[dict] = []
+    if RAW_ONLY_HOSPITALS and BRONZE_RAW_PATH.exists():
+        try:
+            import csv as _csv
+            latest_raw_only: dict[str, dict] = {}
+            with open(BRONZE_RAW_PATH, "r", newline="") as _f:
+                for row in _csv.DictReader(_f):
+                    if row.get("site", "") in RAW_ONLY_HOSPITALS:
+                        latest_raw_only[row["site"]] = row
+            for site, row in latest_raw_only.items():
+                scrape_ts_str = row.get("scrape_timestamp_utc", "")
+                try:
+                    scrape_dt  = datetime.fromisoformat(scrape_ts_str.replace("Z", "+00:00"))
+                    age_mins   = round((generated_utc_dt - scrape_dt).total_seconds() / 60, 1)
+                except Exception:
+                    age_mins = None
+                if age_mins is not None and age_mins > UI_DISPLAY_WINDOW_MINS:
+                    continue  # stale — skip
+                wait_str = row.get("reported_wait_str", "")
+                busy_index: float | None = None
+                if wait_str.startswith("Busy: "):
+                    try:
+                        busy_index = float(wait_str.replace("Busy: ", ""))
+                    except ValueError:
+                        pass
+                status_sites.append({
+                    "site":                site,
+                    "scrape_timestamp_utc": scrape_ts_str,
+                    "heartbeat_age_mins":  age_mins,
+                    "reported_wait_str":   wait_str,
+                    "busy_index":          busy_index,
+                    "fidelity_status":     row.get("fidelity_status", ""),
+                    "last_portal_update":  row.get("reported_timestamp_str", ""),
+                })
+                if busy_index is not None:
+                    print(f"  [Status] {site}: Busy Index {busy_index:.1f}")
+        except Exception as _exc:
+            print(f"  [DEBUG] status_sites build failed: {_exc}", file=sys.stderr)
+
     quarter = (generated_utc_dt.month - 1) // 3 + 1
     vahi_qly_label = f"Q{quarter} {generated_utc_dt.year}"
 
@@ -345,6 +387,7 @@ def main() -> None:
         "vahi_p90_all_mins": VAHI_BENCHMARKS.get("p90_all_mins"),
         "vahi_qly_label":   vahi_qly_label,
         "sites":            sites,
+        "status_sites":     status_sites,
     }
 
     # ── 2. Write JSON ──────────────────────────────────────────────────────────

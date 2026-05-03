@@ -287,9 +287,11 @@ def build_outlook(silver_row: pd.Series) -> dict:
     treating_count  = int(silver_row.get("treating", 0) or 0)
     raw_momentum = silver_row.get("wait_momentum", float("nan"))
     momentum     = 0.0 if pd.isna(raw_momentum) else float(raw_momentum)
-    los_pct      = float(silver_row["ctx_los_pct_under_4hr"])
-    p90          = float(silver_row["ctx_wait_p90_mins"])
-    ctx_source   = str(silver_row["ctx_source"])
+    _los_raw = silver_row.get("ctx_los_pct_under_4hr")
+    _p90_raw = silver_row.get("ctx_wait_p90_mins")
+    los_pct  = float(_los_raw) if _los_raw is not None and not (isinstance(_los_raw, float) and pd.isna(_los_raw)) else 65.0
+    p90      = float(_p90_raw) if _p90_raw is not None and not (isinstance(_p90_raw, float) and pd.isna(_p90_raw)) else 60.0
+    ctx_source = str(silver_row.get("ctx_source", "NONE"))
     obs_utc      = silver_row["timestamp"].strftime("%Y-%m-%dT%H:%M:%SZ")
 
     raw_med123 = silver_row.get("ctx_wait_median_cat123_mins", float("nan"))

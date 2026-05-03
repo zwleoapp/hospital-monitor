@@ -50,12 +50,24 @@ def scrape_html_source(source_key: str, cfg: dict, timestamp: str, location_time
         return [], []
 
     html = resp.text
-    counts_m = re.search(r'const patientCounts\s*=\s*(\{.*?\});', html, re.DOTALL)
-    waits_m  = re.search(r'const predictedWaitMinutes\s*=\s*(\{.*?\});', html, re.DOTALL)
+
+    # JS variable names and field mappings come from hospitals.json so they can be
+    # updated without touching scraper code if Eastern Health renames them.
+    js_vars = cfg.get("js_data_vars", {"counts": "patientCounts", "waits": "predictedWaitMinutes"})
+    fm      = cfg.get("js_field_map",  {"waiting": "waiting", "treating": "beingTreated",
+                                         "min_wait": "min", "max_wait": "max"})
+
+    counts_var = js_vars.get("counts", "patientCounts")
+    waits_var  = js_vars.get("waits",  "predictedWaitMinutes")
+
+    counts_m = re.search(rf'const {re.escape(counts_var)}\s*=\s*(\{{.*?\}});', html, re.DOTALL)
+    waits_m  = re.search(rf'const {re.escape(waits_var)}\s*=\s*(\{{.*?\}});',  html, re.DOTALL)
     if not counts_m or not waits_m:
-        print(f"  [{source_key}] Data variables not found in HTML.")
+        print(f"  [{source_key}] Data variables not found in HTML "
+              f"(looked for '{counts_var}', '{waits_var}').")
         _write_ingest_alert("Eastern Health", "All", "html_js",
-                            "PARSE_ERROR", "patientCounts or predictedWaitMinutes not found in page HTML",
+                            "PARSE_ERROR",
+                            f"{counts_var} or {waits_var} not found in page HTML",
                             timestamp, location_timestamp)
         return [], []
 
@@ -70,10 +82,10 @@ def scrape_html_source(source_key: str, cfg: dict, timestamp: str, location_time
     for js_key, formal_name in cfg["hospitals"].items():
         c = counts.get(js_key, {})
         w = waits.get(js_key, {})
-        waiting  = c.get("waiting",      0)
-        treating = c.get("beingTreated", 0)
-        min_raw  = int(w.get("min", 0))
-        max_raw  = int(w.get("max", 0))
+        waiting  = c.get(fm["waiting"],  0)
+        treating = c.get(fm["treating"], 0)
+        min_raw  = int(w.get(fm["min_wait"], 0))
+        max_raw  = int(w.get(fm["max_wait"], 0))
         min_fmt  = format_time(min_raw)
         max_fmt  = format_time(max_raw)
         wait_str = f"{min_fmt} - {max_fmt}" if min_fmt != "N/A" else "N/A"
