@@ -201,11 +201,15 @@
     /* ── Command-centre rows: truth (now+max) above AI forecast ─────────────── */
     .cmd-row{display:flex;align-items:center;gap:.55rem;margin:.35rem 0 .2rem;flex-wrap:wrap}
     .paeds-row{border-top:1px solid #f0f2f5;margin-top:.3rem;padding-top:.3rem;opacity:.85}
+    .paeds-count{font-size:1.3rem;font-weight:800;color:#6b7280;line-height:1}
+    .paeds-wait{font-size:.75rem;color:#9090a8;white-space:nowrap}
     .cmd-ai-row{display:flex;align-items:center;gap:.45rem;margin:.1rem 0 .55rem}
     .cmd-label{font-size:.62rem;color:#9090a8;font-weight:600;text-transform:uppercase;letter-spacing:.05em;white-space:nowrap}
     .cmd-val{font-size:1.75rem;font-weight:800;color:#1a1a2e;line-height:1}
     .cmd-max-val{font-size:.9rem;font-weight:700;color:#6a6a80;white-space:nowrap}
     .cmd-forecast-val{font-size:1.75rem;font-weight:800;color:#5b72b5;line-height:1}
+    .cmd-arrow{font-size:.9rem;color:#ccc;font-weight:400;line-height:1;padding:0 .1rem}
+    .cat1-note{font-size:.58rem;color:#aaa;font-style:italic;margin-bottom:.25rem;padding-left:.1rem}
     .cmd-sep{font-size:.7rem;color:#bbb;white-space:nowrap}
     .cmd-time{font-size:.62rem;color:#bbb;margin-left:auto;white-space:nowrap}
 
@@ -704,11 +708,11 @@ function renderCard(s) {
 
           <div class="hero-split">
             <div class="hero-col hc-divider">
-              <div class="hero-sub">URGENT<span class="hero-sub-cat">Cat 1&ndash;3</span></div>
+              <div class="hero-sub">URGENT<span class="hero-sub-cat">Cat 2&ndash;3</span></div>
               <div class="hero-val">${urgentEst != null ? fmtShort(urgentEst) ?? "—" : fmtShort(current) ?? "—"}</div>
             </div>
             <div class="hero-col hc-divider hc-minor-col">
-              <div class="hero-sub">MINOR<span class="hero-sub-cat">Cat 4&ndash;5</span></div>
+              <div class="hero-sub">MINOR<span class="hero-sub-cat" title="Left = now, right = 60min forecast">Cat 4&ndash;5</span></div>
               <div class="hero-val${minorHasRange ? ' minor-has-range' : ''}">${minorRangeHtml}</div>
             </div>
             <div class="hero-col hc-divider">
@@ -720,24 +724,26 @@ function renderCard(s) {
               <div class="count-hero${treatingCount != null ? "" : " count-na"}">${treatingCount ?? "—"}</div>
             </div>
           </div>
+          ${urgentEst != null ? `<div class="cat1-note">&#9888;&thinsp;Cat 1 (life-threatening) always seen immediately &mdash; no wait</div>` : ""}
           <div class="cmd-row">
             <span class="cmd-label">All &middot; Now</span>
             <span class="cmd-val">${fmtShort(current) ?? current + "m"}</span>
+            <span class="cmd-arrow">&#8594;</span>
+            <span class="cmd-label">60min</span>
+            <span class="cmd-forecast-val">&#9201;&thinsp;${Math.round(predicted)}m</span>
             ${s.max_wait_min != null ? `<span class="cmd-sep">|</span><span class="cmd-max-val${_maxCritical ? " max-warn-critical" : ""}">Max&nbsp;${fmtShort(s.max_wait_min) ?? s.max_wait_min + "m"}</span>` : ""}
             ${hospTimeParsed ? `<span class="cmd-time">&#128336;&thinsp;${hospTimeParsed.time}&thinsp;${hospTimeParsed.global ? "Refreshed" : "AEST"}</span>` : ""}
           </div>
           ${s.paediatric ? `
           <div class="cmd-row paeds-row">
             <span class="cmd-label">&#128118; Paeds</span>
-            <span class="cmd-sep">${s.paediatric.waiting} waiting</span>
+            <span class="paeds-count">${s.paediatric.waiting}</span>
+            <span class="paeds-wait">waiting</span>
             <span class="cmd-sep">&middot;</span>
-            <span class="cmd-sep">${s.paediatric.treating} treating</span>
-            ${s.paediatric.wait_str ? `<span class="cmd-sep">&middot;</span><span class="cmd-sep" style="color:#6b7280">${s.paediatric.wait_str}</span>` : ""}
+            <span class="paeds-count">${s.paediatric.treating}</span>
+            <span class="paeds-wait">treating</span>
+            ${s.paediatric.wait_str ? `<span class="cmd-sep">&middot;</span><span class="paeds-wait">${s.paediatric.wait_str}</span>` : ""}
           </div>` : ""}
-          <div class="cmd-ai-row">
-            <span class="cmd-label">Next&nbsp;60m</span>
-            <span class="cmd-forecast-val">&#9201;&thinsp;${Math.round(predicted)}m</span>
-          </div>
           <div class="obs-meta" style="margin-bottom:.4rem">
             <span class="badge ${confCls(s.confidence_label)}">${s.confidence_label} confidence &nbsp;${(conf * 100).toFixed(0)}%</span>
             ${accuracyBadgeHtml}
