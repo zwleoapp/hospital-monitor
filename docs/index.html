@@ -157,8 +157,18 @@
     .triage60-val{font-size:1rem;font-weight:800;color:#1a1a2e}
     .triage60-sep{font-size:.6rem;color:#ddd}
 
-    /* ── VAHI FYI ─────────────────────────────────────────────────────────────── */
-    .vahi-fyi{font-size:.54rem;color:#bbb;margin-top:.3rem;font-style:italic;letter-spacing:.02em}
+    /* ── Paediatric section (vertical sub-block within card) ─────────────────── */
+    .paeds-section{
+      border-left:2px solid #aac8de;background:#f3f8fc;
+      border-radius:0 6px 6px 0;
+      padding:.42rem .65rem .38rem .65rem;
+      margin:.3rem 0 .3rem;
+    }
+    .paeds-section-hdr{
+      font-size:.56rem;font-weight:700;color:#5b8db0;
+      text-transform:uppercase;letter-spacing:.07em;
+      margin-bottom:.28rem;
+    }
 
     /* ── Legacy classes kept for historical-grid compatibility ───────────────── */
     .hero-split{display:flex;gap:0;margin-bottom:.75rem;align-items:flex-end}
@@ -507,6 +517,10 @@
 const DATA_URL            = "/latest.json";
 const HISTORY_URL         = "/history_timeline.json";
 const HOSPITAL_STALE_MINS  = 60;
+
+// ── UI display strings — edit here, not inside renderCard ─────────────────────
+const UI_CAT1_NOTE   = "Cat 1 — Always seen immediately, no wait";
+const UI_NO_FC_PAEDS = "No 60min forecast yet";
 const NETWORK_ORDER       = ["Monash Health", "Eastern Health"];
 const FORECAST_KEY        = "ed_forecast_v1";
 const MAPS_QUERIES        = {
@@ -749,27 +763,20 @@ function renderCard(s) {
             <div class="hosp">${s.site}</div>
           </div>
 
-          <!-- Line 1: Cat 1 safety note -->
-          <div class="cat1-chip">&#9889; Cat 1 &mdash; Always seen immediately, no wait</div>
+          <!-- Cat 1 safety note -->
+          <div class="cat1-chip">&#9889; ${UI_CAT1_NOTE}</div>
 
-          <!-- Line 2: Patient counts — Adult (top), Paeds below if present -->
+          <!-- Adult patient counts (label only shown when Paeds section also present) -->
           <div class="counts-block">
             <div class="count-row">
-              <span class="count-cohort">Adult</span>
+              ${s.paediatric ? `<span class="count-cohort">Adult</span>` : ""}
               <span class="count-num">${waitingCount}</span><span class="count-sub">waiting</span>
               <span class="count-dot">&middot;</span>
               <span class="count-num${treatingCount != null ? "" : " count-na"}">${treatingCount ?? "—"}</span><span class="count-sub">in treatment</span>
             </div>
-            ${s.paediatric ? `
-            <div class="count-row">
-              <span class="count-cohort">&#128118; Paeds</span>
-              <span class="count-num count-num-paeds">${s.paediatric.waiting}</span><span class="count-sub">waiting</span>
-              <span class="count-dot">&middot;</span>
-              <span class="count-num count-num-paeds">${s.paediatric.treating}</span><span class="count-sub">in treatment</span>
-            </div>` : ""}
           </div>
 
-          <!-- Line 3: All patients — Now range → 60min forecast -->
+          <!-- All patients: Now range → 60min forecast -->
           <div class="wait-time-row">
             <span class="wt-label">All &middot; Now</span>
             <span class="wt-now">${allRangeHtml}</span>
@@ -779,29 +786,34 @@ function renderCard(s) {
             ${hospTimeParsed ? `<span class="wt-time">&#128336;&thinsp;${hospTimeParsed.time}&thinsp;${hospTimeParsed.global ? "Refreshed" : "AEST"}</span>` : ""}
           </div>
 
-          <!-- Line 4: Paeds wait range (no ML forecast yet) -->
-          ${s.paediatric && s.paediatric.wait_str ? `
-          <div class="wait-time-row">
-            <span class="wt-label">&#128118; Paeds</span>
-            <span class="wt-now-paeds">${s.paediatric.wait_str.trim()}</span>
-            <span class="wt-no-fc">no 60min forecast yet</span>
-          </div>` : ""}
-
-          <!-- Line 5: In 60min triage split (Cat 2-3 | Cat 4-5) -->
+          <!-- In 60min triage split (Cat 2-3 | Cat 4-5) -->
           ${triage60Html}
+
+          <!-- Paediatric section — visually distinct vertical block (Casey & Clayton only) -->
+          ${s.paediatric ? `
+          <div class="paeds-section">
+            <div class="paeds-section-hdr">&#128118; Paediatric</div>
+            <div class="count-row" style="margin-bottom:.25rem">
+              <span class="count-num count-num-paeds">${s.paediatric.waiting}</span><span class="count-sub">waiting</span>
+              <span class="count-dot">&middot;</span>
+              <span class="count-num count-num-paeds">${s.paediatric.treating}</span><span class="count-sub">in treatment</span>
+            </div>
+            ${s.paediatric.wait_str ? `
+            <div class="wait-time-row" style="margin-bottom:0">
+              <span class="wt-label">Now</span>
+              <span class="wt-now-paeds">${s.paediatric.wait_str.trim()}</span>
+              <span class="wt-no-fc">${UI_NO_FC_PAEDS}</span>
+            </div>` : ""}
+          </div>` : ""}
 
           <!-- Trend + crisis -->
           ${crisisHtml || `<div class="trend"><span class="${a.cls}">${a.sym}</span> ${a.lbl}</div>`}
 
           <!-- Confidence + accuracy -->
-          <div class="obs-meta" style="margin-bottom:.25rem">
+          <div class="obs-meta" style="margin-bottom:.2rem">
             <span class="badge ${confCls(s.confidence_label)}">${s.confidence_label} confidence &nbsp;${(conf * 100).toFixed(0)}%</span>
             ${accuracyBadgeHtml}
           </div>
-
-          <!-- VAHI p90 + median FYI (small) -->
-          ${p90Mins != null ? `<div class="p90-badge" style="margin-bottom:.15rem">&#128737; <span class="p90-badge-val">${p90Mins}m</span> (9&#8209;in&#8209;10 &middot; VAHI&nbsp;Qly)</div>` : ""}
-          ${vahiFyiHtml}
 
           ${histAccuracyHtml}
         </div>
@@ -823,6 +835,13 @@ function renderCard(s) {
                 <span class="iv" style="color:#6b7280">${s.scraper_sync_mins != null ? s.scraper_sync_mins + " min ago" : "—"}</span>
               </div>
             </div>
+            ${(p90Mins != null || medCat123 != null || medCat45 != null) ? `
+            <div class="insights-subheader">VAHI Benchmarks &middot; ${currentVahiQLabel()}</div>
+            <div class="insights-row">
+              ${p90Mins   != null ? `<div class="insight"><span class="il">p90 (9&#8209;in&#8209;10)</span><span class="iv">${p90Mins}m</span></div>` : ""}
+              ${medCat123 != null ? `<div class="insight"><span class="il">Cat 2&ndash;3 median</span><span class="iv">${medCat123}m</span></div>` : ""}
+              ${medCat45  != null ? `<div class="insight"><span class="il">Cat 4&ndash;5 median</span><span class="iv">${medCat45}m</span></div>` : ""}
+            </div>` : ""}
           </div>
         </details>
 
