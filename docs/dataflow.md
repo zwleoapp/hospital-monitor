@@ -40,11 +40,11 @@ All hospital names, URLs, credentials, and extraction patterns live in **`config
    ```
    - `pipeline`: `full` (has wait times) or `raw_only` (status/index only, e.g. RCH)
 
-3. **Set `vahi_id`** — look up the hospital's exact "Organisation Description" in
-   `bronze/vahi_90th_Percentile_Waiting_minutes.csv`:
+3. **Set `vahi_id`** — look up the hospital's exact "Organisation Description":
    ```bash
-   python3 -c "import pandas as pd; print(sorted(pd.read_csv('bronze/vahi_90th_Percentile_Waiting_minutes.csv')['Organisation Description'].unique()))"
+   python3 scripts/fetch_vahi.py --list-orgs
    ```
+   Lists all 42 Victorian hospitals; `✓` marks those already mapped in `hospitals.csv`.
    - If the VAHI name **matches** the formal name exactly → leave `vahi_id` blank.
    - If it **differs** (e.g. `"The Royal Melbourne Hospital - City Campus"` vs `"Royal Melbourne Hospital"`) → set `vahi_id` to the VAHI name.
    - If left blank when names differ, `fetch_vahi.py` silently drops the hospital from VAHI context.

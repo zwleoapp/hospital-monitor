@@ -95,7 +95,46 @@ def load_vahi(path: pathlib.Path, value_col: str) -> pd.DataFrame:
     return df[["hospital", "quarter", value_col]]
 
 
+def list_orgs() -> None:
+    """Print all VAHI organisation names, flagging which are already mapped."""
+    import argparse as _ap
+    path = BRONZE_DIR / "vahi_90th_Percentile_Waiting_minutes.csv"
+    if not path.exists():
+        print(f"ERROR: {path} not found — download from the VAHI portal first.")
+        return
+    df = pd.read_csv(path, encoding="utf-8-sig")
+    df.columns = [c.strip() for c in df.columns]
+    all_orgs = sorted(df["Organisation Description"].str.strip().unique())
+
+    # Build reverse map: vahi_name → formal name (already configured)
+    from config.hospitals import REGISTRY
+    configured: dict[str, str] = {}
+    for r in REGISTRY:
+        vid = r.get("vahi_id", "").strip()
+        if vid:
+            configured[vid] = r["name"]
+        else:
+            configured[r["name"]] = r["name"]  # name matches directly
+
+    print(f"\n  VAHI organisations ({len(all_orgs)} total) — ✓ = already in hospitals.csv\n")
+    for org in all_orgs:
+        if org in configured:
+            print(f"  ✓  {org}  →  {configured[org]}")
+        else:
+            print(f"     {org}")
+    print()
+
+
 def main() -> None:
+    import argparse as _ap
+    p = _ap.ArgumentParser(description="Rebuild vahi_history_merged.csv from bronze source CSVs.")
+    p.add_argument("--list-orgs", action="store_true",
+                   help="List all VAHI organisation names (shows which are already mapped)")
+    args = p.parse_args()
+    if args.list_orgs:
+        list_orgs()
+        return
+
     print("Loading VAHI CSVs…")
     print(f"  Processing {len(TARGETS)} hospitals from config/hospitals.csv")
 
