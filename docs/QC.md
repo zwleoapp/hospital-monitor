@@ -1,6 +1,6 @@
 # QC — Quality Control Guardrail
 
-**Version:** 1.0 · **Updated:** 2026-04-25 · **Companion to:** [DESIGN.md](DESIGN.md)
+**Version:** 1.1 · **Updated:** 2026-05-03 · **Companion to:** [DESIGN.md](DESIGN.md)
 
 > Each gate is either a **merge-blocker** or a **runtime check**. Phase tags indicate when a gate becomes active. P1 = applies on the Pi today. P2 = adds when Databricks comes online.
 
@@ -18,6 +18,8 @@
 
 | Gate | Phase | Check | Pass criterion |
 |---|---|---|---|
+| Hospital coverage | P1 | All 7 full-pipeline hospitals (Eastern ×3, Monash ×3, RMH ×1) present in every Bronze cycle. | Missing hospital → `ingest_alerts.csv` row with `NULL_ALL_MEASURES` or `HTTP_ERROR`. |
+| Ingest alerts | P1 | `ingest_alerts.csv` checked after every scrape cycle. | Zero `HTTP_ERROR` or `PARSE_ERROR` entries in last 60 min = green; any in last 15 min = red. |
 | Schema contract | P1 | Validate scraped JSON against `config/bronze_schema_v*.json` before append. | Zero rows appended on mismatch; rejected payload written to `bronze/_rejected/` with error code. |
 | Freshness | P1 | Newest Bronze row timestamp within last 35 minutes. | `bronze_freshness_seconds < 2100`. |
 | Append integrity | P1 | Row count strictly increasing across runs. | `wc -l` before run < `wc -l` after run, every run. |
@@ -35,7 +37,8 @@
 | Idempotency | P1 | Re-running Silver on the same Bronze produces a byte-identical CSV. | `diff(silver_run_1.csv, silver_run_2.csv)` is empty. |
 | Schema contract | P1 | Output schema validated against `config/silver_schema_v*.json`. | All declared columns present, types match, no extras. |
 | Value bounds | P1 | `load_ratio ∈ [0, 5]`; `wait_minutes ∈ [0, 720]`; `treating ≥ 0`; `waiting ≥ 0`. | Out-of-bounds rows quarantined, not silently clamped. |
-| Null-rate | P1 | Null rate per column ≤ 1% over rolling 7-day window. | Heartbeat metric `silver_null_rate{col=...} ≤ 0.01`. |
+| ctx_source coverage | P1 | Every Silver row has a non-null `ctx_source` value. | Allowed values: `VAHI`, `AIHW`, `ESTIMATE`. Any null → `_assert_no_ctx_nulls` raises before write. RMH rows expected to have `ESTIMATE` until VAHI data is loaded. |
+| Null-rate | P1 | Null rate per column ≤ 1% over rolling 7-day window. Exception: `wait_momentum` NaN for first-ever row per hospital is expected and acceptable. | Heartbeat metric `silver_null_rate{col=...} ≤ 0.01`. |
 | Holiday calendar | P1 | `is_holiday` derived from `config/holidays_vic_<yyyy>.yaml`; pinned per year. | Audit script compares flagged dates to the YAML; mismatch fails the gate. |
 | DST integrity | P1 | No duplicate or missing 30-minute slot at AEST/AEDT boundary. | `scripts/qc/dst_audit.py` reports zero anomalies for the last DST event. |
 | Snapshot immutability | P2 (Gold) | Each training snapshot is content-hashed; never overwritten. | SHA-256 of snapshot recorded in `gold/_manifest.csv` with model run-ID. |
@@ -51,10 +54,10 @@ Triage table for on-call. Symptom-first so the entry point is what you observe, 
 
 | Failure | Phase | Symptom | Diagnostic | Remediation |
 |---|---|---|---|---|
-| Ingestion (HTTP) | P1 | No new rows in Bronze; service in `failed`. | `journalctl -u hospital_monitor.service -n 50` | If 4xx/5xx: check `curl_cffi` UA + TLS profile. If JSON shape changed: bump `bronze_schema_v*` and update extractor; replay last 24h from raw cache. |
+| Ingestion (HTTP) | P1 | No new rows in Bronze; `ingest_alerts.csv` has `HTTP_ERROR`. | `tail -20 /mnt/router_ssd/Data_Hub/Waiting_Live_time/ingest_alerts.csv` | If 4xx/5xx: check `curl_cffi` UA + TLS profile. For html_regex sources: check `PARSE_ERROR` — regex pattern may need updating in `hospitals.json`. |
 | Silent drift | P1 | Rows present, `load_ratio` NaN or out-of-bounds. | `python3 scripts/qc/check_silver_bounds.py --window 24h` | Quarantine offending Bronze rows; raise schema version; re-run Silver. |
 | SSD / mount | P1 | `Errno 16` (Device Busy) repeating in journal. | `ls -l /mnt/router_ssd/`; `mount \| grep router_ssd` | Confirm retry caught it; if permanent, remount; if remount fails, fall back to `/var/lib/hospital_monitor/_local_dlq`. |
-| Transformation | P1 | Silver missing columns / row drop. | `python3 scripts/transform_split_1.py --dry-run` | Compare to `silver_schema_v*`. If intentional: bump version + migration note. If regression: revert. |
+| Transformation | P1 | Silver missing columns / row drop. | `python3 scripts/transform_silver.py --dry-run` | Compare to `silver_schema_v*`. If intentional: bump version + migration note. If regression: revert. |
 | Holiday calendar | P1 | `is_holiday` wrong on a known public holiday. | `python3 scripts/qc/audit_holidays.py --year <yyyy> --state VIC` | Update `config/holidays_vic_<yyyy>.yaml`; rerun Silver for affected window. |
 | DST boundary | P1 | Duplicate / missing 30-min slot near AEST/AEDT switch. | `python3 scripts/qc/dst_audit.py` | All Bronze timestamps must be UTC; if local time leaked in, patch extractor and replay the day. |
 | Pipeline drift | P1 | Heartbeat row count deviates >10% from rolling 7-day mean. | `python3 scripts/qc/heartbeat.py --report` | If hospital redefined triage categories, freeze model and open ticket to retrain on post-change data. |
@@ -75,7 +78,9 @@ Triage table for on-call. Symptom-first so the entry point is what you observe, 
 - [ ] Heartbeat metric still emits
 - [ ] Runbook updated if a new failure mode is now possible
 - [ ] data-class stamp unchanged (or privacy-reviewed)
-- [ ] DESIGN.md decisions log updated if the change is architectural
+- [ ] DESIGN.md and dataflow.md updated if the change is architectural
+- [ ] For new hospital: hospitals.json + hospitals.csv updated; ctx_defaults added if no VAHI data
+- [ ] For html_regex source: regex patterns verified against live page before merge
 ```
 
 Tick each box or write a one-line rationale for waiving it.
@@ -95,8 +100,8 @@ Returns a single PASS/FAIL with the failing gate name. Drop in a cron or run bef
 ### 6.2 Manual Silver replay
 
 ```bash
-python3 scripts/transform_split_1.py \
-  --bronze /mnt/router_ssd/.../eastern_hospital.csv \
+python3 scripts/transform_silver.py \
+  --bronze /mnt/router_ssd/.../melbourne_southeast.csv \
   --since 2026-04-20 --until 2026-04-21 \
   --out /tmp/silver_replay.csv
 ```
@@ -105,7 +110,7 @@ python3 scripts/transform_split_1.py \
 
 ```bash
 tar czf /mnt/usb_backup/bronze_$(date +%F).tar.gz \
-  /mnt/router_ssd/.../eastern_hospital.csv
+  /mnt/router_ssd/.../melbourne_southeast.csv
 ```
 
 ### 6.4 Doc maintenance

@@ -1,8 +1,12 @@
 # Forecast Logic — Melbourne ED Monitor
 
+**Updated:** 2026-05-03
+
 ## Overview
 
-60-minute wait-time forecast engine using a Hybrid Momentum-Damping Model with a self-evolving calibration loop. The model has three tiers: a rule-based heuristic (live), an ML damping loop (Phase 2), and a human override layer (always available).
+60-minute wait-time forecast engine using a Hybrid Momentum-Damping Model with a self-evolving calibration loop. Three tiers: rule-based heuristic (always active), ML damping loop (active — runs weekly via `evolve_model.py`), and human override layer (always available).
+
+Covers **7 full-pipeline hospitals**: Eastern Health (Box Hill, Angliss, Maroondah) and Monash Health (Casey, Clayton, Dandenong) and Melbourne Health (Royal Melbourne Hospital). Royal Children's Hospital is `raw_only` — status card only, no forecast.
 
 ---
 
@@ -11,137 +15,143 @@
 ### 60-Minute Projection Formula
 
 ```
-W60 = Wnow + (M15 × 4 × D)
+W60 = clamp(max(Wnow × 0.50,  Wnow + M15 × 4 × D),  max=480)
 ```
 
 | Symbol | Meaning |
-|--------|---------|
+|---|---|
 | `W60` | Projected minimum wait in 60 minutes |
-| `Wnow` | Current minimum wait (minutes, from live Bronze) |
-| `M15` | Wait-time momentum per 15-minute cadence (computed from **Clinical Stream**) |
+| `Wnow` | Current minimum wait (minutes, from Silver) |
+| `M15` | Wait-time momentum per 15-min cadence (Silver column `wait_momentum`) |
 | `4` | Horizon steps: 60 min ÷ 15 min cadence |
-| `D` | Damping Factor (bounded [0.5, 1.2], self-evolving via ML loop) |
+| `D` | Effective damping factor — resolved by `get_effective_damping()` |
 
-### Momentum Calculation — Clinical Stream Formula
+Floor `Wnow × 0.50`: a single momentum spike cannot predict near-zero wait when the system is clearly still busy.  
+Ceiling `480 min`: 8-hour hard cap.
 
-Momentum is calculated from the **Clinical Stream** (`bronze_raw_scrapes.csv`), using system scrape timestamps rather than hospital-reported timestamps:
+### Momentum (`wait_momentum`)
+
+Computed in `transform_silver.py` on the deduped Silver CSV:
 
 ```
-M15 = (Wscrape_t − Wscrape_t−15) / 15
+wait_momentum = (min_wait_mins_t − min_wait_mins_t−1) / (gap_minutes / 15)
 ```
 
-**Rationale:** The hospital's `LastUpdatedDisplay` timestamp reflects when the hospital refreshed their public dashboard, not when real-time system pressure changed. To capture actual ED dynamics, momentum must be computed from the **scrape timestamp** (when we queried the raw Power BI endpoint). This ensures momentum reflects the true rate of change in wait times, not the hospital's publishing cadence.
+Normalised to one 15-min cadence unit regardless of actual gap (handles both 15-min and 30-min intervals). `NaN` for the first-ever row per hospital (no prior observation to diff against); all downstream consumers use `pd.notna` guards.
 
-**Constraints:**
-- Floor: `W60 ≥ Wnow × 0.50` — a single momentum spike cannot predict near-zero wait when the system is clearly still busy
-- Ceiling: `W60 ≤ 480 min` (8-hour hard cap)
+### Effective Damping (`get_effective_damping()`)
+
+Priority order — highest wins:
+
+1. `config/overrides.json → manual_damping_per_site[hospital]` (human override, per-site)
+2. `config/overrides.json → manual_damping` (human override, global)
+3. `config/model_config.json → per_hospital_damping[hospital][{day_type}_{time_band}]` (ML-evolved, segmented)
+4. `config/model_config.json → per_hospital_damping[hospital]` (ML-evolved, mean across segments)
+5. `config/model_config.json → momentum_damping` (global default, 0.50)
+
+All values clamped to `[damping_min, damping_max]` = `[0.50, 1.20]`.
 
 ### Triage Split
 
 Derived from VAHI quarterly median ratios:
 
 ```
-Urgent60 = W60 × (Median_Cat1-3 / (Median_Cat1-3 + Median_Cat4-5))
-Minor60  = W60 × (Median_Cat4-5 / (Median_Cat1-3 + Median_Cat4-5))
+ratio_urgent = Median_Cat1-3 / (Median_Cat1-3 + Median_Cat4-5)
+Urgent60 = W60 × ratio_urgent
+Minor60  = W60 × (1 − ratio_urgent)
 ```
 
-Where `Median_Cat1-3` and `Median_Cat4-5` are the VAHI quarterly medians from `vahi_history_merged.csv`. When VAHI data is unavailable, the current all-category wait is used as the fallback.
+VAHI medians come from Silver `ctx_wait_median_cat123_mins` / `ctx_wait_median_cat45_mins`. For Royal Melbourne Hospital (no VAHI data yet), these are proxy values from `ctx_defaults` in `hospitals.json` (`ctx_source="ESTIMATE"`).
 
 ### Confidence Score
-
-Composite of three signals, each grounded in the 14-year AIHW baseline:
 
 ```
 confidence = 0.50 × LOS_score + 0.30 × momentum_score + 0.20 × p90_score
 ```
 
-| Signal | Formula | Weight | Rationale |
-|--------|---------|--------|-----------|
-| `LOS_score` | `min(1, LOS_pct_under_4hr / 70)` | 0.50 | Hospital near 70% national target = predictable regime |
-| `momentum_score` | `max(0, 1 − \|M15\| / 30)` | 0.30 | Stable trend = more extrapolable |
-| `p90_score` | `max(0, 1 − max(0, Wnow − P90) / P90)` | 0.20 | Within historical norms = reliable baseline |
+| Signal | Formula | Weight |
+|---|---|---|
+| `LOS_score` | `min(1, LOS_pct_under_4hr / 70)` | 0.50 — proximity to 70% national LOS target |
+| `momentum_score` | `max(0, 1 − |M15| / 30)` | 0.30 — stable trend = more extrapolable |
+| `p90_score` | `max(0, 1 − max(0, Wnow − P90) / P90)` | 0.20 — within historical norms |
 
 Labels: **High** (≥ 0.70) | **Moderate** (≥ 0.40) | **Low** (< 0.40)
+
+For hospitals with `ctx_source="ESTIMATE"`, confidence uses proxy ctx values — treat as indicative only until real VAHI benchmarks are onboarded.
 
 ### Strain Index
 
 ```
-Strain = (Waiting + Treating) / Institutional_Capacity
+strain_index = predicted_wait_min / p90_wait_min
 ```
 
-Where `Institutional_Capacity` is derived from AIHW 10-year baseline annual presentations. A Strain Index > 1.0 indicates the hospital is operating above its typical load.
+Where `p90_wait_min` = VAHI quarterly 90th-percentile wait (Silver `ctx_wait_p90_mins`). Values: < 0.70 = low load, 0.70–1.00 = moderate, > 1.00 = above historical normal. A strain of 1.5 means the predicted wait is 1.5× the hospital's normal p90.
 
-### Forecast Accuracy Formula
+*Note: Earlier versions defined strain as `(Waiting + Treating) / Institutional_Capacity`. That formula was replaced — the predicted_wait / p90 ratio is more directly comparable across hospitals with different absolute capacities.*
+
+### Forecast Accuracy
 
 ```
-Accuracy = 100 − (|Predicted − Actual| / Actual × 100)
+accuracy = 100 − (|W60_predicted − W60_actual| / W60_actual × 100)
 ```
 
-Computed in `get_history.py` for each snapshot where the T+60 observation exists (±15-minute tolerance for cadence drift). Results are stored in `accuracy_postmortem.jsonl`.
+Computed in `get_history.py` for each snapshot where the T+60 observation is available (±15-min tolerance). Written to `forecast_audit.csv` on the SSD for ML backtesting.
 
 ---
 
-## Tier 2: Self-Evolving Damping — ML Loop (`evolve_damping_factors()`)
+## Tier 2: Self-Evolving Damping — `evolve_model.py`
 
-**Status: Phase 2 placeholder — not yet active.**
+**Status: Active — runs weekly (Sunday 08:00 AEST local cron).**
 
-### How It Works
+### Segmentation
 
-`evolve_damping_factors()` reads the last 72 hours of accuracy post-mortem entries from:
+Damping is evolved separately for each `(hospital, day_type, time_band)` combination:
 
+- `day_type`: `weekday` | `weekend` | `public_holiday` (Victorian calendar via `holidays` package)
+- `time_band`: `overnight` (00–06) | `morning` (06–12) | `afternoon` (12–18) | `evening` (18–24) (Melbourne local)
+
+Compound key: `"weekday_morning"`, `"weekend_evening"`, etc. — 12 segments maximum per hospital.
+
+### Algorithm
+
+For each `(hospital, segment)` with ≥ 4 rows in `forecast_audit.csv`:
+
+1. Grid-search `d ∈ [damping_min, damping_max]` in 0.05 steps
+2. For each candidate: compute `MAE = mean(|project_wait(current, momentum, d) − actual|)`
+3. Accept `best_d` only if its MAE beats the current damping's MAE — never regress
+4. Write `{hospital: {segment: best_d}}` to `config/model_config.json` — **merge, never replace** (hospitals below minimum data threshold keep their previous evolved values)
+
+**Minimum data requirement:** 24 rows per hospital (across all segments) before evolution runs.
+
+### Running Manually
+
+```bash
+python3 scripts/evolve_model.py --audit   # per-segment breakdown, no write
+python3 scripts/evolve_model.py           # compute and write to model_config.json
+python3 scripts/evolve_model.py --dry-run # compute only, no write
 ```
-/mnt/router_ssd/Data_Hub/Waiting_Live_time/accuracy_postmortem.jsonl
-```
-
-For each hospital, it searches for the damping value `D` that would have minimised mean-absolute-error over that window. The evolved value is written to the pipeline for use on the next run cycle.
-
-### Safety Constraints
-
-All ML-evolved damping values are hard-clamped before use:
-
-```python
-DAMPING_MIN = 0.50   # D cannot go below this
-DAMPING_MAX = 1.20   # D cannot exceed this
-```
-
-This is enforced in both `get_effective_damping()` and `evolve_damping_factors()`.
 
 ### Anomaly Exclusion
 
-Snapshots where the absolute error exceeds 200% of actual are **excluded from ML training** and appended to the anomaly log for human review:
+Snapshots where `|error_pct| > anomaly_error_pct` (default 200%) are excluded from ML training and logged to `accuracy_postmortem.jsonl` anomaly section for human review.
 
-```
-/mnt/router_ssd/Data_Hub/Waiting_Live_time/damping_anomalies.jsonl
-```
+### Future Path
 
-Typical causes: system outages, data feed interruptions, major surge events. These should not influence the damping calibration.
+Once ~500 rows per hospital (≈6 months), replace grid search with multivariate Ridge regression using `current_wait`, `momentum`, `treating_count`, `hour_sin/cos`, `is_weekend`, `is_holiday` as features. `forecast_audit.csv` schema already captures all required inputs.
 
 ---
 
-## Tier 3: Human Intervention
+## Tier 3: Human Override (`config/overrides.json`)
 
-### Override File
+Read every pipeline cycle — no restart required. Takes priority over all ML-evolved values.
 
-`config/overrides.json` provides manual control over the forecast engine. Values here take **priority over all ML-evolved values**. The file is read every pipeline cycle — no restart required.
-
-**Supported keys:**
-
-| Key | Type | Effect |
-|-----|------|--------|
-| `manual_damping` | float | Override damping for all hospitals |
-| `manual_damping_per_site` | object | Per-hospital damping, keyed by exact hospital name |
-
-Keys prefixed with `_` (e.g., `_manual_damping`) are treated as comments and ignored.
-
-**Example — global reset to default:**
 ```json
 {
   "manual_damping": 0.50,
-  "_comment": "Manually set 2026-05-01 — Box Hill maintenance surge"
+  "_comment": "Global reset — 2026-05-01 Box Hill maintenance surge"
 }
 ```
 
-**Example — per-hospital:**
 ```json
 {
   "manual_damping_per_site": {
@@ -150,115 +160,45 @@ Keys prefixed with `_` (e.g., `_manual_damping`) are treated as comments and ign
 }
 ```
 
-### When to Intervene
-
-- A major infrastructure event at a hospital (ward closures, surge capacity activation)
-- The ML-evolved damping has drifted outside expected behaviour
-- Resetting to a known-good baseline after an anomalous period
-
-### How to Reset
-
-1. Open `config/overrides.json`
-2. Set `manual_damping` to the desired value (nominal default: `0.50`)
-3. Run the pipeline: `bash run_monitor.sh`
-4. Confirm the dashboard reflects the reset
-5. Remove the `manual_damping` key once the anomalous period has passed
-
-### Reviewing Anomalies
-
-```bash
-# View recent anomaly entries
-tail -20 /mnt/router_ssd/Data_Hub/Waiting_Live_time/damping_anomalies.jsonl
-
-# Count anomalies by hospital
-grep -o '"hospital":"[^"]*"' /mnt/router_ssd/Data_Hub/Waiting_Live_time/damping_anomalies.jsonl | sort | uniq -c
-```
+Keys prefixed `_` are ignored.
 
 ---
 
-## Data Integrity
+## Silver Context Tiers for Forecast
 
-### Monash Health — Per-Campus Timestamp Extraction
+Silver enriches Bronze with context benchmarks in three tiers:
 
-Monash Health requires per-campus timestamp extraction due to independent Power BI report refresh cycles. Casey, Dandenong, and Clayton each run separate Power BI refresh jobs and may show different `LastUpdatedDisplay` values at any given scrape.
+| `ctx_source` | Data | Quality |
+|---|---|---|
+| `"VAHI"` | Quarterly VAHI benchmarks (Oct 2024–) | Best — hospital-specific quarterly actuals |
+| `"AIHW"` | Annual AIHW episode data (2011–2025) | Lower fidelity — total ED episode time vs wait-to-treatment |
+| `"ESTIMATE"` | Proxy values from `ctx_defaults` in `hospitals.json` | Indicative only — used for newly onboarded hospitals without VAHI history |
 
-**Power BI Data Source:** `CurrentPatients` entity
-
-**Clinical Properties Extracted:**
-| Property | Power BI Column | Scraper Mapping | Purpose |
-|----------|----------------|-----------------|---------|
-| Total Waiting | `TotalWaiting` | `col_waiting` (G1) | Patient count waiting to be seen |
-| Total Being Treated | `TotalBeingTreated` | `col_treating` (G2) | Patient count currently in treatment |
-| Estimated Time | `Estimated Time` | `col_wait_str` (G3) | Wait range string (e.g., "2 hr 46 min - 6 hr 50 min") |
-| Last Updated Display | `LastUpdatedDisplay` | `col_last_updated` (G4) | Per-campus data freshness timestamp (e.g., "20:31") |
-| Adult/Paed Group | `AdultPaed` | `group_col` (G0) | Patient category grouping — scraper targets "Adult" group |
-| Campus Filter | `Campus` | `hospital_col` (WHERE clause) | Campus name filter (Casey/Clayton/Dandenong) |
-
-The scraper sends one grouped query per campus in the batch POST (`_scrape_powerbi_source()`). Each query groups by `AdultPaed` and selects columns G0–G4. The DSR response returns all patient-category rows (Adult + Paediatric) for that campus.
-
-The scraper:
-1. Extracts G4 (`LastUpdatedDisplay`) from each campus's DSR result
-2. Writes per-campus timestamps to sidecar JSON
-3. Scans ALL patient groups (Adult + Paed) for the highest wait upper-bound — this becomes the campus's `max_wait_mins`
-
-**TEMPORAL DRIFT RESOLUTION (2026-04-30):** The scraper implements a **hybrid Trust vs. Pulse** architecture:
-
-**Trust Stream (reported_*):** Webpage-published timestamps and values that users see.
-- Extraction method: HTML scraping of visual tiles (when available)
-- Falls back to Power BI API `LastUpdatedDisplay` (report-level)
-- Used for dashboard UI display
-
-**Pulse Stream (raw_query_*):** Real-time Power BI API metrics for ML momentum.
-- Extraction method: Power BI batch API `/querydata`
-- Captures system pressure at `scrape_timestamp_utc`
-- Used for ML forecast momentum calculation
-
-**Current limitation:** Power BI embedded pages require JavaScript rendering. The visual tiles showing per-campus timestamps (Casey 18:26, Clayton 18:06, Dandenong 17:26) query **separate Power BI visuals** not exposed in the `CurrentPatients` entity batch query. To extract true per-campus timestamps, the scraper needs:
-1. Power BI visual Job IDs for each campus's "Last Updated" tile
-2. OR browser automation (Selenium/Playwright) to render JavaScript and scrape DOM
-3. OR access to the underlying DAX measure that computes per-campus refresh times
-
-**Workaround:** If per-campus timestamps are critical, user should inspect browser DevTools Network tab → filter for `/querydata` POST requests → identify the Job IDs for the timestamp tiles → provide them to update the scraper query list.
-
-`publish_latest.py` reads this sidecar and maps each timestamp to the matching site's `last_updated_display` field in `latest.json`. When all campuses return identical timestamps, the scraper tags them with `^` prefix to signal report-level (not per-campus) freshness.
-
-**Eastern Health** uses an HTTP `Date` response header fallback (prefixed `~`) since its pages do not embed a native published timestamp.
-
-### Data Validation Policy — The "Published Truth" Standard
-
-**Primary source:** Data values must align with what is visually published on the hospital's public-facing webpage, not with raw internal Power BI query output.
-
-**Why this matters:** The internal Power BI query engine and the public dashboard UI operate on independent refresh cycles. At any moment the raw `SemanticQueryDataShapeCommand` response may reflect a model state that has not yet propagated to the rendered tiles a patient would see. If the public webpage shows 40 minutes and this monitor shows 32 minutes sourced from an internal query, users lose trust in the tool — and rightly so, because the hospital's official public statement is 40 minutes.
-
-**Implications for scraper design:**
-
-| Source | Standard | Notes |
-|--------|----------|-------|
-| Eastern Health | UI-scraped (`patientCounts` + `predictedWaitMinutes` JS variables embedded by the page renderer) | Matches exactly what the public page displays |
-| Monash Health | Power BI batch API (`/querydata`) — the same data that populates the rendered tiles | Acceptable because the API is the render-time data source for the public tiles, not a pre-render internal feed |
-
-When discrepancies appear between monitor values and values a user sees on the hospital website, the website value is Ground Truth. Investigate whether the scraper is hitting a pre-render endpoint, a cached layer, or a different entity/column than the one driving the public tile.
+Royal Melbourne Hospital currently uses `"ESTIMATE"`. Confidence scores and triage splits for RMH should be treated as approximate until real VAHI data is loaded.
 
 ---
 
 ## Data Flow Summary
 
 ```
-Bronze CSV (live scrape)
+Bronze CSV (scrape every 15 min)
     │
     ▼
-transform_silver.py → Silver CSV (momentum, VAHI context enriched)
+transform_silver.py
+    │  Context join: VAHI → AIHW → ctx_defaults (3-tier LEFT join)
+    │  Adds: wait_momentum, load_ratio, temporal features
     │
     ▼
-predict_next.py → outlook JSON
-    │  get_effective_damping()
-    │    ├─ config/overrides.json (Tier 3 — human override)
-    │    ├─ evolve_damping_factors() (Tier 2 — ML loop, Phase 2)
-    │    └─ MOMENTUM_DAMPING constant (Tier 1 — default 0.50)
+publish_latest.py
+    │  predict_next.py → W60 via get_effective_damping()
+    │     ├─ overrides.json      (Tier 3)
+    │     ├─ per_hospital_damping (Tier 2, per-segment, from evolve_model.py)
+    │     └─ momentum_damping    (Tier 1, global default)
+    │  get_history.py → history_timeline.json
+    │                 → forecast_audit.csv (for evolve_model.py)
     │
     ▼
-get_history.py → history_timeline.json + accuracy_postmortem.jsonl
-    │
-    ▼
-publish_latest.py → latest.json → data branch → GitHub Pages
+latest.json → data branch → Vercel
 ```
+
+**Not in the forecast pipeline:** Royal Children's Hospital (`raw_only`) — status card only.
