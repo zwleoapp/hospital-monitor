@@ -26,6 +26,71 @@ All hospital names, URLs, credentials, and extraction patterns live in **`config
 
 ---
 
+## Ops Guide — Adding, Renaming, or Removing a Hospital
+
+### Adding a new hospital
+
+1. **`config/hospitals.json`** — add a source entry with parser type, URL, and patterns/credentials.
+   For `html_regex` sources also add `status_map` (if categorical) and optionally `ctx_defaults`
+   (temporary proxy VAHI benchmarks — remove once step 4 is done).
+
+2. **`config/hospitals.csv`** — add one row:
+   ```
+   name, network_type, scraper_type, vahi_id, aihw_id, is_active, pipeline
+   ```
+   - `pipeline`: `full` (has wait times) or `raw_only` (status/index only, e.g. RCH)
+
+3. **Set `vahi_id`** — look up the hospital's exact "Organisation Description" in
+   `bronze/vahi_90th_Percentile_Waiting_minutes.csv`:
+   ```bash
+   python3 -c "import pandas as pd; print(sorted(pd.read_csv('bronze/vahi_90th_Percentile_Waiting_minutes.csv')['Organisation Description'].unique()))"
+   ```
+   - If the VAHI name **matches** the formal name exactly → leave `vahi_id` blank.
+   - If it **differs** (e.g. `"The Royal Melbourne Hospital - City Campus"` vs `"Royal Melbourne Hospital"`) → set `vahi_id` to the VAHI name.
+   - If left blank when names differ, `fetch_vahi.py` silently drops the hospital from VAHI context.
+     It now prints a WARNING with a hint — treat that as a required fix before merging.
+
+4. **Rebuild VAHI merged file**:
+   ```bash
+   python3 scripts/fetch_vahi.py
+   ```
+   Automatically picks up the new hospital. Verify output says the new hospital is in "Hospitals covered".
+   Remove `ctx_defaults` from `hospitals.json` once this step completes.
+
+5. **Rebuild Silver**:
+   ```bash
+   python3 scripts/transform_silver.py
+   ```
+   Check `ctx_source breakdown` in the output — new hospital should show `VAHI`, not `ESTIMATE`.
+
+6. **Test scrape + publish**:
+   ```bash
+   python3 scripts/hospital_monitor.py
+   python3 scripts/publish_latest.py --push
+   ```
+
+### Renaming a hospital (formal name change)
+
+1. Update `name` in `hospitals.csv`.
+2. Update the `hospitals` mapping in `hospitals.json` (parser key → formal name).
+3. Check `vahi_id` — if it was blank because names matched, set it to the old VAHI name explicitly so the mapping still works after the rename.
+4. Run `python3 scripts/fetch_vahi.py` and `python3 scripts/transform_silver.py`.
+5. Update `vahi_benchmarks.per_hospital_p90_mins` key in `hospitals.json` to the new name.
+
+### Renaming/updating a VAHI organisation name
+
+The VAHI portal occasionally renames hospitals. If `fetch_vahi.py` starts WARNING about a missing hospital:
+
+1. Check the current name in `bronze/vahi_*.csv` (re-download the latest CSV from the VAHI portal).
+2. Update `vahi_id` in `hospitals.csv` to match the new VAHI name.
+3. Run `python3 scripts/fetch_vahi.py`.
+
+### Deactivating a hospital
+
+Set `is_active=false` in `hospitals.csv`. The hospital is immediately removed from scraping and Gold output. Historical Silver data is preserved (Silver is rebuilt from Bronze, Bronze is append-only).
+
+---
+
 ## Scraper Types
 
 ### `html_js` — Eastern Health
