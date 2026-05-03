@@ -116,7 +116,51 @@
     .stale-card .dot{background:#e0e0e0;box-shadow:none}
     .hosp{font-weight:700;font-size:.96rem}
 
-    /* ── Split hero: Urgent | Minor (primary) | Patient Count ─────────────── */
+    /* ── Cat 1 chip ──────────────────────────────────────────────────────────── */
+    .cat1-chip{display:inline-flex;align-items:center;gap:.28rem;
+               font-size:.63rem;font-weight:600;color:#2a7a6e;
+               background:#e8f7f5;border-radius:4px;
+               padding:.22rem .6rem;margin-bottom:.55rem}
+
+    /* ── Patient count rows ───────────────────────────────────────────────────── */
+    .counts-block{margin-bottom:.55rem}
+    .count-row{display:flex;align-items:baseline;gap:.32rem;flex-wrap:wrap;margin-bottom:.12rem}
+    .count-cohort{font-size:.58rem;color:#9090a8;font-weight:600;
+                  text-transform:uppercase;letter-spacing:.05em;
+                  min-width:2.8rem;white-space:nowrap}
+    .count-num{font-size:1.75rem;font-weight:800;color:#1a1a2e;line-height:1}
+    .count-num-paeds{font-size:1.3rem;color:#6b7280}
+    .count-sub{font-size:.68rem;color:#bbb}
+    .count-dot{font-size:.7rem;color:#ddd}
+
+    /* ── Wait time rows ───────────────────────────────────────────────────────── */
+    .wait-time-row{display:flex;align-items:center;gap:.42rem;flex-wrap:wrap;margin-bottom:.28rem}
+    .wt-label{font-size:.6rem;color:#9090a8;font-weight:600;
+              text-transform:uppercase;letter-spacing:.05em;white-space:nowrap}
+    .wt-now{font-size:1.4rem;font-weight:800;color:#1a1a2e;line-height:1}
+    .wait-range-sep{font-size:.85rem;color:#bbb;padding:0 .06rem}
+    .wait-range-max{font-size:.95rem;font-weight:700;color:#6a6a80}
+    .wt-arrow{font-size:.85rem;color:#ccc}
+    .wt-fc{font-size:1.4rem;font-weight:800;color:#5b72b5;line-height:1}
+    .wt-time{font-size:.62rem;color:#bbb;margin-left:auto;white-space:nowrap}
+    .wt-now-paeds{font-size:.95rem;font-weight:700;color:#9090a8}
+    .wt-no-fc{font-size:.54rem;color:#ccc;font-style:italic}
+
+    /* ── In 60min triage split ───────────────────────────────────────────────── */
+    .triage60-row{display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;
+                  background:#f8fafc;border-radius:6px;
+                  padding:.32rem .55rem;margin:.2rem 0 .45rem}
+    .triage60-lbl{font-size:.56rem;color:#aaa;font-weight:700;
+                  text-transform:uppercase;letter-spacing:.07em;white-space:nowrap}
+    .triage60-item{display:flex;align-items:baseline;gap:.18rem}
+    .triage60-cat{font-size:.55rem;color:#aaa;text-transform:uppercase;letter-spacing:.04em}
+    .triage60-val{font-size:1rem;font-weight:800;color:#1a1a2e}
+    .triage60-sep{font-size:.6rem;color:#ddd}
+
+    /* ── VAHI FYI ─────────────────────────────────────────────────────────────── */
+    .vahi-fyi{font-size:.54rem;color:#bbb;margin-top:.3rem;font-style:italic;letter-spacing:.02em}
+
+    /* ── Legacy classes kept for historical-grid compatibility ───────────────── */
     .hero-split{display:flex;gap:0;margin-bottom:.75rem;align-items:flex-end}
     .hero-col{display:flex;flex-direction:column;flex:0 0 auto}
     .hc-divider{border-right:1px solid #ebebeb;padding-right:1.1rem;margin-right:1.1rem}
@@ -124,8 +168,6 @@
     .hero-sub{font-size:.6rem;text-transform:uppercase;letter-spacing:.07em;
               color:#aaa;font-weight:600;margin-bottom:.1rem;
               display:flex;align-items:center;flex-wrap:wrap;gap:.18rem}
-    .hero-sub-primary{color:#1a1a2e;font-weight:700}
-    /* Minor is largest (most likely patient type); urgent is bold but smaller */
     .hero-val{font-size:1.75rem;font-weight:800;line-height:1;color:#1a1a2e}
     .hero-val-primary{font-size:2.2rem}
     /* Patient count — 20% smaller than original (1.45rem → 1.16rem) */
@@ -620,9 +662,10 @@ function renderCard(s) {
     const urgentEst    = splits?.urgent ?? null;
     const minorEst     = splits?.minor  ?? null;
     const minorForecastSplits = calcSplitEstimates(predicted, medCat123, medCat45);
-    const minorForecast = minorForecastSplits?.minor ?? null;
+    const minorForecast  = minorForecastSplits?.minor  ?? null;
+    const urgentForecast = minorForecastSplits?.urgent ?? null;
 
-    // Range: min always left, max always right
+    // Minor range: left=now, right=60min forecast (for triage split display)
     const minorNowVal   = minorEst ?? current;
     const minorFcastVal = minorForecast != null ? Math.round(minorForecast) : null;
     const minorLoVal    = minorFcastVal != null ? Math.min(minorNowVal, minorFcastVal) : minorNowVal;
@@ -633,6 +676,12 @@ function renderCard(s) {
     const minorRangeHtml = minorHasRange
       ? `${minorNowStr}<span class="minor-range-sep">–</span><span class="minor-range-end">${minorFcastStr}</span>`
       : minorNowStr;
+
+    // All-patients range (portal min – max) for the main NOW row
+    const allMaxStr   = (s.max_wait_min != null && s.max_wait_min > current) ? fmtShort(s.max_wait_min) : null;
+    const allRangeHtml = allMaxStr
+      ? `${fmtShort(current) ?? "—"}<span class="wait-range-sep">–</span><span class="wait-range-max">${allMaxStr}</span>`
+      : (fmtShort(current) ?? "—");
 
     const hospTimeParsed = parseHospDataTime(s.last_updated_display);
 
@@ -679,24 +728,18 @@ function renderCard(s) {
          : `<div class="hist-accuracy hist-no-acc">&#8987; Calibrating&hellip;</div>`)
       : "";
 
-    // Triage benchmark chips — compare split estimates against VAHI historical medians
-    let triageBenchHtml = "";
-    if (medCat45 != null || medCat123 != null) {
-      const minorCmp  = minorEst  ?? current;
-      const urgentCmp = urgentEst ?? current;
-      const qLabel    = currentVahiQLabel();
-      triageBenchHtml = `
-        <div class="triage-bench">
-          <div class="tb-chip ${triageCls(medCat123, urgentCmp)}">
-            <span class="tb-cat">Urgent (Cat 1&ndash;3)</span>
-            <span class="tb-usual">${medCat123 != null ? `Median <span class="tb-median-val">${medCat123}m</span><span class="tb-qsrc">(YoY VAHI ${qLabel})</span>` : "—"}</span>
-          </div>
-          <div class="tb-chip ${triageCls(medCat45, minorCmp)}">
-            <span class="tb-cat">Minor (Cat 4&ndash;5)</span>
-            <span class="tb-usual">${medCat45 != null ? `Median <span class="tb-median-val">${medCat45}m</span><span class="tb-qsrc">(YoY VAHI ${qLabel})</span>` : "—"}</span>
-          </div>
-        </div>`;
-    }
+    // In-60min triage split row (Cat 2-3 and Cat 4-5 forecasts)
+    const triage60Html = (urgentForecast != null || minorForecast != null) ? `
+      <div class="triage60-row">
+        <span class="triage60-lbl">In 60min</span>
+        ${urgentForecast != null ? `<span class="triage60-item"><span class="triage60-cat">Cat 2&ndash;3</span>&thinsp;<span class="triage60-val">${fmtShort(Math.round(urgentForecast)) ?? "—"}</span></span>` : ""}
+        ${urgentForecast != null && minorForecast != null ? `<span class="triage60-sep">|</span>` : ""}
+        ${minorForecast != null ? `<span class="triage60-item"><span class="triage60-cat">Cat 4&ndash;5</span>&thinsp;<span class="triage60-val">${minorRangeHtml}</span></span>` : ""}
+      </div>` : "";
+
+    // VAHI benchmark — FYI only, compact single line
+    const vahiFyiHtml = (medCat123 != null || medCat45 != null) ? `
+      <div class="vahi-fyi">VAHI median &middot; ${medCat123 != null ? `Cat 2&ndash;3: ${medCat123}m` : ""}${medCat123 != null && medCat45 != null ? " &middot; " : ""}${medCat45 != null ? `Cat 4&ndash;5: ${medCat45}m` : ""} &middot; ${currentVahiQLabel()}</div>` : "";
 
     return `
       <div class="card ${c}${isStale ? " stale-card" : ""}">
@@ -706,53 +749,60 @@ function renderCard(s) {
             <div class="hosp">${s.site}</div>
           </div>
 
-          <div class="hero-split">
-            <div class="hero-col hc-divider">
-              <div class="hero-sub">URGENT<span class="hero-sub-cat">Cat 2&ndash;3</span></div>
-              <div class="hero-val">${urgentEst != null ? fmtShort(urgentEst) ?? "—" : fmtShort(current) ?? "—"}</div>
+          <!-- Line 1: Cat 1 safety note -->
+          <div class="cat1-chip">&#9889; Cat 1 &mdash; Always seen immediately, no wait</div>
+
+          <!-- Line 2: Patient counts — Adult (top), Paeds below if present -->
+          <div class="counts-block">
+            <div class="count-row">
+              <span class="count-cohort">Adult</span>
+              <span class="count-num">${waitingCount}</span><span class="count-sub">waiting</span>
+              <span class="count-dot">&middot;</span>
+              <span class="count-num${treatingCount != null ? "" : " count-na"}">${treatingCount ?? "—"}</span><span class="count-sub">in treatment</span>
             </div>
-            <div class="hero-col hc-divider hc-minor-col">
-              <div class="hero-sub">MINOR<span class="hero-sub-cat" title="Left = now, right = 60min forecast">Cat 4&ndash;5</span></div>
-              <div class="hero-val${minorHasRange ? ' minor-has-range' : ''}">${minorRangeHtml}</div>
-            </div>
-            <div class="hero-col hc-divider">
-              <div class="hero-sub">&#128100; Waiting</div>
-              <div class="count-hero">${waitingCount}</div>
-            </div>
-            <div class="hero-col">
-              <div class="hero-sub">&#129658; In Treatment</div>
-              <div class="count-hero${treatingCount != null ? "" : " count-na"}">${treatingCount ?? "—"}</div>
-            </div>
+            ${s.paediatric ? `
+            <div class="count-row">
+              <span class="count-cohort">&#128118; Paeds</span>
+              <span class="count-num count-num-paeds">${s.paediatric.waiting}</span><span class="count-sub">waiting</span>
+              <span class="count-dot">&middot;</span>
+              <span class="count-num count-num-paeds">${s.paediatric.treating}</span><span class="count-sub">in treatment</span>
+            </div>` : ""}
           </div>
-          ${urgentEst != null ? `<div class="cat1-note">&#9888;&thinsp;Cat 1 (life-threatening) always seen immediately &mdash; no wait</div>` : ""}
-          <div class="cmd-row">
-            <span class="cmd-label">All &middot; Now</span>
-            <span class="cmd-val">${fmtShort(current) ?? current + "m"}</span>
-            <span class="cmd-arrow">&#8594;</span>
-            <span class="cmd-label">60min</span>
-            <span class="cmd-forecast-val">&#9201;&thinsp;${Math.round(predicted)}m</span>
-            ${s.max_wait_min != null ? `<span class="cmd-sep">|</span><span class="cmd-max-val${_maxCritical ? " max-warn-critical" : ""}">Max&nbsp;${fmtShort(s.max_wait_min) ?? s.max_wait_min + "m"}</span>` : ""}
-            ${hospTimeParsed ? `<span class="cmd-time">&#128336;&thinsp;${hospTimeParsed.time}&thinsp;${hospTimeParsed.global ? "Refreshed" : "AEST"}</span>` : ""}
+
+          <!-- Line 3: All patients — Now range → 60min forecast -->
+          <div class="wait-time-row">
+            <span class="wt-label">All &middot; Now</span>
+            <span class="wt-now">${allRangeHtml}</span>
+            <span class="wt-arrow">&#8594;</span>
+            <span class="wt-label">60min</span>
+            <span class="wt-fc">&#9201;&thinsp;${Math.round(predicted)}m</span>
+            ${hospTimeParsed ? `<span class="wt-time">&#128336;&thinsp;${hospTimeParsed.time}&thinsp;${hospTimeParsed.global ? "Refreshed" : "AEST"}</span>` : ""}
           </div>
-          ${s.paediatric ? `
-          <div class="cmd-row paeds-row">
-            <span class="cmd-label">&#128118; Paeds</span>
-            <span class="paeds-count">${s.paediatric.waiting}</span>
-            <span class="paeds-wait">waiting</span>
-            <span class="cmd-sep">&middot;</span>
-            <span class="paeds-count">${s.paediatric.treating}</span>
-            <span class="paeds-wait">treating</span>
-            ${s.paediatric.wait_str ? `<span class="cmd-sep">&middot;</span><span class="paeds-wait">${s.paediatric.wait_str}</span>` : ""}
+
+          <!-- Line 4: Paeds wait range (no ML forecast yet) -->
+          ${s.paediatric && s.paediatric.wait_str ? `
+          <div class="wait-time-row">
+            <span class="wt-label">&#128118; Paeds</span>
+            <span class="wt-now-paeds">${s.paediatric.wait_str.trim()}</span>
+            <span class="wt-no-fc">no 60min forecast yet</span>
           </div>` : ""}
-          <div class="obs-meta" style="margin-bottom:.4rem">
+
+          <!-- Line 5: In 60min triage split (Cat 2-3 | Cat 4-5) -->
+          ${triage60Html}
+
+          <!-- Trend + crisis -->
+          ${crisisHtml || `<div class="trend"><span class="${a.cls}">${a.sym}</span> ${a.lbl}</div>`}
+
+          <!-- Confidence + accuracy -->
+          <div class="obs-meta" style="margin-bottom:.25rem">
             <span class="badge ${confCls(s.confidence_label)}">${s.confidence_label} confidence &nbsp;${(conf * 100).toFixed(0)}%</span>
             ${accuracyBadgeHtml}
           </div>
-          <div class="p90-maxwait-row">
-            ${p90Mins != null ? `<div class="p90-badge">&#128737; <span class="p90-badge-val">${p90Mins}m</span> (9&#8209;in&#8209;10 &middot; VAHI&nbsp;Qly)</div>` : ""}
-          </div>
-          ${crisisHtml || `<div class="trend"><span class="${a.cls}">${a.sym}</span> ${a.lbl}</div>`}
-          ${triageBenchHtml}
+
+          <!-- VAHI p90 + median FYI (small) -->
+          ${p90Mins != null ? `<div class="p90-badge" style="margin-bottom:.15rem">&#128737; <span class="p90-badge-val">${p90Mins}m</span> (9&#8209;in&#8209;10 &middot; VAHI&nbsp;Qly)</div>` : ""}
+          ${vahiFyiHtml}
+
           ${histAccuracyHtml}
         </div>
 
