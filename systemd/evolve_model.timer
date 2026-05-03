@@ -1,0 +1,11 @@
+[Unit]
+Description=Weekly ML damping evolution — runs every Monday 06:00 Melbourne time
+
+[Timer]
+# Monday 06:00 AEST/AEDT (system timezone = Australia/Melbourne)
+# Captures a full week of forecast_audit.csv data including weekend patterns
+OnCalendar=Mon *-*-* 06:00:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target

@@ -19,7 +19,7 @@ hospital-monitor/
 ├── README.md           ← you are here
 ├── scripts/            ← Pi-side ingest + transform (existing)
 │   ├── hospital_monitor.py
-│   └── transform_split_1.py
+│   └── transform_silver.py
 ├── docs/
 │   ├── DESIGN.md       ← architecture, phases, decisions log
 │   └── QC.md           ← QC guardrail: per-layer gates, runbook, change-control

@@ -1,0 +1,15 @@
+[Unit]
+Description=Evolve per-hospital ML damping factors from forecast_audit.csv
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=pi-zwapp
+WorkingDirectory=/home/pi-zwapp/hospital-monitor
+ExecStart=/bin/bash -c '\
+  echo "=== evolve_model audit ===" && \
+  python3 scripts/evolve_model.py --audit && \
+  echo "=== evolve_model write ===" && \
+  python3 scripts/evolve_model.py'
+StandardOutput=journal
+StandardError=journal
