@@ -140,7 +140,52 @@ Phase 1 is deliberately small, but the lifecycle shape is set now so Phase 2 is 
 
 ---
 
-## 6. Output for use (the public-facing piece)
+## 6. Architecture Decision Records (ADRs)
+
+Key decisions recorded here so future changes are made with context.
+
+### ADR-01: API-only scraping for Monash Health (2026-04)
+
+**Decision:** Query the Power BI `/public/reports/querydata` endpoint directly. Do not use headless browser DOM scraping.
+
+**Rejected alternatives and why:**
+
+| Approach | Reason rejected |
+|---|---|
+| requests-html + pyppeteer | Architecture mismatch — pyppeteer targets Chromium process, not the HTTP session |
+| `chromium --dump-dom` | Doesn't execute iframe JavaScript; DOM is static HTML only |
+| Selenium | Too heavy / fragile on Raspberry Pi hardware; brittle against PBI version updates |
+
+**Trade-off accepted:** the API may return a more current count than the browser visual shows ("API Lead Active"). This is acceptable — API data is *more* accurate. The `cache_lag_minutes` / `fidelity_status` fields document this gap.
+
+### ADR-02: Published Truth Standard (2026-04)
+
+**Decision:** Display values must align with what a patient sees on the hospital's public webpage, not raw internal API output.
+
+**Rationale:** If the monitor shows 32 min but the hospital's page shows 40 min, users lose trust. The hospital's public page is the official statement. When discrepancies appear, the hospital page is ground truth — investigate whether the scraper is hitting a pre-render endpoint or cached layer.
+
+**Current status per source:**
+- Eastern Health: `patientCounts` JS object embedded by the page renderer — matches public display exactly.
+- Monash Health: Power BI batch API — same data that renders the public tiles; acceptable.
+- RMH: HTML regex on public page — matches public display exactly.
+
+### ADR-03: Config-driven scrapers, no hardcoding (2026-05)
+
+**Decision:** All hospital names, URLs, field names, regex patterns, Power BI IDs, and status mappings live in `config/hospitals.json` and `config/hospitals.csv`. Scraper scripts contain zero hospital-specific strings.
+
+**Rationale:** Adding a new hospital, updating a URL, or changing a regex requires only a config edit — no Python changes, no re-testing scraper logic, no risk of introducing bugs in unrelated hospitals.
+
+**Adding a hospital:** new row in `hospitals.csv` + source entry in `hospitals.json`. If no VAHI data yet, add `ctx_defaults` entry. For status-only sources, set `pipeline=raw_only`.
+
+### ADR-04: Three-tier Silver context join (2026-05)
+
+**Decision:** Silver enrichment uses VAHI → AIHW → ctx_defaults in priority order. No Bronze row is dropped for missing context.
+
+**Rationale:** Dropping rows when context is missing would make newly onboarded hospitals invisible in forecasts until VAHI data arrives. `ctx_source="ESTIMATE"` allows the full pipeline to operate with proxy values while flagging lower confidence to downstream consumers.
+
+---
+
+## 7. Output for use (the public-facing piece)
 
 **Phase 1 (zero-cost path):**
 
@@ -157,7 +202,7 @@ This is the simplest possible public surface: no servers, no DNS, no inbound on 
 
 ---
 
-## 7. Decisions log (append-only)
+## 8. Decisions log (append-only)
 
 | Date | Decision | Rationale |
 |---|---|---|
@@ -177,7 +222,7 @@ This is the simplest possible public surface: no servers, no DNS, no inbound on 
 
 ---
 
-## 8. Open questions
+## 9. Open questions
 
 1. ~~**Sync cadence to GitHub `data` branch:** every 30 min vs hourly.~~ Resolved 2026-04-29: cadence is 15 min (matches scrape); `ignoreCommand` prevents Vercel build noise.
 2. **Weather endpoint:** Open-Meteo archive (backfill) vs forecast (live). Need both; the join key is the archive value once it's available.
@@ -185,7 +230,7 @@ This is the simplest possible public surface: no servers, no DNS, no inbound on 
 
 ---
 
-## 9. Config-Driven Architecture
+## 10. Config-Driven Architecture
 
 ### Principle: Separate Logic from Parameters
 
@@ -219,8 +264,9 @@ scripts/
 
 | `parser` value | Pattern | Key config fields |
 |---|---|---|
-| `html_js` | Page embeds `const patientCounts` + `const predictedWaitMinutes` (Eastern Health) | `url`, `hospitals` (JS key → formal name) |
-| `powerbi` | Power BI Embedded batch API (`/querydata`) | `endpoint`, `model_id`, `resource_key`, `entity`, column names, `group_col`/`group_target` for Adult vs Paeds split |
+| `html_js` | Page embeds `const patientCounts` + `const predictedWaitMinutes` (Eastern Health) | `url`, `js_data_vars`, `js_field_map`, `hospitals` |
+| `powerbi` | Power BI Embedded batch API (`/querydata`) | `endpoint`, `model_id`, `resource_key`, `visual_ids` (per-campus per-cohort), column names |
+| `html_regex` | Plain HTML with regex patterns (RMH — full pipeline; RCH — raw_only) | `url`, `regex_patterns`, optional `status_map` (digit→label), optional `ctx_defaults` in `hospitals.json` |
 
 ### Power BI Adult/Paeds Isolation
 
@@ -250,7 +296,7 @@ scrape_timestamp_utc, site, reported_timestamp_str, waiting, treating, wait_str,
 
 ---
 
-## 10. Seasonal Benchmark Computation
+## 11. Seasonal Benchmark Computation
 
 VAHI publishes quarterly ED performance data. From Q1-2026 onward, real data for new quarters is not yet available; `transform_silver.py` forward-fills Q4-2025 values as VAHI_PROXY rows. These are seasonally incorrect (e.g. Box Hill Q4 p90=89m used as a Q1/Q2 benchmark when Q2 actual is ~80m).
 
