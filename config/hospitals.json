@@ -149,11 +149,9 @@
       "busy_index":   "<font color='white'>([0-9.]+)</font>",
       "updated_time": "Last updated\\s*([^<]+)"
     },
-    "_status_map_comment": "Maps status_level digit → human label stored in reported_wait_str. Colours match RCH's own colour scheme.",
+    "_status_map_comment": "Maps graph image number → human label. RCH uses a continuous dial gauge; multiple graph numbers may exist per level. Confirmed 2026-05-03 by user observing the page dial needle: graph3=Very Busy. Other levels not yet observed in production — update when seen.",
     "status_map": {
-      "1": "Normal",
-      "2": "Very Busy",
-      "3": "Extremely Busy"
+      "3": "Very Busy"
     },
     "hospitals": {
       "RoyalChildrens": "Royal Childrens Hospital"

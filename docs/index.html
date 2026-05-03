@@ -189,9 +189,8 @@
     .status-badge-extremebusy {background:#fee2e2;color:#7f1d1d;border:1px solid #fca5a5}
     .status-badge-unknown     {background:#f3f4f6;color:#6b7280;border:1px solid #e5e7eb}
     .status-meta{font-size:.58rem;color:#b0b0bb;margin-top:.2rem}
-    .status-stale-note{font-size:.57rem;color:#f59e0b;margin-top:.25rem;font-style:italic}
-    .status-disclaimer{font-size:.57rem;color:#6b7280;margin-top:.45rem;line-height:1.4;
-      border-top:1px solid #f3f4f6;padding-top:.35rem}
+    .status-disclaimer{font-size:.57rem;color:#6b7280;margin-bottom:.4rem;line-height:1.4;
+      border-bottom:1px solid #f3f4f6;padding-bottom:.35rem}
 
     /* ── Legacy classes kept for historical-grid compatibility ───────────────── */
     .hero-split{display:flex;gap:0;margin-bottom:.75rem;align-items:flex-end}
@@ -1040,20 +1039,27 @@ function renderStatusSites(statusSites) {
       badge = `<span class="status-badge status-badge-unknown">No live data</span>`;
     }
 
-    // Stale warning: RCH page may not refresh for hours; cache_lag is tracked
-    const isStale = s.fidelity_status === "PORTAL_STALE_WARNING";
-    const staleNote = isStale
-      ? `<div class="status-stale-note">⚠ Status may be delayed — portal not updated recently</div>`
+    // Age since last portal update — RCH refreshes ~1–2h; show neutrally, not as an error
+    const portalAgeMs = s.last_portal_update
+      ? Date.now() - new Date(s.last_portal_update.replace(/\s+\+AEST$/, "+10:00")).getTime()
+      : null;
+    const portalAgeMins = portalAgeMs != null ? Math.round(portalAgeMs / 60000) : null;
+    const ageStr = portalAgeMins != null
+      ? (portalAgeMins < 60
+          ? `${portalAgeMins}m ago`
+          : `${Math.floor(portalAgeMins / 60)}h ${portalAgeMins % 60}m ago`)
+      : "";
+    const updatedNote = ageStr
+      ? `<div class="status-meta">Portal updated ${ageStr} · RCH refreshes every ~1–2h</div>`
       : "";
 
     return `
       <div class="status-card">
         <div class="status-card-name">${s.site}</div>
         <div class="status-card-sub">Paediatric ED</div>
-        ${badge}
-        ${staleNote}
-        <div class="status-meta">${meta}</div>
         <div class="status-disclaimer">Critically ill patients are always seen first,<br>regardless of waiting times.</div>
+        ${badge}
+        ${updatedNote}
       </div>`;
   }).join("");
   block.innerHTML = `
