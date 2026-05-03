@@ -32,6 +32,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 from predict_next import load_latest_silver, build_outlook   # noqa: E402
 from get_history import build_timeline                        # noqa: E402
 from config.hospitals import VAHI_BENCHMARKS, RAW_ONLY_HOSPITALS  # noqa: E402
+from config.ontology  import write_schema, SCHEMA_VERSION         # noqa: E402
 from config.paths import (                                    # noqa: E402
     SILVER_CSV            as DEFAULT_SILVER,
     LATEST_JSON_TMP       as DEFAULT_JSON_OUT,
@@ -117,6 +118,7 @@ def push_to_data_branch(json_path: pathlib.Path,
     import shutil
     shutil.copy(json_path, PUBLISHER_TMPDIR / "latest.json")
     shutil.copy(_BASE / "docs" / "index.html", PUBLISHER_TMPDIR / "index.html")
+    write_schema(PUBLISHER_TMPDIR / "schema.json")
 
     history_file = "history_timeline.json"
     if history_path and history_path.exists():
@@ -141,7 +143,7 @@ def push_to_data_branch(json_path: pathlib.Path,
     stamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     extra_files = (" " + history_file) if history_file else ""
     try:
-        _git(f"git add latest.json index.html vercel.json{extra_files}", PUBLISHER_TMPDIR)
+        _git(f"git add latest.json index.html vercel.json schema.json{extra_files}", PUBLISHER_TMPDIR)
         _git(f'git commit -m "data: outlook {stamp}"', PUBLISHER_TMPDIR)
     except RuntimeError as e:
         if "nothing to commit" in str(e):
@@ -387,6 +389,7 @@ def main() -> None:
     vahi_qly_label = f"Q{quarter} {generated_utc_dt.year}"
 
     payload = {
+        "schema_version":   SCHEMA_VERSION,
         "generated_utc":    generated_utc_str,
         "horizon_min":      60,
         "vahi_p90_all_mins": VAHI_BENCHMARKS.get("p90_all_mins"),

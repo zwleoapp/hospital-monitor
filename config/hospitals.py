@@ -9,12 +9,22 @@ Two config files combine here:
                    entity/column names).  Edit to update credentials or add a
                    new scraper type without touching Python.
 
+Typed objects (Palantir Ontology-style) are in config/ontology.py:
+  HOSPITALS, get_hospital(), Hospital dataclass, write_schema().
+  This module re-exports the flat name lists for backwards compatibility.
+
 SOURCES is the merged, active-filtered view consumed by hospital_monitor.py.
 """
 
 import csv
 import json
 import pathlib
+
+# Typed object registry — validated at import; raises ValueError on bad config
+from config.ontology import (   # noqa: E402
+    HOSPITALS, HOSPITAL_MAP, FULL_PIPELINE, RAW_ONLY,
+    get_hospital, write_schema,
+)
 
 _CSV  = pathlib.Path(__file__).resolve().parent / "hospitals.csv"
 _JSON = pathlib.Path(__file__).resolve().parent / "hospitals.json"
