@@ -49,6 +49,49 @@
 
     "_timestamp_limitation": "KNOWN LIMITATION (2026-04-30): LastUpdatedDisplay (G4) is a report-level property, NOT per-campus. Power BI returns the same timestamp for all three campuses (e.g., '18:31' for Casey, Clayton, AND Dandenong), but the webpage visual tiles show different per-campus values (e.g., Casey 18:26, Clayton 18:06, Dandenong 17:26). The visual tiles either: (a) compute timestamps client-side from a hidden measure, or (b) query a different entity. Current scraper extracts the report-level timestamp as the best available proxy. ValueDicts.D2 in the Power BI response contains only ONE timestamp value, confirming this is not a scraper bug. See /tmp/powerbi_debug_response.json for raw API evidence.",
 
+    "dataset_id": "70ffff0b-d2c6-456d-9c2e-b0f259d3b30d",
+    "report_id": "f2fa43bb-ab01-4657-8834-363c23f3d1a1",
+
+    "_visual_ids_comment": "Per-campus, per-cohort visual IDs. Structure: {campus: {cohort: {measure: visual_id}}}. Adult is the default view. Paediatric IDs present for Casey and Clayton only (Dandenong has no Paeds ward). Timestamp visual is shared across cohorts within a campus.",
+    "visual_ids": {
+      "Casey": {
+        "Adult": {
+          "timestamp": "4f961799444a81c9ce10",
+          "waiting":   "2078d2aa3fc4888d7d96",
+          "treating":  "c626b63d1be2c3927b21",
+          "wait_str":  "396336996d2b8481f0d1"
+        },
+        "Paeds": {
+          "timestamp": "4f961799444a81c9ce10",
+          "waiting":   "9658174126eb58406377",
+          "treating":  "b71489ce42da14412305",
+          "wait_str":  "f6baf7ab3f7903580e3e"
+        }
+      },
+      "Clayton": {
+        "Adult": {
+          "timestamp": "15cb34db2db3daac4c18",
+          "waiting":   "27deef2e9bdcb4839858",
+          "treating":  "2eb0bb95d5ab28f54a3d",
+          "wait_str":  "2b17e297d77c5bea74f0"
+        },
+        "Paeds": {
+          "timestamp": "15cb34db2db3daac4c18",
+          "waiting":   "2b17e297d77c5bea74f0",
+          "treating":  "2ac13e1cf75fd64ee6bc",
+          "wait_str":  "5c1a51615e329f4b246e"
+        }
+      },
+      "Dandenong": {
+        "Adult": {
+          "timestamp": "7a416434c916ea347dce",
+          "waiting":   "c0dd3e5de53f6b951b97",
+          "treating":  "836d6f08dfbb836a058d",
+          "wait_str":  "b9f45fd046e1eaee747b"
+        }
+      }
+    },
+
     "hospitals": {
       "Casey":     "Casey Hospital",
       "Clayton":   "Monash Medical Centre - Clayton",

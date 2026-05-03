@@ -47,14 +47,16 @@ except ImportError:
     def update_status(name, state):  # graceful no-op outside Pi environment
         pass
 
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
+from config.paths import (
+    BRONZE_CSV  as DEFAULT_BRONZE,
+    SILVER_CSV  as DEFAULT_OUTPUT,
+    VAHI_FILE,
+    AIHW_FILE,
+)
+
 # ── Paths ─────────────────────────────────────────────────────────────────────
 _BASE = pathlib.Path(__file__).resolve().parent.parent
-_SSD  = pathlib.Path("/mnt/router_ssd/Data_Hub/Waiting_Live_time")
-
-DEFAULT_BRONZE = _SSD / "eastern_hospital.csv"
-DEFAULT_OUTPUT = _SSD / "eastern_hospital_silver.csv"
-VAHI_FILE      = _BASE / "bronze" / "vahi_history_merged.csv"
-AIHW_FILE      = _BASE / "bronze" / "eastern_hospital_historical_context.csv"
 
 # ── Constants ─────────────────────────────────────────────────────────────────
 MELBOURNE = ZoneInfo("Australia/Melbourne")

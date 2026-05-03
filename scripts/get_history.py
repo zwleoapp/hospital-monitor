@@ -1,19 +1,19 @@
 # data-class: public-aggregate
 """
-get_history.py — Silver CSV → history_timeline.json (last 24 h)
+get_history.py — Silver CSV → history_timeline.json + forecast_audit.csv
 
-Reads the Silver CSV, extracts the last 24 hours of observations grouped
-into 15-minute buckets (one row per hospital per bucket), computes the
-60-minute forecast for each snapshot, and pre-computes forecast accuracy
-(predicted at T vs actual at T+60) so the UI can show a training comparison.
+Reads the Silver CSV, extracts the last N hours of observations grouped into
+15-minute buckets (one row per hospital per bucket), computes the 60-minute
+forecast for each snapshot, and pre-computes forecast accuracy (predicted at T
+vs actual at T+60).
 
-Output schema:
+history_timeline.json schema:
   {
     "generated_utc":  "...",
-    "history_hours":  24,
+    "history_hours":  3,
     "snapshots": [
       {
-        "bucket_utc": "2026-04-28T01:00:00Z",
+        "bucket_utc": "2026-05-03T01:00:00Z",
         "sites": [
           {
             "site":                 "Box Hill Hospital",
@@ -26,17 +26,66 @@ Output schema:
             "predicted_wait_min":   55.0,
             "confidence":           0.78,
             "confidence_label":     "High",
-            "forecast_accuracy":    91.2,   // % — null if T+60 not yet recorded
-            "actual_60m_wait_min":  48.0    // null if T+60 not yet recorded
-          },
-          ...
+            "forecast_accuracy":    91.2,
+            "actual_60m_wait_min":  48.0
+          }, ...
         ]
-      },
-      ...
+      }, ...
     ]
   }
+
+── Cache Lag Architecture ───────────────────────────────────────────────────
+
+cache_lag_minutes measures the gap between the portal's claimed last-update
+time and the moment our scraper ran. It is ALWAYS non-zero because:
+
+  - Our scraper runs every 15 minutes
+  - Hospitals update their data on their own schedule (typically every 5–30 min)
+  - Even in the best case, there is irreducible latency between hospital system
+    update → portal publish → our scrape
+
+The lag means DIFFERENT things depending on the data source:
+
+  SOURCE TYPE: html_js  (Eastern Health — Box Hill, Angliss, Maroondah)
+  ─────────────────────────────────────────────────────────────────────────
+  The hospital's own public webpage embeds a native "Last Updated" timestamp
+  that reflects when the hospital pushed new patient-count data to their site.
+
+    cache_lag_minutes = scrape_timestamp − hospital_page_last_updated
+
+  This is a DIRECT measure of hospital publishing latency. A lag of 5 min
+  means the hospital refreshed 5 min before we scraped. A lag of 45 min
+  means the hospital's own system was slow to publish. Relatively trustworthy
+  as an indicator of underlying data freshness.
+
+  SOURCE TYPE: powerbi  (Monash Health — Casey, Clayton, Dandenong)
+  ─────────────────────────────────────────────────────────────────────────
+  Monash Health exposes data through Power BI Embedded. The "Last Updated"
+  value (LastUpdatedDisplay) is a timestamp shown inside the Power BI visual,
+  which reflects when Power BI REFRESHED ITS OWN DATASET — not when the
+  underlying hospital system changed.
+
+    cache_lag_minutes = scrape_timestamp − powerbi_dataset_refresh_time
+
+  This is an INDIRECT measure: PBI caching latency, not hospital data freshness.
+  The actual hospital data could be fresher or staler than PBI's display claims.
+  When interpreting this column for Monash rows, treat it as "time since Power BI
+  last synced" rather than "time since hospital updated."
+
+  ML FORECAST NOTE:
+  ─────────────────────────────────────────────────────────────────────────
+  The ML forecast (predicted_wait_min) is always trained on the raw API-queried
+  waiting time — the actual count returned by the scrape — regardless of what
+  the portal claims to have last updated. cache_lag_minutes is a DIAGNOSTIC
+  column in forecast_audit.csv to explain error spikes in hindsight; it is
+  NOT an input feature to the forecast model.
+
+forecast_audit.csv is written alongside accuracy_postmortem.jsonl and is
+NEVER subject to the UI display window filter. It is a full historical record
+for ML backtesting and model evolution.
 """
 
+import csv
 import sys
 import json
 import pathlib
@@ -47,15 +96,43 @@ import pandas as pd
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 from predict_next import project_wait, confidence_score  # noqa: E402
-from config.hospitals import ALL_HOSPITALS               # noqa: E402
+from config.hospitals import ALL_HOSPITALS, SOURCES       # noqa: E402
+from config.paths import (                                # noqa: E402
+    SILVER_CSV          as DEFAULT_SILVER,
+    HISTORY_JSON_TMP    as DEFAULT_JSON_OUT,
+    ACCURACY_LOG        as ACCURACY_LOG_PATH,
+    ANOMALY_LOG         as ANOMALY_LOG_PATH,
+    FORECAST_AUDIT_CSV  as FORECAST_AUDIT_PATH,
+    BRONZE_RAW_CSV      as BRONZE_RAW_PATH,
+)
+ANOMALY_ERROR_PCT = 200.0
 
-_SSD              = pathlib.Path("/mnt/router_ssd/Data_Hub/Waiting_Live_time")
-DEFAULT_SILVER    = _SSD / "eastern_hospital_silver.csv"
-DEFAULT_JSON_OUT  = pathlib.Path("/tmp/history_timeline.json")
-ACCURACY_LOG_PATH = _SSD / "accuracy_postmortem.jsonl"
-ANOMALY_LOG_PATH  = _SSD / "damping_anomalies.jsonl"
-ANOMALY_ERROR_PCT = 200.0   # entries exceeding this are routed to anomaly log
-HISTORY_HOURS     = 24
+# Read UI_DISPLAY_WINDOW_MINS from ui_config.json so that running get_history.py
+# directly from the CLI produces the same window as publish_latest.py.
+# Falls back to 3 h (180 min) if the config file is unreadable.
+_UI_CFG_PATH = pathlib.Path(__file__).resolve().parent.parent / "config" / "ui_config.json"
+try:
+    _ui_window_mins = int(json.loads(_UI_CFG_PATH.read_text()).get("UI_DISPLAY_WINDOW_MINS", 180))
+except Exception:
+    _ui_window_mins = 180
+HISTORY_HOURS = _ui_window_mins / 60  # e.g. 180 min → 3.0 h
+
+# Map each hospital formal name → scraper source_type ("html_js" or "powerbi").
+# Used in forecast_audit.csv so cache_lag_minutes can be interpreted correctly:
+#   html_js  → lag measures hospital publishing latency (direct)
+#   powerbi  → lag measures Power BI dataset refresh latency (indirect/cached)
+_SOURCE_TYPE_MAP: dict[str, str] = {
+    formal_name: cfg.get("parser", "html_js")
+    for cfg in SOURCES.values()
+    for formal_name in cfg.get("hospitals", {}).values()
+}
+
+FORECAST_AUDIT_HEADER = [
+    "bucket_utc", "hospital", "cohort", "source_type",
+    "current_wait_min", "wait_momentum",
+    "actual_wait_min", "predicted_wait_min", "error_pct", "forecast_accuracy",
+    "cache_lag_minutes", "fidelity_status",
+]
 
 
 def _log_accuracy_postmortem(df: "pd.DataFrame") -> None:
@@ -102,6 +179,96 @@ def _log_accuracy_postmortem(df: "pd.DataFrame") -> None:
                     fh.write("\n".join(lines) + "\n")
             except OSError:
                 pass  # SSD unavailable — non-fatal
+
+
+def _write_forecast_audit(df: "pd.DataFrame") -> None:
+    """
+    Append completed forecast rows to forecast_audit.csv.
+
+    Runs after _log_accuracy_postmortem on the same completed-rows subset.
+    Only writes rows where actual_60m_wait_min is known (T+60 already observed).
+
+    cache_lag_minutes / fidelity_status are joined from bronze_raw_scrapes.csv
+    by matching scrape timestamps to 15-minute buckets. These columns are
+    DIAGNOSTIC ONLY — they explain forecast error in hindsight but are not
+    ML inputs. Interpretation differs by source_type:
+
+      html_js (Eastern Health):
+        cache_lag = time since hospital last published their page data.
+        Directly reflects hospital publishing latency.
+
+      powerbi (Monash Health):
+        cache_lag = time since Power BI last refreshed its embedded dataset.
+        Reflects PBI caching latency, NOT underlying hospital data freshness.
+        The lag always exists (scraper runs every 15 min, PBI refreshes on its
+        own cadence) — treat it as "PBI sync age" rather than "hospital data age."
+
+    This file is NEVER subject to the UI display window filter.
+    """
+    completed = df[df["actual_60m_wait_min"].notna() & df["forecast_accuracy"].notna()].copy()
+    if completed.empty:
+        return
+
+    # Build (hospital, bucket) → (cache_lag_minutes, fidelity_status) lookup
+    # by flooring bronze_raw scrape timestamps into 15-minute buckets.
+    cache_lag_lookup: dict[tuple, str] = {}
+    fidelity_lookup: dict[tuple, str]  = {}
+    if BRONZE_RAW_PATH.exists():
+        try:
+            br = pd.read_csv(BRONZE_RAW_PATH)
+            br["scrape_dt"] = pd.to_datetime(
+                br["scrape_timestamp_utc"], utc=True, errors="coerce"
+            )
+            br["bucket"] = br["scrape_dt"].dt.floor("15min")
+            br = br.dropna(subset=["scrape_dt", "site"])
+            # Keep last row per (site, bucket) — most recent scrape wins
+            br = br.sort_values("scrape_dt").groupby(["site", "bucket"]).last().reset_index()
+            for _, row in br.iterrows():
+                key = (row["site"], row["bucket"])
+                cache_lag_lookup[key] = row.get("cache_lag_minutes", "")
+                fidelity_lookup[key]  = row.get("fidelity_status", "")
+        except Exception:
+            pass
+
+    audit_rows = []
+    for _, row in completed.iterrows():
+        hospital = row["hospital"]
+        bucket   = row["bucket"]
+        key      = (hospital, bucket)
+
+        predicted = float(row["predicted_wait_min"])
+        actual    = float(row["actual_60m_wait_min"])
+        current   = float(row.get("min_wait_mins") or 0)
+        momentum  = float(row.get("wait_momentum")  or 0)
+        error_pct = abs(predicted - actual) / max(actual, 1) * 100
+
+        audit_rows.append([
+            bucket.strftime("%Y-%m-%dT%H:%M:%SZ"),
+            hospital,
+            "Adult",                                     # cohort — Paed forecasts not yet built
+            _SOURCE_TYPE_MAP.get(hospital, "unknown"),   # html_js or powerbi
+            round(current, 1),
+            round(momentum, 1),
+            round(actual, 1),
+            round(predicted, 1),
+            round(error_pct, 1),
+            float(row["forecast_accuracy"]),
+            cache_lag_lookup.get(key, ""),               # see docstring for interpretation
+            fidelity_lookup.get(key, ""),
+        ])
+
+    if not audit_rows:
+        return
+
+    file_exists = FORECAST_AUDIT_PATH.exists()
+    try:
+        with open(FORECAST_AUDIT_PATH, "a", newline="") as fh:
+            writer = csv.writer(fh)
+            if not file_exists:
+                writer.writerow(FORECAST_AUDIT_HEADER)
+            writer.writerows(audit_rows)
+    except OSError:
+        pass  # SSD unavailable — non-fatal
 
 
 def build_timeline(silver_path: pathlib.Path, history_hours: int = HISTORY_HOURS) -> dict:
@@ -156,6 +323,7 @@ def build_timeline(silver_path: pathlib.Path, history_hours: int = HISTORY_HOURS
     df["actual_60m_wait_min"] = actuals
 
     _log_accuracy_postmortem(df)
+    _write_forecast_audit(df)
 
     snapshots = []
     for bucket, grp in df.groupby("bucket"):

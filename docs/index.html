@@ -200,6 +200,7 @@
 
     /* ── Command-centre rows: truth (now+max) above AI forecast ─────────────── */
     .cmd-row{display:flex;align-items:center;gap:.55rem;margin:.35rem 0 .2rem;flex-wrap:wrap}
+    .paeds-row{border-top:1px solid #f0f2f5;margin-top:.3rem;padding-top:.3rem;opacity:.85}
     .cmd-ai-row{display:flex;align-items:center;gap:.45rem;margin:.1rem 0 .55rem}
     .cmd-label{font-size:.62rem;color:#9090a8;font-weight:600;text-transform:uppercase;letter-spacing:.05em;white-space:nowrap}
     .cmd-val{font-size:1.75rem;font-weight:800;color:#1a1a2e;line-height:1}
@@ -378,6 +379,9 @@
   <span id="hist-pos">&#8987; Loading&hellip;</span>
   <button id="hist-next" class="hist-btn" onclick="histStep(+1)" disabled>Later &#8594;</button>
   <button id="hist-live-btn" class="hist-btn hist-live" onclick="exitHistory()" style="display:none">&#9679; Live</button>
+  <span id="hist-window-note" style="display:none;font-size:.7rem;color:#aaa;margin-left:.4rem">
+    &#9432; Snapshots available for the last 3 hours only
+  </span>
 </div>
 
 <div id="stale-banner">
@@ -456,7 +460,7 @@
 <script>
 const DATA_URL            = "/latest.json";
 const HISTORY_URL         = "/history_timeline.json";
-const HOSPITAL_STALE_MINS = 60;
+const HOSPITAL_STALE_MINS  = 60;
 const NETWORK_ORDER       = ["Monash Health", "Eastern Health"];
 const FORECAST_KEY        = "ed_forecast_v1";
 const MAPS_QUERIES        = {
@@ -722,6 +726,14 @@ function renderCard(s) {
             ${s.max_wait_min != null ? `<span class="cmd-sep">|</span><span class="cmd-max-val${_maxCritical ? " max-warn-critical" : ""}">Max&nbsp;${fmtShort(s.max_wait_min) ?? s.max_wait_min + "m"}</span>` : ""}
             ${hospTimeParsed ? `<span class="cmd-time">&#128336;&thinsp;${hospTimeParsed.time}&thinsp;${hospTimeParsed.global ? "Refreshed" : "AEST"}</span>` : ""}
           </div>
+          ${s.paediatric ? `
+          <div class="cmd-row paeds-row">
+            <span class="cmd-label">&#128118; Paeds</span>
+            <span class="cmd-sep">${s.paediatric.waiting} waiting</span>
+            <span class="cmd-sep">&middot;</span>
+            <span class="cmd-sep">${s.paediatric.treating} treating</span>
+            ${s.paediatric.wait_str ? `<span class="cmd-sep">&middot;</span><span class="cmd-sep" style="color:#6b7280">${s.paediatric.wait_str}</span>` : ""}
+          </div>` : ""}
           <div class="cmd-ai-row">
             <span class="cmd-label">Next&nbsp;60m</span>
             <span class="cmd-forecast-val">&#9201;&thinsp;${Math.round(predicted)}m</span>
@@ -960,9 +972,13 @@ function updateHistNav() {
     document.getElementById("hist-ts").textContent =
       ts + (ago != null ? " (" + Math.round(ago / 60 * 10) / 10 + "h ago)" : "");
     pos.innerHTML         = (_histIdx + 1) + " / " + _histTimeline.snapshots.length + " &middot; " + ts;
-    prevBtn.disabled      = (_histIdx === 0);
+    const atOldest = (_histIdx === 0);
+    prevBtn.disabled      = atOldest;
     nextBtn.disabled      = (_histIdx >= _histTimeline.snapshots.length - 1);
     liveBtn.style.display = "";
+    // Show window-limit note when the user has reached the earliest available snapshot
+    const note = document.getElementById("hist-window-note");
+    if (note) note.style.display = atOldest ? "inline" : "none";
   }
 }
 

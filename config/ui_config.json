@@ -1,0 +1,14 @@
+{
+  "_comment": "Operational configuration. Read by publish_latest.py, hospital_monitor.py, and get_history.py. Change values here — no Python edits required.",
+
+  "_section_ui": "Dashboard display window — sites with scrape older than this are excluded from latest.json and history_timeline.json before publish. Bronze CSV and forecast_audit.csv are never filtered.",
+  "UI_DISPLAY_WINDOW_MINS": 180,
+
+  "_section_ops": "Publish gate — outside this Melbourne-local window publish_latest.py exits without pushing (Trial Mode).",
+  "OPERATIONAL_START_H": 6,
+  "OPERATIONAL_END_H": 23,
+
+  "_section_fidelity": "Cache-lag thresholds for fidelity_status labels written to bronze_raw_scrapes.csv and forecast_audit.csv. See get_history.py module docstring for interpretation differences between html_js (Eastern Health) and powerbi (Monash Health) sources.",
+  "FIDELITY_SYNCED_THRESHOLD_MINS": 15,
+  "FIDELITY_STALE_THRESHOLD_MINS": 60
+}

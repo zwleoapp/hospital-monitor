@@ -44,28 +44,43 @@ import pandas as pd
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 from config.hospitals import ALL_HOSPITALS
+from config.paths import (             # noqa: E402
+    SILVER_CSV as DEFAULT_SILVER,
+    ACCURACY_LOG as _ACCURACY_LOG,
+    ANOMALY_LOG  as _ANOMALY_LOG,
+)
 
-# ── Paths ─────────────────────────────────────────────────────────────────────
-_SSD = pathlib.Path("/mnt/router_ssd/Data_Hub/Waiting_Live_time")
-DEFAULT_SILVER = _SSD / "eastern_hospital_silver.csv"
-
-# ── Tuning constants ──────────────────────────────────────────────────────────
-HORIZON_MIN       = 60     # forecast horizon in minutes
-CADENCE_MIN       = 15     # scraper cadence — momentum is normalised to this unit
-MOMENTUM_DAMPING  = 0.50   # default damping — overridden by get_effective_damping()
-MOMENTUM_CEILING  = 30.0   # momentum beyond this (min/cadence) = max uncertainty
-MAX_WAIT_MIN      = 480    # hard upper clamp on projected wait (8 hours)
-LOS_TARGET_PCT    = 70.0   # Australian national 4-hour ED target
-
-# ── Safety & evolution constraints ────────────────────────────────────────────
-DAMPING_MIN       = 0.50   # ML-evolved damping cannot go below this (D ∈ [0.5, 1.2])
-DAMPING_MAX       = 1.20   # ML-evolved damping cannot exceed this
-ANOMALY_ERROR_PCT = 200.0  # skip ML training on snapshots with error > 200%
-
-# ── Derived paths ─────────────────────────────────────────────────────────────
+# ── Model config (config/model_config.json) ───────────────────────────────────
+_MODEL_CFG_PATH = pathlib.Path(__file__).resolve().parent.parent / "config" / "model_config.json"
 _OVERRIDES_PATH = pathlib.Path(__file__).resolve().parent.parent / "config" / "overrides.json"
-_ACCURACY_LOG   = _SSD / "accuracy_postmortem.jsonl"
-_ANOMALY_LOG    = _SSD / "damping_anomalies.jsonl"
+
+def _load_model_cfg() -> dict:
+    try:
+        return json.loads(_MODEL_CFG_PATH.read_text())
+    except Exception:
+        return {}
+
+_mcfg = _load_model_cfg()
+
+HORIZON_MIN       = int(_mcfg.get("horizon_min",       60))
+CADENCE_MIN       = int(_mcfg.get("cadence_min",       15))
+MOMENTUM_DAMPING  = float(_mcfg.get("momentum_damping", 0.50))
+MOMENTUM_CEILING  = float(_mcfg.get("momentum_ceiling", 30.0))
+MAX_WAIT_MIN      = int(_mcfg.get("max_wait_min",       480))
+LOS_TARGET_PCT    = float(_mcfg.get("los_target_pct",   70.0))
+DAMPING_MIN       = float(_mcfg.get("damping_min",      0.50))
+DAMPING_MAX       = float(_mcfg.get("damping_max",      1.20))
+ANOMALY_ERROR_PCT = float(_mcfg.get("anomaly_error_pct", 200.0))
+
+# Confidence weights
+_CW_LOS      = float(_mcfg.get("confidence_weight_los",      0.50))
+_CW_MOMENTUM = float(_mcfg.get("confidence_weight_momentum", 0.30))
+_CW_P90      = float(_mcfg.get("confidence_weight_p90",      0.20))
+_CONF_HIGH   = float(_mcfg.get("confidence_high_threshold",  0.70))
+_CONF_MOD    = float(_mcfg.get("confidence_moderate_threshold", 0.40))
+
+# Per-hospital damping from evolve_model.py (written to model_config.json)
+_PER_HOSPITAL_DAMPING: dict[str, float] = _mcfg.get("per_hospital_damping", {})
 
 
 # ── Override & safety layer ───────────────────────────────────────────────────
@@ -85,18 +100,23 @@ def get_effective_damping(hospital: str | None = None) -> float:
     Priority order:
       1. config/overrides.json → manual_damping_per_site[hospital]  (human override)
       2. config/overrides.json → manual_damping                      (global human override)
-      3. ML-evolved value from evolve_damping_factors()              (Phase 2 — placeholder)
-      4. MOMENTUM_DAMPING compile-time default
+      3. model_config.json → per_hospital_damping[hospital]          (ML-evolved by evolve_model.py)
+      4. model_config.json → momentum_damping                        (global default)
     """
+    def _clamp(v: float) -> float:
+        return float(min(DAMPING_MAX, max(DAMPING_MIN, v)))
+
     ov = _load_overrides()
 
     if hospital and "manual_damping_per_site" in ov:
-        per_site = ov["manual_damping_per_site"]
-        if hospital in per_site:
-            return float(min(DAMPING_MAX, max(DAMPING_MIN, per_site[hospital])))
+        if hospital in ov["manual_damping_per_site"]:
+            return _clamp(ov["manual_damping_per_site"][hospital])
 
     if "manual_damping" in ov:
-        return float(min(DAMPING_MAX, max(DAMPING_MIN, ov["manual_damping"])))
+        return _clamp(ov["manual_damping"])
+
+    if hospital and hospital in _PER_HOSPITAL_DAMPING:
+        return _clamp(_PER_HOSPITAL_DAMPING[hospital])
 
     return MOMENTUM_DAMPING
 
@@ -177,11 +197,11 @@ def confidence_score(
     overshoot = max(0.0, current_wait - ctx_wait_p90_mins)
     p90_score = max(0.0, 1.0 - overshoot / max(1.0, ctx_wait_p90_mins))
 
-    score = round(0.50 * los_score + 0.30 * momentum_score + 0.20 * p90_score, 3)
+    score = round(_CW_LOS * los_score + _CW_MOMENTUM * momentum_score + _CW_P90 * p90_score, 3)
 
-    if score >= 0.70:
+    if score >= _CONF_HIGH:
         label = "High"
-    elif score >= 0.40:
+    elif score >= _CONF_MOD:
         label = "Moderate"
     else:
         label = "Low"

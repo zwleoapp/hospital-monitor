@@ -32,21 +32,32 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 from predict_next import load_latest_silver, build_outlook   # noqa: E402
 from get_history import build_timeline                        # noqa: E402
 from config.hospitals import VAHI_BENCHMARKS                  # noqa: E402
+from config.paths import (                                    # noqa: E402
+    SILVER_CSV            as DEFAULT_SILVER,
+    LATEST_JSON_TMP       as DEFAULT_JSON_OUT,
+    HISTORY_JSON_TMP      as DEFAULT_HISTORY_OUT,
+    PUBLISHER_TMPDIR,
+    LAST_UPDATED_SIDECAR,
+    BRONZE_RAW_CSV        as BRONZE_RAW_PATH,
+)
+
+# ── UI display window ─────────────────────────────────────────────────────────
+# Loaded from config/ui_config.json so the threshold is adjustable without
+# touching Python. Applied upstream before writing latest.json and
+# history_timeline.json — the frontend renders whatever is in those files.
+_UI_CONFIG_PATH = pathlib.Path(__file__).resolve().parent.parent / "config" / "ui_config.json"
+try:
+    _ui_cfg = json.loads(_UI_CONFIG_PATH.read_text())
+    UI_DISPLAY_WINDOW_MINS: int = int(_ui_cfg.get("UI_DISPLAY_WINDOW_MINS", 180))
+except Exception:
+    UI_DISPLAY_WINDOW_MINS = 180  # safe fallback
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
 _BASE = pathlib.Path(__file__).resolve().parent.parent
-_SSD  = pathlib.Path("/mnt/router_ssd/Data_Hub/Waiting_Live_time")
 
-DEFAULT_SILVER        = _SSD / "eastern_hospital_silver.csv"
-DEFAULT_JSON_OUT      = pathlib.Path("/tmp/hospital_monitor_latest.json")
-DEFAULT_HISTORY_OUT   = pathlib.Path("/tmp/history_timeline.json")
-PUBLISHER_TMPDIR      = pathlib.Path("/tmp/publisher")   # staging clone for data branch
-LAST_UPDATED_SIDECAR  = _SSD / "monash_last_updated.json"  # written by hospital_monitor.py
-BRONZE_RAW_PATH       = _SSD / "bronze_raw_scrapes.csv"    # clinical raw scrapes for ML
-
-_MELB                  = ZoneInfo("Australia/Melbourne")
-OPERATIONAL_START_H    = 6     # 06:00 Melbourne — before this, skip and exit
-OPERATIONAL_END_H      = 23    # 23:00 Melbourne — after this, skip and exit
+_MELB               = ZoneInfo("Australia/Melbourne")
+OPERATIONAL_START_H = int(_ui_cfg.get("OPERATIONAL_START_H", 6))
+OPERATIONAL_END_H   = int(_ui_cfg.get("OPERATIONAL_END_H",   23))
 
 # ── Traffic-light helper ──────────────────────────────────────────────────────
 
@@ -200,28 +211,63 @@ def main() -> None:
         except Exception:
             pass
 
-    # Scraper sync times: how long ago did the Pi last successfully query the raw endpoint?
+    # Scraper sync times + metadata: how long ago did the Pi last successfully query the raw endpoint?
     scraper_sync_map: dict[str, int] = {}
+    cache_lag_map: dict[str, int] = {}
+    fidelity_status_map: dict[str, str] = {}
+    last_portal_update_map: dict[str, str] = {}
+
+    # latest_paed: {site -> row dict} — latest Paediatric scrape per hospital
+    latest_paed: dict[str, dict] = {}
+
     if BRONZE_RAW_PATH.exists():
         try:
             import csv
             with open(BRONZE_RAW_PATH, "r", newline="") as f:
                 reader = csv.DictReader(f)
-                latest_scrapes = {}
+                latest_adult: dict[str, dict] = {}
+                # Separate Adult and Paediatric rows; keep last occurrence of each
                 for row in reader:
-                    site = row.get("site", "")
+                    site   = row.get("site", "")
+                    cohort = row.get("cohort", "Adult")
                     scrape_ts_str = row.get("scrape_timestamp_utc", "")
-                    if site and scrape_ts_str:
-                        latest_scrapes[site] = scrape_ts_str
-                for site, scrape_ts_str in latest_scrapes.items():
+                    if not site or not scrape_ts_str:
+                        continue
+                    if cohort not in ("Adult", "All"):
+                        latest_paed[site] = row
+                    else:
+                        latest_adult[site] = {
+                            "scrape_timestamp_utc": scrape_ts_str,
+                            "cache_lag_minutes":    row.get("cache_lag_minutes", ""),
+                            "fidelity_status":      row.get("fidelity_status", ""),
+                            "reported_timestamp_str": row.get("reported_timestamp_str", "")
+                        }
+
+                # Process the latest Adult scrape for each site
+                for site, data in latest_adult.items():
                     try:
-                        scrape_dt = datetime.fromisoformat(scrape_ts_str.replace("Z", "+00:00"))
+                        scrape_dt = datetime.fromisoformat(data["scrape_timestamp_utc"].replace("Z", "+00:00"))
                         delta_mins = round((generated_utc_dt - scrape_dt).total_seconds() / 60)
                         scraper_sync_map[site] = delta_mins
-                    except Exception:
-                        pass
-        except Exception:
-            pass
+
+                        cache_lag_str = data.get("cache_lag_minutes", "")
+                        if cache_lag_str:
+                            try:
+                                cache_lag_map[site] = int(cache_lag_str)
+                            except ValueError:
+                                pass
+
+                        fidelity = data.get("fidelity_status", "")
+                        if fidelity:
+                            fidelity_status_map[site] = fidelity
+
+                        portal_ts = data.get("reported_timestamp_str", "")
+                        if portal_ts:
+                            last_portal_update_map[site] = portal_ts
+                    except Exception as e:
+                        print(f"  [DEBUG] Error processing {site}: {e}", file=sys.stderr)
+        except Exception as e:
+            print(f"  [DEBUG] Error reading Bronze Raw: {e}", file=sys.stderr)
 
     sites = []
     for _, row in silver.iterrows():
@@ -241,7 +287,54 @@ def main() -> None:
         )
         outlook["last_updated_display"] = last_updated_map.get(outlook["site"], "")
         outlook["scraper_sync_mins"] = scraper_sync_map.get(outlook["site"])
+
+        # Add unified metadata block for Clinical Pulse architecture
+        cache_lag = cache_lag_map.get(outlook["site"])
+        fidelity_status = fidelity_status_map.get(outlook["site"])
+        last_portal_update = last_portal_update_map.get(outlook["site"], "")
+
+        outlook["metadata"] = {
+            "cache_lag_minutes": cache_lag,
+            "fidelity_status": fidelity_status,
+            "is_stale": fidelity_status == "PORTAL_STALE_WARNING" if fidelity_status else None,
+            "last_portal_update": last_portal_update.replace("Last Updated: ", "").replace("~", "") if last_portal_update else None,
+            "scrape_timestamp": outlook.get("latest_obs_utc")
+        }
+
         sites.append(outlook)
+
+    # ── UI window filter (upstream — keeps latest.json lean) ──────────────────
+    before = len(sites)
+    sites = [s for s in sites if (s.get("heartbeat_age_mins") or 0) <= UI_DISPLAY_WINDOW_MINS]
+    dropped = before - len(sites)
+    if dropped:
+        print(f"  [UI filter] {dropped} site(s) dropped (scrape > {UI_DISPLAY_WINDOW_MINS} min old)")
+
+    # ── Attach Paediatric sub-object to sites that have it ────────────────────
+    # Paediatric data comes from bronze_raw_scrapes.csv (scraped alongside Adult
+    # but not routed through Silver). Attached as s.paediatric for UI rendering.
+    # Only included when the scrape is within the UI display window.
+    for s in sites:
+        paed_row = latest_paed.get(s["site"])
+        if not paed_row:
+            continue
+        try:
+            paed_dt    = datetime.fromisoformat(paed_row["scrape_timestamp_utc"].replace("Z", "+00:00"))
+            paed_age   = (generated_utc_dt - paed_dt).total_seconds() / 60
+            if paed_age > UI_DISPLAY_WINDOW_MINS:
+                continue
+            waiting  = int(paed_row.get("reported_waiting") or 0)
+            treating = int(paed_row.get("raw_query_treating") or 0)
+            wait_str = paed_row.get("reported_wait_str", "")
+            s["paediatric"] = {
+                "waiting":  waiting,
+                "treating": treating,
+                "wait_str": wait_str,
+                "heartbeat_age_mins": round(paed_age, 1),
+            }
+            print(f"  [Paeds] {s['site']}: {waiting} waiting, {treating} treating, {wait_str}")
+        except Exception as e:
+            print(f"  [DEBUG] Paeds attach failed for {s['site']}: {e}", file=sys.stderr)
 
     quarter = (generated_utc_dt.month - 1) // 3 + 1
     vahi_qly_label = f"Q{quarter} {generated_utc_dt.year}"
@@ -276,13 +369,17 @@ def main() -> None:
         )
     print(f"\n  latest.json → {args.out}")
 
-    # ── 4. Build 24h history timeline ─────────────────────────────────────────
+    # ── 4. Build history timeline (UI window) ────────────────────────────────
+    # history_timeline.json is trimmed to UI_DISPLAY_WINDOW_MINS (default 3h).
+    # Full historical accuracy data lives in forecast_audit.csv (never filtered).
     history_path: pathlib.Path | None = None
+    history_hours = UI_DISPLAY_WINDOW_MINS / 60  # e.g. 180 min → 3.0 h
     try:
-        timeline = build_timeline(args.silver)
+        timeline = build_timeline(args.silver, history_hours=history_hours)
         history_path = DEFAULT_HISTORY_OUT
         history_path.write_text(json.dumps(timeline, indent=2, allow_nan=False))
-        print(f"\n  History timeline: {len(timeline['snapshots'])} snapshots → {history_path}")
+        print(f"\n  History timeline: {len(timeline['snapshots'])} snapshots "
+              f"({history_hours:.1f}h window) → {history_path}")
     except Exception as e:
         print(f"\n  Warning: history timeline skipped: {e}", file=sys.stderr)
 

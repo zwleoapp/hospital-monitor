@@ -1,0 +1,27 @@
+{
+  "_comment": "ML forecast model configuration. Read by predict_next.py at startup. evolve_model.py writes updated per_hospital_damping values here after each evolution run. Manual overrides in config/overrides.json take priority over everything in this file.",
+
+  "_section_forecast": "Core projection parameters. horizon_min / cadence_min define the forecast window; momentum_damping is the global default dampening applied to linear extrapolation.",
+  "horizon_min":       60,
+  "cadence_min":       15,
+  "momentum_damping":  0.50,
+  "momentum_ceiling":  30.0,
+  "max_wait_min":      480,
+  "los_target_pct":    70.0,
+
+  "_section_confidence": "Confidence score weights — must sum to 1.0.",
+  "confidence_weight_los":      0.50,
+  "confidence_weight_momentum": 0.30,
+  "confidence_weight_p90":      0.20,
+  "confidence_high_threshold":  0.70,
+  "confidence_moderate_threshold": 0.40,
+
+  "_section_evolution": "Safety constraints for evolve_model.py. Evolved damping values are clamped to [damping_min, damping_max]. Rows with error above anomaly_error_pct are excluded from training.",
+  "damping_min":        0.50,
+  "damping_max":        1.20,
+  "anomaly_error_pct":  200.0,
+  "min_rows_to_evolve": 24,
+
+  "_section_per_hospital": "Per-hospital damping factors written by evolve_model.py. Empty until enough forecast_audit.csv rows accumulate (min_rows_to_evolve per hospital). Values here override the global momentum_damping.",
+  "per_hospital_damping": {}
+}
