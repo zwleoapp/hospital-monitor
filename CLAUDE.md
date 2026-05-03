@@ -35,8 +35,13 @@ run_monitor.sh      Full pipeline: scrape → silver → publish (called by syst
 ## Adding a new hospital (no Python changes needed)
 1. Add source entry to `config/hospitals.json` with parser type, URL, and patterns/credentials
 2. Add row to `config/hospitals.csv` (name, network_type, scraper_type, aihw_id, is_active, pipeline)
-3. If no VAHI benchmark data yet: add `ctx_defaults` entry to `hospitals.json` (ctx_source="ESTIMATE")
-4. Once VAHI data available: add to `vahi_history_merged.csv` and remove from `ctx_defaults`
+3. Set `vahi_id` to the exact "Organisation Description" string from the bronze VAHI source CSVs.
+   If it matches the formal name exactly, leave blank. If it differs (e.g. RMH: "The Royal Melbourne
+   Hospital - City Campus" ≠ "Royal Melbourne Hospital"), populate it — otherwise `fetch_vahi.py`
+   silently drops the hospital. Missing vahi_id now prints a WARNING with a hint.
+4. `python3 scripts/fetch_vahi.py` — automatically picks up the new hospital and rebuilds
+   `bronze/vahi_history_merged.csv`. No code changes needed.
+5. `python3 scripts/transform_silver.py` — Silver uses real VAHI context (ctx_source="VAHI")
 
 ## ED Data Pipeline Workflow
 

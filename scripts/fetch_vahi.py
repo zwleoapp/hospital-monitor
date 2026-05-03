@@ -147,10 +147,13 @@ def main() -> None:
             raise ValueError(f"Non-UTC timestamp in {col}:\n{bad}")
 
     for q in sorted(merged["quarter"].unique()):
+        if q == "PROXY":
+            continue
         found   = set(merged.loc[merged["quarter"] == q, "hospital"])
         missing = TARGETS - found
         if missing:
             print(f"  WARNING: {missing} absent from quarter '{q}'")
+            print(f"  → If these hospitals exist in VAHI, check their vahi_id in hospitals.csv")
 
     unmapped = merged[merged["network"].isna()]["hospital"].unique()
     if len(unmapped):
