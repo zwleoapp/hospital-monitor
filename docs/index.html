@@ -536,7 +536,7 @@ const HOSPITAL_STALE_MINS  = 60;
 // ── UI display strings — edit here, not inside renderCard ─────────────────────
 const UI_CAT1_NOTE   = "Cat 1 — Always seen immediately, no wait";
 const UI_NO_FC_PAEDS = "No 60min forecast yet";
-const NETWORK_ORDER       = ["Monash Health", "Eastern Health"];
+const NETWORK_ORDER       = ["Monash Health", "Eastern Health", "Melbourne Health"];
 const FORECAST_KEY        = "ed_forecast_v1";
 const MAPS_QUERIES        = {
   "Box Hill Hospital":               "Box+Hill+Hospital+Box+Hill+VIC",
@@ -1008,18 +1008,23 @@ function renderStatusSites(statusSites) {
   if (!block) return;
   if (!statusSites || statusSites.length === 0) { block.innerHTML = ""; return; }
   const cards = statusSites.map(s => {
-    const busyVal  = s.busy_index != null ? s.busy_index.toFixed(1) : "—";
     const ageTxt   = s.heartbeat_age_mins != null ? `${Math.round(s.heartbeat_age_mins)}m ago` : "";
-    const portalTs = s.last_portal_update ? ` · Updated ${s.last_portal_update}` : "";
+    const portalTs = s.last_portal_update ? `Updated ${s.last_portal_update}` : "";
+    const meta     = [ageTxt, portalTs].filter(Boolean).join(" · ");
+    let dataRow;
+    if (s.busy_index != null) {
+      dataRow = `<div class="status-busy-row">
+        <span class="status-busy-label">Busy Index</span>
+        <span class="status-busy-val">${s.busy_index.toFixed(1)}</span>
+      </div>`;
+    } else {
+      dataRow = `<div class="status-meta" style="color:#9ca3af;font-style:italic">No live data published</div>`;
+    }
     return `
       <div class="status-card">
         <div class="status-card-name">${s.site}</div>
-        <div class="status-busy-row">
-          <span class="status-busy-label">Busy Index</span>
-          <span class="status-busy-val">${busyVal}</span>
-          <span class="status-busy-unit">/ 100</span>
-        </div>
-        <div class="status-meta">${ageTxt}${portalTs}</div>
+        ${dataRow}
+        <div class="status-meta">${meta}</div>
       </div>`;
   }).join("");
   block.innerHTML = `

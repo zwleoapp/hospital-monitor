@@ -1,6 +1,6 @@
 # DESIGN — Predictive ED Wait Time Engine
 
-**Version:** 1.7 · **Updated:** 2026-04-29 · **Owner:** G
+**Version:** 1.8 · **Updated:** 2026-05-03 · **Owner:** G
 
 > This document is the **Single Source of Truth (SSOT)**. Every architectural change updates this doc *before* the code is merged. Both Gemini (strategy) and Claude (DS co-design / tactical execution) read it on every session.
 >
@@ -10,7 +10,7 @@
 
 ## 1. Mission
 
-Build a small, low-maintenance pipeline that turns Eastern Health's public ED dashboard into a clean, ML-ready dataset, and — when ready — serves predicted wait times back to the public via a tiny static page. The four focus areas, in priority order:
+Build a small, low-maintenance pipeline that turns public ED dashboards into a clean, ML-ready dataset, and serves predicted wait times back to the public via a static page. The four focus areas, in priority order:
 
 1. **Data safety** — public-aggregate only, append-only Bronze, schema-validated, no PII.
 2. **Accurate ingest & transform** — every layer is reproducible from the previous one.
@@ -41,24 +41,40 @@ The project moves through two phases. Phase 1 is the current operating mode and 
 Everything runs on the Raspberry Pi. No cloud spend.
 
 ```
-[Eastern Health dashboard]   [Open-Meteo API]
-        │ curl_cffi                 │ requests
-        ▼ (30 min, systemd)         ▼ (hourly, systemd)
-[Raspberry Pi]
-   ├── Bronze: eastern_hospital.csv         (append-only, on /mnt/router_ssd/)
-   ├── Bronze: weather.csv                  (append-only, on /mnt/router_ssd/)
-   ├── Silver: eastern_hospital_cleaned.csv (rebuilt each cycle from Bronze)
-   ├── Model:  /models/v<n>.pkl             (trained locally, weekly)
-   └── Export: /tmp/latest.json
-            │
-            ▼  (force-push to `data` branch)
-   [GitHub repo]  ──►  [GitHub Pages]  static map page reads `latest.json`
+[Eastern Health html_js]  [Monash Health powerbi]  [RMH html_regex]  [RCH html_regex]
+         │                         │                       │                 │
+         └──────────────┬──────────┘               (full pipeline)    (raw_only)
+                        │ curl_cffi · every 15 min (systemd)                │
+                        ▼                                                    │
+[Raspberry Pi]                                                               │
+   ├── Bronze:    melbourne_southeast.csv          (append-only, SSD)        │
+   ├── Bronze Raw: bronze_raw_scrapes.csv          (all cohorts+metadata) ◄──┘
+   ├── Audit:    forecast_audit.csv               (ML training log, SSD)
+   ├── Silver:   melbourne_southeast_silver.csv    (rebuilt each cycle)
+   │              Context join: VAHI → AIHW → ctx_defaults (3-tier LEFT join)
+   ├── Model:    config/model_config.json          (per_hospital_damping, weekly evolve)
+   └── Export:   /tmp/latest.json  +  history_timeline.json
+                  │  sites[]           (7 full-pipeline hospitals)
+                  │  status_sites[]    (raw_only hospitals, e.g. RCH)
+                  │  paediatric{}      (Paeds sub-object, Monash campuses only)
+                  ▼  (force-push to `data` branch)
+   [GitHub repo]  ──►  [Vercel]  static page reads latest.json (no-cache)
 ```
+
+**Scraper dispatch (config/hospital_monitor.py → scrapers/ package):**
+
+| Parser | Source | Pattern |
+|---|---|---|
+| `html_js` | Eastern Health | Extracts JS-embedded JSON objects; JS variable names + field maps in `hospitals.json` |
+| `powerbi` | Monash Health | Power BI DSR batch API; per-campus per-cohort visual IDs in `hospitals.json` |
+| `html_regex` | RMH, RCH | Regex patterns from `hospitals.json`; `wait_time` present → full pipeline; `busy_index` only → `raw_only` |
+
+**Adding a hospital requires only config changes** — new row in `hospitals.csv` and source entry in `hospitals.json`. No Python edits needed.
 
 **Phase 1 deliverables:**
 
 - Bronze ingester (existing): `hospital_monitor.py`
-- Silver transformer (existing): `transform_split_1.py`
+- Silver transformer (existing): `transform_silver.py`
 - Weather ingester (new, small): `weather_monitor.py` — pulls Open-Meteo on the Pi.
 - Publisher (new, small): `publish_latest.py` — writes `latest.json`, force-pushes to `data` branch via SSH key.
 - Trainer (new, small): `train_local.py` — pickles a model weekly into `/models/v<n>.pkl`.
@@ -218,7 +234,7 @@ Monash campuses return rows for both Adult and Paeds populations. The engine bui
 
 | Stream | File | Purpose | Timestamp Source |
 |---|---|---|---|
-| **Reported Truth (UI)** | `eastern_hospital.csv` | Official wait times displayed on the dashboard | Hospital's `LastUpdatedDisplay` (Monash) or page `Date` header (Eastern Health) |
+| **Reported Truth (UI)** | `melbourne_southeast.csv` | Official wait times displayed on the dashboard | Hospital's `LastUpdatedDisplay` (Monash) or page `Date` header (Eastern Health) |
 | **Clinical Raw (ML)** | `bronze_raw_scrapes.csv` | Raw scrapes for momentum calculation | System scrape timestamp (UTC, when Pi executed the query) |
 
 Both streams are written on every scrape cycle by `hospital_monitor.py`. The Clinical Raw stream is never deduplicated — every scrape is a new row, even if the hospital's reported timestamp hasn't changed. This ensures ML momentum (`M15`) reflects the true rate of change in wait times, not the hospital's publishing cadence.
@@ -228,7 +244,7 @@ Both streams are written on every scrape cycle by `hospital_monitor.py`. The Cli
 scrape_timestamp_utc, site, reported_timestamp_str, waiting, treating, wait_str, source_type
 ```
 
-**Fallback logic:** If the Power BI query fails to return a specific campus value, the scraper will replicate the most recent "Reported" data from `eastern_hospital.csv` as a proxy, ensuring the dashboard never shows blank values during transient scraper failures.
+**Fallback logic:** If the Power BI query fails to return a specific campus value, the scraper will replicate the most recent "Reported" data from `melbourne_southeast.csv` as a proxy, ensuring the dashboard never shows blank values during transient scraper failures.
 
 **UI integration:** The dashboard's **Metrics & Index Insights** panel includes a "Scraper Sync" field showing how many minutes ago the Pi last successfully queried the raw Power BI endpoint for that hospital. This is computed from the latest `scrape_timestamp_utc` in `bronze_raw_scrapes.csv` and published to `latest.json` as `scraper_sync_mins`.
 
