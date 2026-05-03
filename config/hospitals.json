@@ -143,10 +143,17 @@
   "rch_health": {
     "parser": "html_regex",
     "url": "https://www.rch.org.au/emerg_rch/status/",
-    "_pipeline_comment": "RCH does not publish patient counts or wait times. pipeline=raw_only: scraper writes to Bronze Raw only. busy_index pattern kept in case RCH re-publishes it; currently RCH page shows a static message with no numeric data (as of 2026-05-03).",
+    "_pipeline_comment": "RCH publishes a 3-level status (Normal/Very Busy/Extremely Busy) via image filename. No patient counts or wait minutes. pipeline=raw_only: Bronze Raw only, shown as status card in UI.",
     "regex_patterns": {
-      "busy_index":   "how busy we are:\\s*([0-9.]+)",
+      "status_level": "ED-wait-times-graph(\\d)\\.png",
+      "busy_index":   "<font color='white'>([0-9.]+)</font>",
       "updated_time": "Last updated\\s*([^<]+)"
+    },
+    "_status_map_comment": "Maps status_level digit → human label stored in reported_wait_str. Colours match RCH's own colour scheme.",
+    "status_map": {
+      "1": "Normal",
+      "2": "Very Busy",
+      "3": "Extremely Busy"
     },
     "hospitals": {
       "RoyalChildrens": "Royal Childrens Hospital"

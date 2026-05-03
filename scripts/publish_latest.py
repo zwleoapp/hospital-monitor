@@ -357,7 +357,11 @@ def main() -> None:
                     age_mins = None
                 if age_mins is not None and age_mins > UI_DISPLAY_WINDOW_MINS:
                     continue  # stale — skip
-                wait_str = row.get("reported_wait_str", "")
+                wait_str  = row.get("reported_wait_str", "")
+                # busy_label: human status label (e.g. "Extremely Busy", "Normal")
+                # busy_index: numeric value (e.g. 95.793) — stored alongside label
+                _known_labels = {"Normal", "Very Busy", "Extremely Busy"}
+                busy_label: str | None = wait_str if wait_str in _known_labels else None
                 busy_index: float | None = None
                 if wait_str.startswith("Busy: "):
                     try:
@@ -369,6 +373,7 @@ def main() -> None:
                     "scrape_timestamp_utc": scrape_ts_str,
                     "heartbeat_age_mins":  age_mins,
                     "reported_wait_str":   wait_str,
+                    "busy_label":          busy_label,
                     "busy_index":          busy_index,
                     "fidelity_status":     row.get("fidelity_status", ""),
                     "last_portal_update":  row.get("reported_timestamp_str", ""),

@@ -176,13 +176,19 @@
       letter-spacing:.08em;color:#9ca3af;margin-bottom:.6rem}
     .status-sites-grid{display:flex;flex-wrap:wrap;gap:.7rem}
     .status-card{background:#fff;border-radius:.75rem;padding:.85rem 1rem;
-      border:1px solid #e5e7eb;min-width:200px;flex:0 0 auto}
-    .status-card-name{font-size:.72rem;font-weight:700;color:#374151;margin-bottom:.35rem}
-    .status-busy-row{display:flex;align-items:baseline;gap:.3rem}
-    .status-busy-label{font-size:.6rem;text-transform:uppercase;letter-spacing:.06em;color:#9ca3af;font-weight:600}
-    .status-busy-val{font-size:1.5rem;font-weight:800;color:#f59e0b}
-    .status-busy-unit{font-size:.6rem;color:#9ca3af}
-    .status-meta{font-size:.58rem;color:#b0b0bb;margin-top:.3rem}
+      border:1px solid #e5e7eb;min-width:200px;max-width:260px;flex:0 0 auto}
+    .status-card-name{font-size:.72rem;font-weight:700;color:#374151;margin-bottom:.1rem}
+    .status-card-sub{font-size:.58rem;color:#9ca3af;text-transform:uppercase;
+      letter-spacing:.06em;margin-bottom:.5rem}
+    /* Colour-coded badge — matches RCH's own three-level colour scheme */
+    .status-badge{display:inline-flex;align-items:center;gap:.35rem;
+      padding:.28rem .65rem;border-radius:.4rem;font-size:.75rem;font-weight:700;
+      letter-spacing:.03em;margin-bottom:.4rem}
+    .status-badge-normal      {background:#fef9c3;color:#78350f;border:1px solid #fde68a}
+    .status-badge-verybusy    {background:#fff3e0;color:#9a3412;border:1px solid #fed7aa}
+    .status-badge-extremebusy {background:#fee2e2;color:#7f1d1d;border:1px solid #fca5a5}
+    .status-badge-unknown     {background:#f3f4f6;color:#6b7280;border:1px solid #e5e7eb}
+    .status-meta{font-size:.58rem;color:#b0b0bb;margin-top:.2rem}
 
     /* ── Legacy classes kept for historical-grid compatibility ───────────────── */
     .hero-split{display:flex;gap:0;margin-bottom:.75rem;align-items:flex-end}
@@ -1003,27 +1009,39 @@ function renderDashboard(outlook) {
   updateHistNav();
 }
 
+const _STATUS_BADGE = {
+  "Normal":          {cls:"status-badge-normal",       dot:"🟡", label:"Normal"},
+  "Very Busy":       {cls:"status-badge-verybusy",     dot:"🟠", label:"Very Busy"},
+  "Extremely Busy":  {cls:"status-badge-extremebusy",  dot:"🔴", label:"Extremely Busy"},
+};
+
 function renderStatusSites(statusSites) {
   const block = document.getElementById("status-sites-block");
   if (!block) return;
   if (!statusSites || statusSites.length === 0) { block.innerHTML = ""; return; }
   const cards = statusSites.map(s => {
-    const ageTxt   = s.heartbeat_age_mins != null ? `${Math.round(s.heartbeat_age_mins)}m ago` : "";
-    const portalTs = s.last_portal_update ? `Updated ${s.last_portal_update}` : "";
-    const meta     = [ageTxt, portalTs].filter(Boolean).join(" · ");
-    let dataRow;
-    if (s.busy_index != null) {
-      dataRow = `<div class="status-busy-row">
-        <span class="status-busy-label">Busy Index</span>
-        <span class="status-busy-val">${s.busy_index.toFixed(1)}</span>
-      </div>`;
+    // Portal timestamp — show HH:MM from normalized "~HH:MM" or raw string
+    const pts = s.last_portal_update || "";
+    const ptm = pts.match(/(\d{1,2}:\d{2})/);
+    const ptime = ptm ? ptm[1] + " AEST" : (pts ? pts : "");
+    const meta = [
+      s.heartbeat_age_mins != null ? `${Math.round(s.heartbeat_age_mins)}m ago` : "",
+      ptime ? `Updated ${ptime}` : "",
+    ].filter(Boolean).join(" · ");
+
+    let badge;
+    if (s.busy_label && _STATUS_BADGE[s.busy_label]) {
+      const b = _STATUS_BADGE[s.busy_label];
+      badge = `<span class="status-badge ${b.cls}">${b.dot}&thinsp;${b.label}</span>`;
     } else {
-      dataRow = `<div class="status-meta" style="color:#9ca3af;font-style:italic">No live data published</div>`;
+      badge = `<span class="status-badge status-badge-unknown">No live data</span>`;
     }
+
     return `
       <div class="status-card">
         <div class="status-card-name">${s.site}</div>
-        ${dataRow}
+        <div class="status-card-sub">Paediatric ED</div>
+        ${badge}
         <div class="status-meta">${meta}</div>
       </div>`;
   }).join("");

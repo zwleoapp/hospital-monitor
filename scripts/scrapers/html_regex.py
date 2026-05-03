@@ -61,12 +61,18 @@ def scrape_html_regex_source(source_key: str, cfg: dict, timestamp: str,
     rows: list = []
     raw_rows: list = []
 
+    # status_map (optional): maps a captured status_level digit to a human label.
+    # e.g. {"1": "Normal", "2": "Very Busy", "3": "Extremely Busy"} for RCH.
+    # Stored in config so label changes require no script edits.
+    status_map: dict = cfg.get("status_map", {})
+
     for js_key, formal_name in hospitals.items():
         wait_time_raw = extracted.get("wait_time")        # e.g. "00 hr 52 min - 01 hr 54 min"
         waiting_raw   = extracted.get("patients_waiting")
         treating_raw  = extracted.get("patients_treating")
         updated_raw   = extracted.get("updated_time", "") or ""
         busy_idx      = extracted.get("busy_index")
+        status_level  = extracted.get("status_level")     # e.g. "3" from image filename
 
         # Safe int conversion for counts
         def _to_int(s):
@@ -79,12 +85,15 @@ def scrape_html_regex_source(source_key: str, cfg: dict, timestamp: str,
         treating = _to_int(treating_raw)
 
         # Parse wait range → (min_wait_mins, max_wait_mins, display string)
+        # Priority: wait_time (full pipeline) > status_map label > busy_index numeric
         min_wait, max_wait, wait_str = 0, 0, ""
         if wait_time_raw:
             parts    = re.split(r"\s*-\s*", wait_time_raw, maxsplit=1)
             min_wait = _parse_wait_str(parts[0])
             max_wait = _parse_wait_str(parts[1]) if len(parts) > 1 else min_wait
             wait_str = wait_time_raw
+        elif status_level and status_level in status_map:
+            wait_str = status_map[status_level]   # e.g. "Extremely Busy"
         elif busy_idx:
             wait_str = f"Busy: {busy_idx}"
 
