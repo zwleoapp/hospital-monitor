@@ -95,7 +95,7 @@ from datetime import datetime, timezone, timedelta
 import pandas as pd
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
-from predict_next import project_wait, confidence_score  # noqa: E402
+from predict_next import project_wait, confidence_score, time_band, day_type  # noqa: E402
 from config.hospitals import ALL_HOSPITALS, SOURCES       # noqa: E402
 from config.paths import (                                # noqa: E402
     SILVER_CSV          as DEFAULT_SILVER,
@@ -129,7 +129,8 @@ _SOURCE_TYPE_MAP: dict[str, str] = {
 
 FORECAST_AUDIT_HEADER = [
     "bucket_utc", "hospital", "cohort", "source_type",
-    "current_wait_min", "wait_momentum",
+    "day_type", "time_band",
+    "current_wait_min", "wait_momentum", "treating_count",
     "actual_wait_min", "predicted_wait_min", "error_pct", "forecast_accuracy",
     "cache_lag_minutes", "fidelity_status",
 ]
@@ -236,24 +237,34 @@ def _write_forecast_audit(df: "pd.DataFrame") -> None:
         bucket   = row["bucket"]
         key      = (hospital, bucket)
 
-        predicted = float(row["predicted_wait_min"])
-        actual    = float(row["actual_60m_wait_min"])
-        current   = float(row.get("min_wait_mins") or 0)
-        momentum  = float(row.get("wait_momentum")  or 0)
-        error_pct = abs(predicted - actual) / max(actual, 1) * 100
+        predicted  = float(row["predicted_wait_min"])
+        actual     = float(row["actual_60m_wait_min"])
+        current    = float(row.get("min_wait_mins") or 0)
+        momentum   = float(row.get("wait_momentum")  or 0)
+        treating   = int(row.get("treating") or 0)
+        error_pct  = abs(predicted - actual) / max(actual, 1) * 100
+
+        # Temporal classification for the evolve_model.py demand segmentation
+        from zoneinfo import ZoneInfo as _ZI
+        bucket_melb = bucket.astimezone(_ZI("Australia/Melbourne"))
+        d_type = day_type(bucket_melb)
+        t_band = time_band(bucket_melb.hour)
 
         audit_rows.append([
             bucket.strftime("%Y-%m-%dT%H:%M:%SZ"),
             hospital,
             "Adult",                                     # cohort — Paed forecasts not yet built
             _SOURCE_TYPE_MAP.get(hospital, "unknown"),   # html_js or powerbi
+            d_type,                                      # weekday | weekend | public_holiday
+            t_band,                                      # overnight | morning | afternoon | evening
             round(current, 1),
             round(momentum, 1),
+            treating,                                    # treating_count — capacity signal for regression
             round(actual, 1),
             round(predicted, 1),
             round(error_pct, 1),
             float(row["forecast_accuracy"]),
-            cache_lag_lookup.get(key, ""),               # see docstring for interpretation
+            cache_lag_lookup.get(key, ""),
             fidelity_lookup.get(key, ""),
         ])
 

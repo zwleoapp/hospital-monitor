@@ -40,6 +40,7 @@ import argparse
 import pathlib
 from datetime import datetime, timezone, timedelta
 
+import holidays as _holidays_lib
 import pandas as pd
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
@@ -79,8 +80,40 @@ _CW_P90      = float(_mcfg.get("confidence_weight_p90",      0.20))
 _CONF_HIGH   = float(_mcfg.get("confidence_high_threshold",  0.70))
 _CONF_MOD    = float(_mcfg.get("confidence_moderate_threshold", 0.40))
 
-# Per-hospital damping from evolve_model.py (written to model_config.json)
-_PER_HOSPITAL_DAMPING: dict[str, float] = _mcfg.get("per_hospital_damping", {})
+# Per-hospital damping written by evolve_model.py.
+# Schema: {hospital: {day_type_band: float}} — granular by day_type + time_band.
+# Legacy flat {hospital: float} also supported for backward compat.
+_PER_HOSPITAL_DAMPING: dict = _mcfg.get("per_hospital_damping", {})
+
+# Victorian public holiday calendar (auto-updated yearly by the holidays package)
+_VIC_HOLIDAYS = _holidays_lib.country_holidays("AU", subdiv="VIC")
+
+
+# ── Temporal helpers (used by evolve_model.py and get_history.py) ─────────────
+
+def time_band(hour: int) -> str:
+    """Map hour-of-day (0–23 Melbourne local) to a named 6-hour band."""
+    if hour < 6:  return "overnight"
+    if hour < 12: return "morning"
+    if hour < 18: return "afternoon"
+    return "evening"
+
+
+def day_type(dt: datetime) -> str:
+    """
+    Classify a Melbourne-local datetime as weekday / weekend / public_holiday.
+
+    Public holidays take priority over weekend — a Saturday public holiday
+    (e.g. Anzac Day 2026 falls on Saturday) is classified as public_holiday.
+    ED demand on Victorian public holidays matches Sunday-like patterns but
+    can spike on the following Monday (substitute holiday effect).
+    """
+    d = dt.date()
+    if d in _VIC_HOLIDAYS:
+        return "public_holiday"
+    if dt.weekday() >= 5:   # 5 = Saturday, 6 = Sunday
+        return "weekend"
+    return "weekday"
 
 
 # ── Override & safety layer ───────────────────────────────────────────────────
@@ -93,15 +126,23 @@ def _load_overrides() -> dict:
         return {}
 
 
-def get_effective_damping(hospital: str | None = None) -> float:
+def get_effective_damping(hospital: str | None = None,
+                          dt: datetime | None = None) -> float:
     """
-    Resolve the damping factor for a hospital, clamped to [DAMPING_MIN, DAMPING_MAX].
+    Resolve the damping factor, clamped to [DAMPING_MIN, DAMPING_MAX].
 
     Priority order:
-      1. config/overrides.json → manual_damping_per_site[hospital]  (human override)
-      2. config/overrides.json → manual_damping                      (global human override)
-      3. model_config.json → per_hospital_damping[hospital]          (ML-evolved by evolve_model.py)
-      4. model_config.json → momentum_damping                        (global default)
+      1. overrides.json → manual_damping_per_site[hospital]   (human override)
+      2. overrides.json → manual_damping                       (global human override)
+      3. model_config.json → per_hospital_damping[hospital]
+           → granular {day_type}_{time_band} key if dt provided and key exists
+           → average across all evolved bands as fallback
+      4. model_config.json → momentum_damping                  (global default)
+
+    Args:
+        hospital: Hospital formal name.
+        dt: Melbourne-local datetime of the observation (used to select the
+            correct day_type + time_band). Defaults to now if not provided.
     """
     def _clamp(v: float) -> float:
         return float(min(DAMPING_MAX, max(DAMPING_MIN, v)))
@@ -116,7 +157,18 @@ def get_effective_damping(hospital: str | None = None) -> float:
         return _clamp(ov["manual_damping"])
 
     if hospital and hospital in _PER_HOSPITAL_DAMPING:
-        return _clamp(_PER_HOSPITAL_DAMPING[hospital])
+        ph = _PER_HOSPITAL_DAMPING[hospital]
+        if isinstance(ph, dict) and ph:
+            # Granular lookup: (day_type)_(time_band) compound key
+            ref_dt = dt or datetime.now(timezone.utc).astimezone(
+                __import__("zoneinfo").ZoneInfo("Australia/Melbourne"))
+            key = f"{day_type(ref_dt)}_{time_band(ref_dt.hour)}"
+            if key in ph:
+                return _clamp(ph[key])
+            # No exact match — use weighted mean of all evolved bands as best proxy
+            return _clamp(sum(ph.values()) / len(ph))
+        elif isinstance(ph, (int, float)):
+            return _clamp(float(ph))  # legacy flat value
 
     return MOMENTUM_DAMPING
 
@@ -245,7 +297,10 @@ def build_outlook(silver_row: pd.Series) -> dict:
     vahi_median_cat123 = None if pd.isna(raw_med123) else int(raw_med123)
     vahi_median_cat45  = None if pd.isna(raw_med45)  else int(raw_med45)
 
-    damping = get_effective_damping(hospital)
+    # Pass the observation datetime so damping resolves to the correct day_type + band
+    from zoneinfo import ZoneInfo as _ZI
+    obs_melb = silver_row["timestamp"].astimezone(_ZI("Australia/Melbourne"))
+    damping = get_effective_damping(hospital, dt=obs_melb)
     projected, (confidence, label) = (
         project_wait(current_wait, momentum, damping),
         confidence_score(current_wait, momentum, los_pct, p90),
