@@ -15,19 +15,8 @@
     }
   },
 
-  "_comment_ctx_defaults": "Fallback ctx values for hospitals not yet in VAHI quarterly file. Applied by transform_silver.py as ctx_source=ESTIMATE. Update each field with real VAHI data once available.",
-  "ctx_defaults": {
-    "Royal Melbourne Hospital": {
-      "_comment": "Proxy estimates — replace with real VAHI benchmarks once available for Melbourne Health",
-      "ctx_network": "Melbourne Health",
-      "ctx_wait_p90_mins": 90,
-      "ctx_wait_median_cat123_mins": 30,
-      "ctx_wait_median_cat45_mins": 60,
-      "ctx_los_pct_under_4hr": 65.0,
-      "ctx_los_pct_over_24hr": 2.0,
-      "ctx_non_admitted_los_pct_under_4hr": 85.0
-    }
-  },
+  "_comment_ctx_defaults": "Fallback ctx values for hospitals not yet in VAHI quarterly file. Applied by transform_silver.py as ctx_source=ESTIMATE. Currently empty — RMH now has real VAHI data (vahi_id onboarded 2026-05-03). Add entries here only for newly added hospitals before their first VAHI quarter.",
+  "ctx_defaults": {},
 
   "eastern_health": {
     "parser": "html_js",

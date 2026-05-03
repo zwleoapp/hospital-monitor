@@ -37,8 +37,18 @@ RAW_ONLY_HOSPITALS: set[str] = {
 
 # ── Per-hospital metadata (all hospitals — used for historical joins) ──────────
 HOSPITAL_META: dict[str, dict] = {
-    r["name"]: {"network": r["network_type"], "aihw_code": r["aihw_id"]}
+    r["name"]: {"network": r["network_type"], "aihw_code": r["aihw_id"],
+                "vahi_id": r.get("vahi_id", "")}
     for r in REGISTRY
+}
+
+# Maps VAHI "Organisation Description" → our formal hospital name.
+# Used by fetch_vahi.py so VAHI source CSVs can use long-form names while
+# the pipeline uses short formal names throughout.
+VAHI_NAME_MAP: dict[str, str] = {
+    r.get("vahi_id", "").strip(): r["name"]
+    for r in REGISTRY
+    if r.get("vahi_id", "").strip() and r.get("vahi_id", "").strip() != r["name"]
 }
 
 ALL_HOSPITALS    = list(HOSPITAL_META)

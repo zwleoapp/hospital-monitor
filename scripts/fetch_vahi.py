@@ -32,7 +32,7 @@ from datetime import datetime, date
 from zoneinfo import ZoneInfo
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
-from config.hospitals import HOSPITAL_META, HOSPITAL_NETWORK
+from config.hospitals import HOSPITAL_META, HOSPITAL_NETWORK, VAHI_NAME_MAP
 
 BRONZE_DIR  = pathlib.Path(__file__).resolve().parent.parent / "bronze"
 OUTPUT_FILE = BRONZE_DIR / "vahi_history_merged.csv"
@@ -79,7 +79,7 @@ def load_vahi(path: pathlib.Path, value_col: str) -> pd.DataFrame:
         "Calendar Quarter Name":    "quarter",  # wait-time files
         "Period Axis":              "quarter",   # LOS files
     })
-    df["hospital"] = df["hospital"].str.strip()
+    df["hospital"] = df["hospital"].str.strip().replace(VAHI_NAME_MAP)
     df["quarter"]  = df["quarter"].str.strip()
     df = df[df["hospital"].isin(TARGETS)].copy()
 
