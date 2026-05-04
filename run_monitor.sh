@@ -12,6 +12,7 @@ REPO=/home/pi-zwapp/hospital-monitor
 SCRIPTS=$REPO/scripts
 LOG_DIR=/var/log/hospital-monitor
 PYTHON=python3
+[ -f "$REPO/.env" ] && source "$REPO/.env"
 
 # ── Logging ────────────────────────────────────────────────────────────────────
 mkdir -p "$LOG_DIR"
@@ -28,7 +29,7 @@ $PYTHON "$SCRIPTS/hospital_monitor.py"
 echo "--- Step 2: transform_silver"
 $PYTHON "$SCRIPTS/transform_silver.py"
 
-# ── Step 3: Publish + push ─────────────────────────────────────────────────────
+# ── Step 3: Publish (method: config/ui_config.json → publish_method) ──────────
 # publish_latest.py enforces the 06:00–23:00 operational hours gate internally.
 # Outside those hours it logs "Trial Mode: Sleeping" and exits 0 cleanly.
 echo "--- Step 3: publish_latest (--push)"

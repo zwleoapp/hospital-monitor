@@ -1,29 +1,38 @@
 # data-class: public-aggregate
 """
-publish_latest.py — Silver → JSON → data branch
+publish_latest.py — Silver → JSON → Vercel (direct API) / GitHub data branch / dual
 
 Pipeline (run after transform_silver.py):
   1. Load the most-recent Silver CSV row per hospital
   2. Compute outlook via predict_next logic (wait + momentum + VAHI baseline)
-  3. Write latest.json to a staging path (/tmp by default, gitignored in docs/)
-  4. --push: force-push latest.json to the `data` branch via SSH deploy key
+  3. Write latest.json to a staging path (/tmp/publisher/)
+  4. --push: publish via method set in config/ui_config.json → publish_method
+             'vercel_api'      — direct Vercel API deploy (no git)
+             'git_data_branch' — push to GitHub data branch via SSH deploy key
+             'dual'            — git every cycle + Vercel every vercel_deploy_interval_mins
 
-docs/index.html is a static file committed to main; it fetches latest.json
-from the data branch at runtime — no embedded payload, no local write needed.
+Credentials for Vercel in .env (repo root, never committed):
+  VERCEL_API_TOKEN, VERCEL_PROJECT_ID
+
+Override method at runtime: PUBLISH_METHOD=git_data_branch python3 scripts/publish_latest.py --push
 
 Usage:
   python3 scripts/publish_latest.py
   python3 scripts/publish_latest.py --silver /path/to/silver.csv
-  python3 scripts/publish_latest.py --push   # requires SSH deploy key configured
+  python3 scripts/publish_latest.py --push
 """
 
+import os
 import sys
 import json
 import math
 import shlex
+import hashlib
 import argparse
 import pathlib
 import subprocess
+import urllib.request
+import urllib.error
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
@@ -40,6 +49,7 @@ from config.paths import (                                    # noqa: E402
     PUBLISHER_TMPDIR,
     LAST_UPDATED_SIDECAR,
     BRONZE_RAW_CSV        as BRONZE_RAW_PATH,
+    VERCEL_LAST_DEPLOY,
 )
 
 # ── UI display window ─────────────────────────────────────────────────────────
@@ -75,6 +85,102 @@ def traffic_light(predicted_wait: float, momentum: float) -> str:
         return "amber"
     return "red"
 
+# ── Vercel deploy interval check ─────────────────────────────────────────────
+
+def _load_env() -> dict[str, str]:
+    env: dict[str, str] = {}
+    env_file = _BASE / ".env"
+    if env_file.exists():
+        for line in env_file.read_text().splitlines():
+            line = line.strip()
+            if line and not line.startswith("#") and "=" in line:
+                k, v = line.split("=", 1)
+                env[k.strip()] = v.strip()
+    return env
+
+
+def _vercel_due(interval_mins: int) -> bool:
+    try:
+        last = float(VERCEL_LAST_DEPLOY.read_text().strip())
+        elapsed = (datetime.now(timezone.utc).timestamp() - last) / 60
+        if elapsed < interval_mins:
+            print(f"  Vercel deploy skipped — {elapsed:.0f}/{interval_mins} min elapsed")
+            return False
+    except (FileNotFoundError, ValueError):
+        pass
+    return True
+
+
+def _vercel_stamp() -> None:
+    VERCEL_LAST_DEPLOY.write_text(str(datetime.now(timezone.utc).timestamp()))
+
+
+def deploy_to_vercel(json_path: pathlib.Path,
+                     history_path: pathlib.Path | None = None) -> None:
+    """Upload files directly to Vercel production via deployment API (no git)."""
+    import shutil
+    env        = _load_env()
+    token      = os.environ.get("VERCEL_API_TOKEN")  or env.get("VERCEL_API_TOKEN", "")
+    project_id = os.environ.get("VERCEL_PROJECT_ID") or env.get("VERCEL_PROJECT_ID", "")
+    if not token or not project_id:
+        raise RuntimeError("VERCEL_API_TOKEN and VERCEL_PROJECT_ID must be set in .env")
+
+    PUBLISHER_TMPDIR.mkdir(parents=True, exist_ok=True)
+    shutil.copy(json_path, PUBLISHER_TMPDIR / "latest.json")
+    shutil.copy(_BASE / "docs" / "index.html", PUBLISHER_TMPDIR / "index.html")
+    write_schema(PUBLISHER_TMPDIR / "schema.json")
+    vercel_config = {
+        "headers": [
+            {"source": "/latest.json",          "headers": [{"key": "Cache-Control", "value": "no-cache, no-store, must-revalidate"}]},
+            {"source": "/history_timeline.json", "headers": [{"key": "Cache-Control", "value": "public, max-age=900"}]},
+        ]
+    }
+    (PUBLISHER_TMPDIR / "vercel.json").write_text(json.dumps(vercel_config, indent=2))
+
+    deploy_files = [
+        (PUBLISHER_TMPDIR / "latest.json",         "latest.json"),
+        (PUBLISHER_TMPDIR / "index.html",          "index.html"),
+        (PUBLISHER_TMPDIR / "schema.json",         "schema.json"),
+        (PUBLISHER_TMPDIR / "vercel.json",         "vercel.json"),
+    ]
+    if history_path and history_path.exists():
+        shutil.copy(history_path, PUBLISHER_TMPDIR / "history_timeline.json")
+        deploy_files.append((PUBLISHER_TMPDIR / "history_timeline.json", "history_timeline.json"))
+
+    def _upload(content: bytes) -> str:
+        sha = hashlib.sha1(content).hexdigest()
+        req = urllib.request.Request(
+            "https://api.vercel.com/v2/files", data=content, method="POST",
+            headers={"Authorization": f"Bearer {token}", "Content-Type": "application/octet-stream",
+                     "x-vercel-digest": sha, "Content-Length": str(len(content))},
+        )
+        try:
+            with urllib.request.urlopen(req) as r:
+                r.read()
+        except urllib.error.HTTPError as e:
+            if e.code not in (200, 201):
+                raise
+        return sha
+
+    manifest = []
+    for local, vercel_path in deploy_files:
+        content = local.read_bytes()
+        sha = _upload(content)
+        manifest.append({"file": vercel_path, "sha": sha, "size": len(content)})
+        print(f"  uploaded {vercel_path} ({len(content):,} bytes)")
+
+    payload = json.dumps({"name": "hospital-monitor", "target": "production", "files": manifest}).encode()
+    req = urllib.request.Request(
+        f"https://api.vercel.com/v13/deployments?projectId={project_id}&skipAutoDetectionConfirmation=1",
+        data=payload, method="POST",
+        headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+    )
+    with urllib.request.urlopen(req) as r:
+        result = json.loads(r.read())
+    stamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    print(f"  Deployed → https://{result.get('url', '?')} ({stamp})")
+
+
 # ── Git push (data branch) ────────────────────────────────────────────────────
 
 def _git(cmd: str, cwd: pathlib.Path) -> None:
@@ -87,30 +193,25 @@ def _git(cmd: str, cwd: pathlib.Path) -> None:
 
 def push_to_data_branch(json_path: pathlib.Path,
                         history_path: pathlib.Path | None = None) -> None:
-    """
-    Force-push data files to the `data` branch via SSH deploy key.
-    Each commit is a clean slate containing exactly 4 files:
-      index.html, latest.json, history_timeline.json, vercel.json
-    This removes any source-code files that crept in via earlier manual pushes.
-    """
+    """Force-push data files to the GitHub data branch via SSH deploy key."""
+    import shutil
     repo_url = subprocess.check_output(
-        ["git", "remote", "get-url", "origin"],
-        cwd=_BASE, text=True
+        ["git", "remote", "get-url", "origin"], cwd=_BASE, text=True
     ).strip()
 
-    if not PUBLISHER_TMPDIR.exists():
+    if not (PUBLISHER_TMPDIR / ".git").exists():
+        import shutil as _shutil
+        if PUBLISHER_TMPDIR.exists():
+            _shutil.rmtree(PUBLISHER_TMPDIR)
         print(f"  Cloning data branch → {PUBLISHER_TMPDIR} …")
         subprocess.run(
             ["git", "clone", "--depth", "1", "--branch", "data",
-             repo_url, str(PUBLISHER_TMPDIR)],
-            check=True
+             repo_url, str(PUBLISHER_TMPDIR)], check=True
         )
     else:
         _git("git fetch origin data", PUBLISHER_TMPDIR)
         _git("git reset --hard origin/data", PUBLISHER_TMPDIR)
 
-    # Strip everything from the index and working tree so only our 4 files land in the commit.
-    # Handles the case where manual pushes contaminated the data branch with source files.
     _git("git rm -rf --cached --quiet .", PUBLISHER_TMPDIR)
     subprocess.run(["git", "clean", "-fdx", "--quiet"],
                    cwd=PUBLISHER_TMPDIR, capture_output=True, check=False)
@@ -176,7 +277,7 @@ def main() -> None:
     )
     parser.add_argument(
         "--push", action="store_true",
-        help="Force-push latest.json to the git data branch via SSH deploy key",
+        help="Publish via method in ui_config.json (vercel_api / git_data_branch / dual)",
     )
     args = parser.parse_args()
 
@@ -434,15 +535,32 @@ def main() -> None:
     except Exception as e:
         print(f"\n  Warning: history timeline skipped: {e}", file=sys.stderr)
 
-    # ── 5. Optional git push ───────────────────────────────────────────────────
+    # ── 5. Publish (env PUBLISH_METHOD → ui_config.json → default vercel_api) ──
     if args.push:
-        print("\n  Pushing to data branch …")
-        try:
-            push_to_data_branch(args.out, history_path)
-        except Exception as e:
-            print(f"  Push failed: {e}", file=sys.stderr)
-            print("  Check SSH deploy key is configured.", file=sys.stderr)
-            sys.exit(1)
+        method   = os.environ.get("PUBLISH_METHOD") or _ui_cfg.get("publish_method", "vercel_api")
+        interval = int(_ui_cfg.get("vercel_deploy_interval_mins", 60))
+        do_git    = method in ("git_data_branch", "dual")
+        do_vercel = method in ("vercel_api",      "dual")
+
+        if do_git:
+            print("\n  Pushing to GitHub data branch …")
+            try:
+                push_to_data_branch(args.out, history_path)
+            except Exception as e:
+                print(f"  Git push failed: {e}", file=sys.stderr)
+                print("  Check SSH deploy key and data branch exist.", file=sys.stderr)
+                if not do_vercel:
+                    sys.exit(1)
+
+        if do_vercel and _vercel_due(interval):
+            print("\n  Deploying to Vercel …")
+            try:
+                deploy_to_vercel(args.out, history_path)
+                _vercel_stamp()
+            except Exception as e:
+                print(f"  Vercel deploy failed: {e}", file=sys.stderr)
+                if not do_git:
+                    sys.exit(1)
 
 
 if __name__ == "__main__":

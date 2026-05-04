@@ -32,6 +32,7 @@ LAST_UPDATED_SIDECAR = SSD / "monash_last_updated.json"   # per-campus portal ti
 LATEST_JSON_TMP      = pathlib.Path("/tmp/hospital_monitor_latest.json")
 HISTORY_JSON_TMP     = pathlib.Path("/tmp/history_timeline.json")
 PUBLISHER_TMPDIR     = pathlib.Path("/tmp/publisher")
+VERCEL_LAST_DEPLOY   = pathlib.Path("/tmp/vercel_last_deploy.txt")  # UTC epoch float
 
 # ── Bronze reference data ─────────────────────────────────────────────────────
 VAHI_FILE  = REPO / "bronze" / "vahi_history_merged.csv"
