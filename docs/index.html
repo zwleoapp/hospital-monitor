@@ -544,7 +544,6 @@ let _uiT = {};  // populated from outlook.ui_thresholds after first fetch
 const UI_CAT1_NOTE   = "Cat 1 — Always seen immediately, no wait";
 const UI_NO_FC_PAEDS = "No 60min forecast yet";
 const NETWORK_ORDER       = ["Monash Health", "Eastern Health", "Melbourne Health"];
-const FORECAST_KEY        = "ed_forecast_v1";
 const MAPS_QUERIES        = {
   "Box Hill Hospital":               "Box+Hill+Hospital+Box+Hill+VIC",
   "Maroondah Hospital":              "Maroondah+Hospital+Ringwood+East+VIC",
@@ -623,42 +622,6 @@ function mapsUrl(site) {
   return "https://maps.google.com/?q=" + q;
 }
 
-// ── Rolling forecast accuracy via localStorage ────────────────────────────────
-function storeForecast(sites) {
-  try {
-    const now = Date.now();
-    const stored = JSON.parse(localStorage.getItem(FORECAST_KEY) || "[]");
-    sites.forEach(s => {
-      if (s.predicted_wait_min != null) {
-        stored.push({site: s.site, p: s.predicted_wait_min, ts: now});
-      }
-    });
-    // Prune to last 3 hours
-    const pruned = stored.filter(h => now - h.ts < 6 * 60 * 60 * 1000);
-    localStorage.setItem(FORECAST_KEY, JSON.stringify(pruned));
-  } catch(e) { /* storage unavailable */ }
-}
-
-function getForecastAccuracy(siteName, actual) {
-  try {
-    const now = Date.now();
-    const stored = JSON.parse(localStorage.getItem(FORECAST_KEY) || "[]");
-    const siteStored = stored.filter(h => h.site === siteName);
-    // Calibrating until we have ≥ 4 hours of stored data for this site
-    const oldest = siteStored.length ? Math.min(...siteStored.map(h => h.ts)) : now;
-    if (now - oldest < 4 * 60 * 60 * 1000) return null;
-    // Predictions from 45–75 min ago (±15 min window around the 60-min horizon)
-    const candidates = siteStored.filter(h =>
-      now - h.ts >= 45 * 60 * 1000 &&
-      now - h.ts <= 75 * 60 * 1000
-    );
-    if (!candidates.length || actual == null || actual <= 0) return null;
-    const best = candidates.reduce((a, b) =>
-      Math.abs(now - a.ts - 3600000) < Math.abs(now - b.ts - 3600000) ? a : b
-    );
-    return Math.max(0, Math.round(100 - Math.abs(best.p - actual) / Math.max(actual, 5) * 100));
-  } catch(e) { return null; }
-}
 
 // ── Triage split-estimate helpers ─────────────────────────────────────────────
 function calcSplitEstimates(live, cat123, cat45) {
@@ -758,8 +721,8 @@ function renderCard(s) {
       ? `<div class="crisis-headline ${_crisisCritical ? 'crisis-very-long' : 'crisis-long'}">&#9888; ${_crisisCritical ? 'VERY LONG WAIT' : 'LONG WAIT'}</div>`
       : "";
 
-    const accuracy = getForecastAccuracy(s.site, current);
-    const accuracyBadgeHtml = `<span class="badge ${accuracy != null ? 'forecast-badge' : 'forecast-badge-cal'}">${accuracy != null ? (accuracy > 0 ? '72h&nbsp;Accuracy&nbsp;' + accuracy + '%' : '72h&nbsp;Accuracy&nbsp;&mdash;') : '&#8987; Calibrating&hellip;'}</span>`;
+    const acc = s.recent_accuracy;
+    const accuracyBadgeHtml = `<span class="badge ${acc != null ? 'forecast-badge' : 'forecast-badge-cal'}">${acc != null ? 'Recent&nbsp;Accuracy&nbsp;' + acc + '%' : '&#8987; Calibrating&hellip;'}</span>`;
 
     const histAccuracyHtml = s._is_historical
       ? (s._forecast_accuracy != null && s._forecast_accuracy > 0
@@ -1008,7 +971,6 @@ function renderDashboard(outlook) {
     `).join("");
 
   renderLeaderboard(outlook.sites);
-  storeForecast(outlook.sites);
   checkStale(outlook);
   renderStatusSites(outlook.status_sites ?? []);
   updateHistNav();

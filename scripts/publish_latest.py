@@ -49,6 +49,7 @@ from config.paths import (                                    # noqa: E402
     PUBLISHER_TMPDIR,
     LAST_UPDATED_SIDECAR,
     BRONZE_RAW_CSV        as BRONZE_RAW_PATH,
+    FORECAST_AUDIT_CSV,
     VERCEL_LAST_DEPLOY,
     GITHUB_LAST_PUSH,
 )
@@ -271,6 +272,37 @@ def compute_strain_index(predicted_wait: float, p90: float) -> float:
     return round(predicted_wait / max(1.0, p90), 3)
 
 
+# ── Recent forecast accuracy ─────────────────────────────────────────────────
+
+def _load_recent_accuracy(n: int = 6) -> dict[str, float | None]:
+    """
+    Return {hospital: recent_accuracy} from the last n completed T+60 rows
+    in forecast_audit.csv. n=6 ≈ last 90 min of resolved forecasts.
+    Returns empty dict if file unavailable.
+    """
+    result: dict[str, list[float]] = {}
+    if not FORECAST_AUDIT_CSV.exists():
+        return {}
+    try:
+        import csv
+        with open(FORECAST_AUDIT_CSV, newline="") as f:
+            for row in csv.DictReader(f):
+                hospital = row.get("hospital", "")
+                acc_str  = row.get("forecast_accuracy", "")
+                if not hospital or not acc_str:
+                    continue
+                try:
+                    result.setdefault(hospital, []).append(float(acc_str))
+                except ValueError:
+                    pass
+    except Exception:
+        return {}
+    return {
+        h: round(sum(rows[-n:]) / len(rows[-n:]), 1)
+        for h, rows in result.items() if rows
+    }
+
+
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 def main() -> None:
@@ -382,6 +414,8 @@ def main() -> None:
         except Exception as e:
             print(f"  [DEBUG] Error reading Bronze Raw: {e}", file=sys.stderr)
 
+    recent_accuracy_map = _load_recent_accuracy(n=int(_ui_cfg.get("RECENT_ACCURACY_LOOKBACK", 6)))
+
     sites = []
     for _, row in silver.iterrows():
         outlook = build_outlook(row)
@@ -399,7 +433,8 @@ def main() -> None:
             else None
         )
         outlook["last_updated_display"] = last_updated_map.get(outlook["site"], "")
-        outlook["scraper_sync_mins"] = scraper_sync_map.get(outlook["site"])
+        outlook["scraper_sync_mins"]    = scraper_sync_map.get(outlook["site"])
+        outlook["recent_accuracy"]      = recent_accuracy_map.get(outlook["site"])
 
         # Add unified metadata block for Clinical Pulse architecture
         cache_lag = cache_lag_map.get(outlook["site"])
@@ -515,6 +550,7 @@ def main() -> None:
             "CRISIS_AMBER_P90_RATIO":       float(_ui_cfg.get("CRISIS_AMBER_P90_RATIO",       0.80)),
             "CRISIS_CRITICAL_P90_RATIO":    float(_ui_cfg.get("CRISIS_CRITICAL_P90_RATIO",    1.00)),
             "MAX_WAIT_CRITICAL_P90_RATIO":  float(_ui_cfg.get("MAX_WAIT_CRITICAL_P90_RATIO",  5)),
+            "RECENT_ACCURACY_LOOKBACK":     int(_ui_cfg.get("RECENT_ACCURACY_LOOKBACK",       6)),
         },
     }
 

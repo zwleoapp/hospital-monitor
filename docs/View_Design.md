@@ -1,6 +1,6 @@
 # View Design — Melbourne ED Monitor
 
-**Updated:** 2026-05-03
+**Updated:** 2026-05-04
 
 > Describes the current UI layout in `docs/index.html`. For data schemas that drive content, see [dataflow.md](dataflow.md).
 
@@ -57,10 +57,14 @@ In 60min  Cat 2–3  35m  |  Cat 4–5  39m–43m    [grey chip]
 ```
 CSS: `.triage60-row .triage60-lbl .triage60-item .triage60-cat .triage60-val`
 
-### 5. Trend + confidence
+### 5. Trend + confidence + accuracy
 ```
-↑ Worsening  High confidence 82%
+↑ Worsening  High confidence 82%   Recent Accuracy 83%
 ```
+- Trend arrow and label from `wait_momentum` (Rising / Improving / Stable)
+- Confidence label from `confidence_label` (High / Moderate / Low)
+- **Recent Accuracy badge** from `s.recent_accuracy` in `latest.json` — server-computed average of last 6 completed T+60 predictions. Shows `Calibrating…` when fewer than 6 exist.
+- CSS: `.forecast-badge` (accuracy known) | `.forecast-badge-cal` (calibrating, italic grey)
 
 ### 6. Paediatric section (Monash Casey + Clayton only)
 ```
@@ -131,7 +135,7 @@ CSS: `.status-sites-block .status-sites-grid .status-card .status-card-name .sta
 
 ## Stale Data
 
-`HOSPITAL_STALE_MINS = 60`. When all sites have `heartbeat_age_mins > 60`:
+`HOSPITAL_STALE_MINS` (default 60, from `outlook.ui_thresholds`). When all sites have `heartbeat_age_mins > 60`:
 - Stale banner appears with total age
 - Grid opacity 0.3, grayscale filter, pointer-events none
 
@@ -142,9 +146,11 @@ CSS: `.status-sites-block .status-sites-grid .status-card .status-card-name .sta
 | Constant | Purpose |
 |---|---|
 | `NETWORK_ORDER` | Display order of network groups |
-| `HOSPITAL_STALE_MINS` | Age threshold for stale-data banner |
+| `_uiT` | UI thresholds read from `outlook.ui_thresholds` — replaces hardcoded values |
 | `UI_CAT1_NOTE` | Text in Cat 1 chip |
 | `UI_NO_FC_PAEDS` | Text when no Paeds 60-min forecast |
 | `_STATUS_BADGE` | Label → dot + CSS class for status cards |
 | `DATA_URL` | `/latest.json` (Vercel root-relative, no-cache) |
 | `HISTORY_URL` | `/history_timeline.json` (15-min cache) |
+
+Accuracy is no longer computed client-side. `s.recent_accuracy` from `latest.json` is used directly — no `localStorage`, no `FORECAST_KEY`, no calibration wait per device.

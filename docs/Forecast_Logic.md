@@ -1,6 +1,6 @@
 # Forecast Logic — Melbourne ED Monitor
 
-**Updated:** 2026-05-03
+**Updated:** 2026-05-04
 
 ## Overview
 
@@ -95,7 +95,13 @@ Where `p90_wait_min` = VAHI quarterly 90th-percentile wait (Silver `ctx_wait_p90
 accuracy = 100 − (|W60_predicted − W60_actual| / W60_actual × 100)
 ```
 
-Computed in `get_history.py` for each snapshot where the T+60 observation is available (±15-min tolerance). Written to `forecast_audit.csv` on the SSD for ML backtesting.
+Computed in `get_history.py` for each snapshot where the T+60 observation is available (±15-min tolerance). Written to `forecast_audit.csv` on the SSD.
+
+**Recent Accuracy (UI badge):** `publish_latest.py` reads `forecast_audit.csv` at publish time and takes the last 6 completed T+60 comparisons per hospital (≈ 90 min of resolved forecasts), averages their `forecast_accuracy`, and embeds it as `recent_accuracy` on each site in `latest.json`. This means every device and browser sees the same server-computed value immediately — no client-side calibration period.
+
+- **All triage categories combined** — per-category breakdown is not available from source portals.
+- **"Calibrating"** shown when fewer than 6 completed comparisons exist (e.g. first 90 min after a new hospital is added, or `forecast_audit.csv` is absent).
+- 6 predictions chosen as the window: recent enough to reflect current conditions, enough points to smooth single-scrape noise.
 
 ---
 
