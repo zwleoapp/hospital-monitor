@@ -50,6 +50,7 @@ from config.paths import (                                    # noqa: E402
     LAST_UPDATED_SIDECAR,
     BRONZE_RAW_CSV        as BRONZE_RAW_PATH,
     VERCEL_LAST_DEPLOY,
+    GITHUB_LAST_PUSH,
 )
 
 # ── UI display window ─────────────────────────────────────────────────────────
@@ -99,20 +100,32 @@ def _load_env() -> dict[str, str]:
     return env
 
 
-def _vercel_due(interval_mins: int) -> bool:
+def _due(sidecar: pathlib.Path, interval_mins: int, label: str) -> bool:
     try:
-        last = float(VERCEL_LAST_DEPLOY.read_text().strip())
+        last = float(sidecar.read_text().strip())
         elapsed = (datetime.now(timezone.utc).timestamp() - last) / 60
         if elapsed < interval_mins:
-            print(f"  Vercel deploy skipped — {elapsed:.0f}/{interval_mins} min elapsed")
+            print(f"  {label} skipped — {elapsed:.0f}/{interval_mins} min elapsed")
             return False
     except (FileNotFoundError, ValueError):
         pass
     return True
 
 
+def _vercel_due(interval_mins: int) -> bool:
+    return _due(VERCEL_LAST_DEPLOY, interval_mins, "Vercel deploy")
+
+
 def _vercel_stamp() -> None:
     VERCEL_LAST_DEPLOY.write_text(str(datetime.now(timezone.utc).timestamp()))
+
+
+def _git_due(interval_mins: int) -> bool:
+    return _due(GITHUB_LAST_PUSH, interval_mins, "Git push")
+
+
+def _git_stamp() -> None:
+    GITHUB_LAST_PUSH.write_text(str(datetime.now(timezone.utc).timestamp()))
 
 
 def deploy_to_vercel(json_path: pathlib.Path,
@@ -537,22 +550,24 @@ def main() -> None:
 
     # ── 5. Publish (env PUBLISH_METHOD → ui_config.json → default vercel_api) ──
     if args.push:
-        method   = os.environ.get("PUBLISH_METHOD") or _ui_cfg.get("publish_method", "vercel_api")
-        interval = int(_ui_cfg.get("vercel_deploy_interval_mins", 60))
+        method         = os.environ.get("PUBLISH_METHOD") or _ui_cfg.get("publish_method", "vercel_api")
+        git_interval   = int(_ui_cfg.get("git_push_interval_mins",    30))
+        vercel_interval= int(_ui_cfg.get("vercel_deploy_interval_mins", 60))
         do_git    = method in ("git_data_branch", "dual")
         do_vercel = method in ("vercel_api",      "dual")
 
-        if do_git:
+        if do_git and _git_due(git_interval):
             print("\n  Pushing to GitHub data branch …")
             try:
                 push_to_data_branch(args.out, history_path)
+                _git_stamp()
             except Exception as e:
                 print(f"  Git push failed: {e}", file=sys.stderr)
                 print("  Check SSH deploy key and data branch exist.", file=sys.stderr)
                 if not do_vercel:
                     sys.exit(1)
 
-        if do_vercel and _vercel_due(interval):
+        if do_vercel and _vercel_due(vercel_interval):
             print("\n  Deploying to Vercel …")
             try:
                 deploy_to_vercel(args.out, history_path)

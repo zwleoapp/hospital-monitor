@@ -12,7 +12,8 @@
   "FIDELITY_SYNCED_THRESHOLD_MINS": 15,
   "FIDELITY_STALE_THRESHOLD_MINS": 60,
 
-  "_section_publish": "Publish method for publish_latest.py --push. 'vercel_api' = direct Vercel API only. 'git_data_branch' = GitHub data branch only. 'dual' = git every cycle + Vercel every vercel_deploy_interval_mins. Override: PUBLISH_METHOD=git_data_branch python3 scripts/publish_latest.py --push",
+  "_section_publish": "Publish method for publish_latest.py --push. 'vercel_api' = direct Vercel API only. 'git_data_branch' = GitHub data branch only. 'dual' = git every git_push_interval_mins + Vercel every vercel_deploy_interval_mins. Override: PUBLISH_METHOD=git_data_branch python3 scripts/publish_latest.py --push",
   "publish_method": "dual",
+  "git_push_interval_mins": 30,
   "vercel_deploy_interval_mins": 60
 }
