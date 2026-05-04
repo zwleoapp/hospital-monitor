@@ -33,6 +33,7 @@ from zoneinfo import ZoneInfo
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 from config.hospitals import HOSPITAL_META, HOSPITAL_NETWORK, VAHI_NAME_MAP
+from config.paths import BRONZE_BACKUP_DIR
 
 BRONZE_DIR  = pathlib.Path(__file__).resolve().parent.parent / "bronze"
 OUTPUT_FILE = BRONZE_DIR / "vahi_history_merged.csv"
@@ -220,6 +221,15 @@ def main() -> None:
     merged.to_csv(OUTPUT_FILE, index=False)
     print(f"\nWritten {len(merged)} rows → {OUTPUT_FILE}")
     print(f"Hospitals covered: {sorted(merged['hospital'].unique())}")
+
+    import shutil
+    try:
+        BRONZE_BACKUP_DIR.mkdir(parents=True, exist_ok=True)
+        for src in BRONZE_DIR.glob("*.csv"):
+            shutil.copy2(src, BRONZE_BACKUP_DIR / src.name)
+        print(f"  Bronze backup → {BRONZE_BACKUP_DIR}")
+    except Exception as e:
+        print(f"  Warning: bronze backup skipped ({e})")
 
 
 if __name__ == "__main__":

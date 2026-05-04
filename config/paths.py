@@ -36,5 +36,6 @@ VERCEL_LAST_DEPLOY   = pathlib.Path("/tmp/vercel_last_deploy.txt")   # UTC epoch
 GITHUB_LAST_PUSH     = pathlib.Path("/tmp/github_last_push.txt")    # UTC epoch float
 
 # ── Bronze reference data ─────────────────────────────────────────────────────
-VAHI_FILE  = REPO / "bronze" / "vahi_history_merged.csv"
-AIHW_FILE  = REPO / "bronze" / "eastern_hospital_historical_context.csv"
+VAHI_FILE         = REPO / "bronze" / "vahi_history_merged.csv"
+AIHW_FILE         = REPO / "bronze" / "eastern_hospital_historical_context.csv"
+BRONZE_BACKUP_DIR = pathlib.Path("/mnt/router_ssd/Data_Hub/bronze_backup")

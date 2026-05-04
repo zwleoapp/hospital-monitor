@@ -30,58 +30,130 @@ All hospital names, URLs, credentials, and extraction patterns live in **`config
 
 ### Adding a new hospital
 
-1. **`config/hospitals.json`** — add a source entry with parser type, URL, and patterns/credentials.
-   For `html_regex` sources also add `status_map` (if categorical) and optionally `ctx_defaults`
-   (temporary proxy VAHI benchmarks — remove once step 4 is done).
+No Python changes needed. All steps are config edits + manual script runs.
 
-2. **`config/hospitals.csv`** — add one row:
-   ```
-   name, network_type, scraper_type, vahi_id, aihw_id, is_active, pipeline
-   ```
-   - `pipeline`: `full` (has wait times) or `raw_only` (status/index only, e.g. RCH)
+#### Step 1 — Config: `config/hospitals.json`
 
-3. **Set `vahi_id`** — look up the hospital's exact "Organisation Description":
-   ```bash
-   python3 scripts/fetch_vahi.py --list-orgs
-   ```
-   Lists all 42 Victorian hospitals; `✓` marks those already mapped in `hospitals.csv`.
-   - If the VAHI name **matches** the formal name exactly → leave `vahi_id` blank.
-   - If it **differs** (e.g. `"The Royal Melbourne Hospital - City Campus"` vs `"Royal Melbourne Hospital"`) → set `vahi_id` to the VAHI name.
-   - If left blank when names differ, `fetch_vahi.py` silently drops the hospital from VAHI context.
-     It now prints a WARNING with a hint — treat that as a required fix before merging.
+Add a source entry with parser type, URL, and extraction patterns/credentials.
 
-4. **Rebuild VAHI merged file**:
-   ```bash
-   python3 scripts/fetch_vahi.py
-   ```
-   Automatically picks up the new hospital. Verify output says the new hospital is in "Hospitals covered".
-   Remove `ctx_defaults` from `hospitals.json` once this step completes.
+- For `html_js` sources: set `js_data_vars` and `js_field_map`.
+- For `powerbi` sources: set `endpoint` and `visual_ids` (per-campus per-cohort).
+- For `html_regex` sources: set `regex_patterns`. Add `status_map` if the portal uses categorical labels.
+- Add `ctx_defaults` (temporary proxy VAHI benchmarks) if the hospital has no VAHI/AIHW data yet — remove after step 5 confirms VAHI coverage.
 
-5. **Rebuild Silver**:
-   ```bash
-   python3 scripts/transform_silver.py
-   ```
-   Check `ctx_source breakdown` in the output — new hospital should show `VAHI`, not `ESTIMATE`.
+#### Step 2 — Config: `config/hospitals.csv`
 
-6. **Test scrape + publish**:
-   ```bash
-   python3 scripts/hospital_monitor.py
-   python3 scripts/publish_latest.py --push
-   ```
+Add one row:
+```
+name, network_type, scraper_type, vahi_id, aihw_id, is_active, pipeline
+```
+- `pipeline`: `full` (has numeric wait times → Silver + Gold) or `raw_only` (status/index only → `status_sites` card in UI, no forecast)
+- Leave `vahi_id` and `aihw_id` blank for now — filled in steps 3 and 6.
+
+#### Step 3 — Look up `vahi_id`
+
+```bash
+python3 scripts/fetch_vahi.py --list-orgs
+```
+
+Lists all 42 Victorian hospitals; `✓` marks those already mapped in `hospitals.csv`.
+
+- If the VAHI name **matches** the formal name exactly → leave `vahi_id` blank.
+- If it **differs** (e.g. `"The Royal Melbourne Hospital - City Campus"` vs `"Royal Melbourne Hospital"`) → set `vahi_id` in `hospitals.csv` to the exact VAHI name.
+- If left blank when names differ, `fetch_vahi.py` silently drops the hospital. It prints a WARNING — treat that as a required fix.
+
+#### Step 4 — Rebuild VAHI merged file
+
+```bash
+python3 scripts/fetch_vahi.py
+```
+
+- Automatically picks up the new hospital from `hospitals.csv`.
+- Rebuilds `bronze/vahi_history_merged.csv`.
+- **Auto-backs up all `bronze/*.csv` to SSD** (`/mnt/router_ssd/Data_Hub/bronze_backup/`) — no manual copy needed.
+- Verify output: new hospital should appear in "Hospitals covered".
+
+#### Step 5 — Rebuild Silver
+
+```bash
+python3 scripts/transform_silver.py
+```
+
+Check `ctx_source breakdown` in the output:
+- `VAHI` → real quarterly benchmarks, ready to go. Remove `ctx_defaults` from `hospitals.json`.
+- `ESTIMATE` → VAHI name mismatch or hospital not yet in VAHI file — fix `vahi_id` and re-run step 4.
+
+#### Step 6 — Load AIHW historical data (optional, `full` pipeline only)
+
+Provides historical annual benchmarks for pre-VAHI rows. Skip for `raw_only` hospitals.
+
+```bash
+# Verify the hospital's H-code resolves
+python3 scripts/fetch_aihw.py --list-only
+
+# Preview — fetch to a temp file and check row counts
+python3 scripts/fetch_aihw.py --out bronze/check_aihw.csv
+
+# Append to the main file once rows look correct
+python3 scripts/fetch_aihw.py --append
+
+# Backup the AIHW file to SSD (fetch_aihw.py does not auto-backup)
+cp bronze/eastern_hospital_historical_context.csv /mnt/router_ssd/Data_Hub/bronze_backup/
+
+# Set aihw_id in hospitals.csv to the H-code (e.g. H0330)
+```
+
+**H-code lookup:** See CLAUDE.md → "H-codes (verified 2026-04-29)". If the hospital is new, use `--list-only` to find its code.
+
+#### Step 7 — Test scrape
+
+```bash
+python3 scripts/hospital_monitor.py
+```
+
+Check:
+- New hospital appears in Bronze Raw CSV output.
+- No `PARSE_ERROR` or `HTTP_ERROR` in `ingest_alerts.csv`:
+  ```bash
+  tail -20 /mnt/router_ssd/Data_Hub/Waiting_Live_time/ingest_alerts.csv
+  ```
+
+#### Step 8 — Test publish
+
+```bash
+python3 scripts/publish_latest.py --push
+```
+
+Check:
+- New hospital appears in the `sites` array of the published `latest.json`.
+- `ctx_source` is `"VAHI"` (not `"ESTIMATE"`) on the site object.
+- UI card renders correctly on the dashboard.
+
+#### Step 9 — Cleanup
+
+- Remove `ctx_defaults` from `config/hospitals.json` if added in step 1 and VAHI is now confirmed.
+- Commit the config changes to `main`:
+  ```bash
+  git add config/hospitals.json config/hospitals.csv
+  git commit -m "feat: add <Hospital Name>"
+  git push origin main
+  ```
+
+---
 
 ### Renaming a hospital (formal name change)
 
 1. Update `name` in `hospitals.csv`.
 2. Update the `hospitals` mapping in `hospitals.json` (parser key → formal name).
-3. Check `vahi_id` — if it was blank because names matched, set it to the old VAHI name explicitly so the mapping still works after the rename.
-4. Run `python3 scripts/fetch_vahi.py` and `python3 scripts/transform_silver.py`.
-5. Update `vahi_benchmarks.per_hospital_p90_mins` key in `hospitals.json` to the new name.
+3. Check `vahi_id` — if it was blank because names matched, set it to the old VAHI name explicitly so the mapping survives the rename.
+4. Update `vahi_benchmarks.per_hospital_p90_mins` key in `hospitals.json` to the new name.
+5. Run `python3 scripts/fetch_vahi.py` then `python3 scripts/transform_silver.py`.
 
 ### Renaming/updating a VAHI organisation name
 
-The VAHI portal occasionally renames hospitals. If `fetch_vahi.py` starts WARNING about a missing hospital:
+The VAHI portal occasionally renames hospitals. If `fetch_vahi.py` WARNING appears:
 
-1. Check the current name in `bronze/vahi_*.csv` (re-download the latest CSV from the VAHI portal).
+1. Re-download the affected raw VAHI CSV from the VAHI Data Portal into `bronze/`.
 2. Update `vahi_id` in `hospitals.csv` to match the new VAHI name.
 3. Run `python3 scripts/fetch_vahi.py`.
 
@@ -175,6 +247,25 @@ html_regex ──► "~17:45" (norm'd) ──►
 ---
 
 ## Bronze Layer
+
+### Reference files (`bronze/` — VAHI and AIHW benchmarks)
+
+`bronze/` is in `.gitignore` — these files are **never committed to `main`**. They live on disk and are backed up to the SSD automatically.
+
+| File | Source | Rebuilt by |
+|---|---|---|
+| `vahi_history_merged.csv` | VAHI Data Portal CSVs (manually downloaded) | `fetch_vahi.py` |
+| `eastern_hospital_historical_context.csv` | AIHW API | `fetch_aihw.py --append` |
+
+**SSD backup:** `fetch_vahi.py` automatically copies all `bronze/*.csv` to `/mnt/router_ssd/Data_Hub/bronze_backup/` after rebuilding the merged file. `fetch_aihw.py` requires a manual copy step (see `CLAUDE.md`).
+
+**Restore if `bronze/` is wiped:**
+```bash
+cp /mnt/router_ssd/Data_Hub/bronze_backup/* /home/pi-zwapp/hospital-monitor/bronze/
+python3 scripts/transform_silver.py
+```
+
+---
 
 ### `bronze_raw_scrapes.csv` (all scrapers — Adult + Paeds + raw_only)
 
@@ -392,6 +483,14 @@ data/
 ```
 
 The `data` branch is machine-written on every publish cycle. Never commit source code to `data` manually.
+
+## SSH Deploy Key
+
+```
+~/.ssh/hospital_monitor_deploy   (mode 600)
+```
+
+Routes **all** GitHub connections on this Pi — both `main` branch pushes and `data` branch force-pushes. Do not delete or replace without updating `~/.ssh/config`.
 
 ---
 
