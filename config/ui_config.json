@@ -12,8 +12,21 @@
   "FIDELITY_SYNCED_THRESHOLD_MINS": 15,
   "FIDELITY_STALE_THRESHOLD_MINS": 60,
 
+  "_section_thresholds": "UI display thresholds — embedded in latest.json as ui_thresholds so index.html reads config, not hardcode.",
+  "HOSPITAL_STALE_MINS": 60,
+  "TRAFFIC_LIGHT_GREEN_MAX_MINS": 30,
+  "TRAFFIC_LIGHT_MOMENTUM_MAX": 2,
+  "TRAFFIC_LIGHT_AMBER_MAX_MINS": 60,
+  "CRISIS_AMBER_P90_RATIO": 0.80,
+  "CRISIS_CRITICAL_P90_RATIO": 1.00,
+  "MAX_WAIT_CRITICAL_P90_RATIO": 5,
+
+  "_section_cache": "HTTP Cache-Control headers for published JSON files.",
+  "CACHE_LATEST_JSON": "no-cache, no-store, must-revalidate",
+  "CACHE_HISTORY_JSON": "public, max-age=900",
+
   "_section_publish": "Publish method for publish_latest.py --push. 'vercel_api' = direct Vercel API only. 'git_data_branch' = GitHub data branch only. 'dual' = git every git_push_interval_mins + Vercel every vercel_deploy_interval_mins. Override: PUBLISH_METHOD=git_data_branch python3 scripts/publish_latest.py --push",
-  "publish_method": "dual",
-  "git_push_interval_mins": 15,
+  "publish_method": "git_data_branch",
+  "git_push_interval_mins": 1,
   "vercel_deploy_interval_mins": 60
 }

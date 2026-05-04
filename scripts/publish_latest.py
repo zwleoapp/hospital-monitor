@@ -74,15 +74,12 @@ OPERATIONAL_END_H   = int(_ui_cfg.get("OPERATIONAL_END_H",   23))
 # ── Traffic-light helper ──────────────────────────────────────────────────────
 
 def traffic_light(predicted_wait: float, momentum: float) -> str:
-    """
-    Patient-centric colour based on where the patient will likely wait in 60 min.
-      Green : predicted ≤ 30 min and trend stable or improving
-      Amber : predicted 31–60 min (or short but rising fast)
-      Red   : predicted  > 60 min
-    """
-    if predicted_wait <= 30 and momentum <= 2:
+    green_max  = float(_ui_cfg.get("TRAFFIC_LIGHT_GREEN_MAX_MINS", 30))
+    mom_max    = float(_ui_cfg.get("TRAFFIC_LIGHT_MOMENTUM_MAX",   2))
+    amber_max  = float(_ui_cfg.get("TRAFFIC_LIGHT_AMBER_MAX_MINS", 60))
+    if predicted_wait <= green_max and momentum <= mom_max:
         return "green"
-    if predicted_wait <= 60:
+    if predicted_wait <= amber_max:
         return "amber"
     return "red"
 
@@ -144,17 +141,17 @@ def deploy_to_vercel(json_path: pathlib.Path,
     write_schema(PUBLISHER_TMPDIR / "schema.json")
     vercel_config = {
         "headers": [
-            {"source": "/latest.json",          "headers": [{"key": "Cache-Control", "value": "no-cache, no-store, must-revalidate"}]},
-            {"source": "/history_timeline.json", "headers": [{"key": "Cache-Control", "value": "public, max-age=900"}]},
+            {"source": "/latest.json",          "headers": [{"key": "Cache-Control", "value": _ui_cfg.get("CACHE_LATEST_JSON", "no-cache, no-store, must-revalidate")}]},
+            {"source": "/history_timeline.json", "headers": [{"key": "Cache-Control", "value": _ui_cfg.get("CACHE_HISTORY_JSON", "public, max-age=900")}]},
         ]
     }
     (PUBLISHER_TMPDIR / "vercel.json").write_text(json.dumps(vercel_config, indent=2))
 
     deploy_files = [
-        (PUBLISHER_TMPDIR / "latest.json",         "latest.json"),
-        (PUBLISHER_TMPDIR / "index.html",          "index.html"),
-        (PUBLISHER_TMPDIR / "schema.json",         "schema.json"),
-        (PUBLISHER_TMPDIR / "vercel.json",         "vercel.json"),
+        (PUBLISHER_TMPDIR / "latest.json",          "latest.json"),
+        (PUBLISHER_TMPDIR / "index.html",           "index.html"),
+        (PUBLISHER_TMPDIR / "schema.json",          "schema.json"),
+        (PUBLISHER_TMPDIR / "vercel.json",          "vercel.json"),
     ]
     if history_path and history_path.exists():
         shutil.copy(history_path, PUBLISHER_TMPDIR / "history_timeline.json")
@@ -244,11 +241,11 @@ def push_to_data_branch(json_path: pathlib.Path,
         "headers": [
             {
                 "source": "/latest.json",
-                "headers": [{"key": "Cache-Control", "value": "no-cache, no-store, must-revalidate"}]
+                "headers": [{"key": "Cache-Control", "value": _ui_cfg.get("CACHE_LATEST_JSON", "no-cache, no-store, must-revalidate")}]
             },
             {
                 "source": "/history_timeline.json",
-                "headers": [{"key": "Cache-Control", "value": "public, max-age=900"}]
+                "headers": [{"key": "Cache-Control", "value": _ui_cfg.get("CACHE_HISTORY_JSON", "public, max-age=900")}]
             },
         ]
     }
@@ -510,6 +507,15 @@ def main() -> None:
         "vahi_qly_label":   vahi_qly_label,
         "sites":            sites,
         "status_sites":     status_sites,
+        "ui_thresholds": {
+            "HOSPITAL_STALE_MINS":         int(_ui_cfg.get("HOSPITAL_STALE_MINS",          60)),
+            "TRAFFIC_LIGHT_GREEN_MAX_MINS": float(_ui_cfg.get("TRAFFIC_LIGHT_GREEN_MAX_MINS", 30)),
+            "TRAFFIC_LIGHT_MOMENTUM_MAX":   float(_ui_cfg.get("TRAFFIC_LIGHT_MOMENTUM_MAX",   2)),
+            "TRAFFIC_LIGHT_AMBER_MAX_MINS": float(_ui_cfg.get("TRAFFIC_LIGHT_AMBER_MAX_MINS", 60)),
+            "CRISIS_AMBER_P90_RATIO":       float(_ui_cfg.get("CRISIS_AMBER_P90_RATIO",       0.80)),
+            "CRISIS_CRITICAL_P90_RATIO":    float(_ui_cfg.get("CRISIS_CRITICAL_P90_RATIO",    1.00)),
+            "MAX_WAIT_CRITICAL_P90_RATIO":  float(_ui_cfg.get("MAX_WAIT_CRITICAL_P90_RATIO",  5)),
+        },
     }
 
     # ── 2. Write JSON ──────────────────────────────────────────────────────────

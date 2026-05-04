@@ -503,16 +503,16 @@
     <div class="footer-col">
       <h4>Data Sources</h4>
       <p>Live feed: Monash Health &amp; Eastern Health public dashboards</p>
-      <p>Benchmarks: VAHI quarterly ED performance data (Oct&nbsp;2024&ndash;)</p>
-      <p>Historical baseline: AIHW ED statistics 2011&ndash;2025</p>
+      <p>Benchmarks: VAHI quarterly ED performance data (Oct&nbsp;2024 - Dec 2025&ndash;)</p>
+      <p></p>
     </div>
     <div class="footer-col">
       <h4>Methodology</h4>
       <p>Raspberry Pi scraper &middot; 15-min collection cycles</p>
       <p>Momentum + VAHI baseline confidence model</p>
       <p>60-min rolling forecast with adaptive damping</p>
-      <a href="https://github.com/zwleoapp/hospital-monitor" target="_blank" rel="noopener">
-        github.com/zwleoapp/hospital-monitor
+      <a href="Contact" target="_blank" rel="noopener">
+        Contact: zwapp@protonmail.com
       </a>
     </div>
     <div class="footer-col">
@@ -538,7 +538,7 @@
 <script>
 const DATA_URL            = "/latest.json";
 const HISTORY_URL         = "/history_timeline.json";
-const HOSPITAL_STALE_MINS  = 60;
+let _uiT = {};  // populated from outlook.ui_thresholds after first fetch
 
 // ── UI display strings — edit here, not inside renderCard ─────────────────────
 const UI_CAT1_NOTE   = "Cat 1 — Always seen immediately, no wait";
@@ -567,14 +567,18 @@ function parseHospDataTime(display) {
   return { time: m[1], approx, global };
 }
 function light(p, m) {
-  if (p <= 30 && m <= 2) return "green";
-  if (p <= 60)           return "amber";
+  const gMax = _uiT.TRAFFIC_LIGHT_GREEN_MAX_MINS ?? 30;
+  const mMax = _uiT.TRAFFIC_LIGHT_MOMENTUM_MAX   ?? 2;
+  const aMax = _uiT.TRAFFIC_LIGHT_AMBER_MAX_MINS ?? 60;
+  if (p <= gMax && m <= mMax) return "green";
+  if (p <= aMax)              return "amber";
   return "red";
 }
 function arrow(m) {
-  if (m >  2) return {cls:"up", sym:"&#8593;", lbl:"Rising"};
-  if (m < -2) return {cls:"dn", sym:"&#8595;", lbl:"Improving"};
-  return             {cls:"fl", sym:"&#8594;", lbl:"Stable"};
+  const thr = _uiT.TRAFFIC_LIGHT_MOMENTUM_MAX ?? 2;
+  if (m >  thr) return {cls:"up", sym:"&#8593;", lbl:"Rising"};
+  if (m < -thr) return {cls:"dn", sym:"&#8595;", lbl:"Improving"};
+  return              {cls:"fl", sym:"&#8594;", lbl:"Stable"};
 }
 function confCls(lbl) {
   return {High:"bh", Moderate:"bm", Low:"bl"}[lbl] || "bm";
@@ -729,10 +733,10 @@ function renderCard(s) {
       const hospT    = new Date(melbNow);
       hospT.setHours(hh, mm, 0, 0);
       if (hospT > melbNow) hospT.setDate(hospT.getDate() - 1);
-      hospNativeStale = (melbNow - hospT) / 60000 > HOSPITAL_STALE_MINS;
+      hospNativeStale = (melbNow - hospT) / 60000 > (_uiT.HOSPITAL_STALE_MINS ?? 60);
     }
 
-    const isStale = (ageMin > HOSPITAL_STALE_MINS || hospNativeStale) && !s._is_historical;
+    const isStale = (ageMin > (_uiT.HOSPITAL_STALE_MINS ?? 60) || hospNativeStale) && !s._is_historical;
     const c    = light(predicted, momentum);
     const a    = arrow(momentum);
     const sign = momentum >= 0 ? "+" : "";
@@ -744,13 +748,12 @@ function renderCard(s) {
       </div>` : "";
 
     const _maxRatio    = (p90Mins != null && s.max_wait_min != null) ? s.max_wait_min / p90Mins : null;
-    const _maxCritical = _maxRatio != null && _maxRatio > 5;
+    const _maxCritical = _maxRatio != null && _maxRatio > (_uiT.MAX_WAIT_CRITICAL_P90_RATIO ?? 5);
     const maxWaitPairingHtml = s.max_wait_min != null
       ? `<span class="max-wait-pairing">Max&nbsp;${fmtShort(s.max_wait_min) ?? "—"}${_maxRatio != null ? `&thinsp;<small>(${_maxRatio.toFixed(1)}&times;)</small>` : ""}</span>`
       : "";
-    // Crisis triggered by current wait vs P90: amber ≥80%, red ≥100%
-    const _crisisAmber    = p90Mins != null && current >= p90Mins * 0.80;
-    const _crisisCritical = p90Mins != null && current >= p90Mins;
+    const _crisisAmber    = p90Mins != null && current >= p90Mins * (_uiT.CRISIS_AMBER_P90_RATIO    ?? 0.80);
+    const _crisisCritical = p90Mins != null && current >= p90Mins * (_uiT.CRISIS_CRITICAL_P90_RATIO ?? 1.00);
     const crisisHtml = _crisisAmber
       ? `<div class="crisis-headline ${_crisisCritical ? 'crisis-very-long' : 'crisis-long'}">&#9888; ${_crisisCritical ? 'VERY LONG WAIT' : 'LONG WAIT'}</div>`
       : "";
@@ -969,6 +972,7 @@ function renderLeaderboard(sites) {
 // ── Dashboard orchestrator ────────────────────────────────────────────────────
 function renderDashboard(outlook) {
   _lastOutlook = outlook;
+  _uiT         = outlook.ui_thresholds    ?? {};
   _p90AllMins  = outlook.vahi_p90_all_mins ?? null;
 
   const genDate = safeDate(outlook.generated_utc);
@@ -1068,7 +1072,7 @@ function renderStatusSites(statusSites) {
 
 function checkStale(outlook) {
   if (_histIdx >= 0) return;  // suppress stale checks while in history mode
-  const allStale = outlook.sites.every(s => (s.heartbeat_age_mins ?? 0) > HOSPITAL_STALE_MINS);
+  const allStale = outlook.sites.every(s => (s.heartbeat_age_mins ?? 0) > (_uiT.HOSPITAL_STALE_MINS ?? 60));
 
   const maxObsAge        = Math.max(...outlook.sites.map(s => s.heartbeat_age_mins ?? 0));
   const genMs            = safeDate(outlook.generated_utc)?.getTime() ?? Date.now();
