@@ -1,0 +1,157 @@
+{
+  "schema_version": "2.1",
+  "description": "ED wait-time outlook \u2014 Royal Children's Hospital, Melbourne",
+  "object_types": {
+    "EDSite": {
+      "description": "Full-pipeline hospital: 60-min forecast + VAHI context",
+      "primary_key": "site",
+      "properties": {
+        "site": {
+          "type": "string",
+          "description": "Formal hospital name"
+        },
+        "network": {
+          "type": "string",
+          "description": "Health network"
+        },
+        "latest_obs_utc": {
+          "type": "string",
+          "format": "datetime"
+        },
+        "current_wait_min": {
+          "type": "number",
+          "unit": "minutes"
+        },
+        "predicted_wait_min": {
+          "type": "number",
+          "unit": "minutes",
+          "description": "60-min damped momentum forecast"
+        },
+        "wait_momentum": {
+          "type": "number",
+          "unit": "min/15min-cadence"
+        },
+        "confidence": {
+          "type": "number",
+          "range": [
+            0,
+            1
+          ]
+        },
+        "confidence_label": {
+          "type": "string",
+          "enum": [
+            "High",
+            "Moderate",
+            "Low"
+          ]
+        },
+        "color": {
+          "type": "string",
+          "enum": [
+            "green",
+            "amber",
+            "red"
+          ]
+        },
+        "strain_index": {
+          "type": "number",
+          "description": "predicted_wait / VAHI p90"
+        },
+        "ctx_source": {
+          "type": "string",
+          "enum": [
+            "VAHI",
+            "AIHW",
+            "ESTIMATE"
+          ],
+          "description": "Quality of benchmark context"
+        },
+        "fidelity_status": {
+          "type": "string",
+          "enum": [
+            "SYNCED",
+            "API_LEAD_ACTIVE",
+            "PORTAL_STALE_WARNING",
+            "UNKNOWN_FORMAT"
+          ]
+        },
+        "heartbeat_age_mins": {
+          "type": "number",
+          "unit": "minutes"
+        },
+        "last_updated_display": {
+          "type": "string",
+          "description": "Portal timestamp (sidecar)"
+        },
+        "paediatric": {
+          "type": "object",
+          "nullable": true,
+          "description": "Paeds sub-object (Monash Casey/Clayton only)"
+        },
+        "metadata": {
+          "type": "object",
+          "description": "cache_lag, fidelity detail, scrape_timestamp"
+        }
+      }
+    },
+    "StatusSite": {
+      "description": "Raw-only hospital: categorical status, no forecast",
+      "primary_key": "site",
+      "properties": {
+        "site": {
+          "type": "string"
+        },
+        "busy_label": {
+          "type": "string",
+          "nullable": true,
+          "enum": [
+            "Normal",
+            "Very Busy",
+            "Extremely Busy"
+          ]
+        },
+        "busy_index": {
+          "type": "number",
+          "nullable": true
+        },
+        "fidelity_status": {
+          "type": "string"
+        },
+        "last_portal_update": {
+          "type": "string"
+        },
+        "heartbeat_age_mins": {
+          "type": "number"
+        }
+      }
+    }
+  },
+  "payload": {
+    "generated_utc": {
+      "type": "string",
+      "format": "datetime"
+    },
+    "schema_version": {
+      "type": "string"
+    },
+    "horizon_min": {
+      "type": "integer",
+      "value": 60
+    },
+    "vahi_p90_all_mins": {
+      "type": "number"
+    },
+    "vahi_qly_label": {
+      "type": "string"
+    },
+    "sites": {
+      "type": "array",
+      "items": "$EDSite"
+    },
+    "status_sites": {
+      "type": "array",
+      "items": "$StatusSite"
+    }
+  }
+}
