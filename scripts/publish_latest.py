@@ -276,31 +276,64 @@ def compute_strain_index(predicted_wait: float, p90: float) -> float:
 
 def _load_recent_accuracy(n: int = 6) -> dict[str, float | None]:
     """
-    Return {hospital: recent_accuracy} from the last n completed T+60 rows
-    in forecast_audit.csv. n=6 ≈ last 90 min of resolved forecasts.
-    Returns empty dict if file unavailable.
+    Return {hospital: recent_accuracy} — segment-aware, deduplicated.
+
+    'Segment-aware' means: the n comparisons are drawn from rows whose
+    day_type + time_band match the current Melbourne moment (e.g. weekday_morning).
+    This gives a like-for-like accuracy view — Box Hill's 9am weekday badge
+    reflects weekday morning forecasts, not weekend evenings.
+
+    Fallback: if fewer than n same-segment rows exist for a hospital (early
+    calibration, rare public_holiday segment, etc.), falls back to the last n
+    rows across all segments so the badge doesn't go blank unnecessarily.
+
+    Deduplicates on (hospital, bucket_utc) — same approach as evolve_model.py —
+    because _write_forecast_audit re-appends completed buckets on every pipeline
+    cycle while they remain in the 3h Silver window (~4 writes per completed
+    forecast). Without dedup, 'last n' may reflect fewer than n distinct snapshots.
     """
-    result: dict[str, list[float]] = {}
+    from zoneinfo import ZoneInfo
+    from predict_next import day_type as _day_type, time_band as _time_band
+
+    now_melb = datetime.now(timezone.utc).astimezone(ZoneInfo("Australia/Melbourne"))
+    current_segment = f"{_day_type(now_melb)}_{_time_band(now_melb.hour)}"
+
+    # {hospital: {bucket_utc: (forecast_accuracy, segment)}} — last write wins
+    seen: dict[str, dict[str, tuple[float, str]]] = {}
     if not FORECAST_AUDIT_CSV.exists():
         return {}
     try:
         import csv
         with open(FORECAST_AUDIT_CSV, newline="") as f:
             for row in csv.DictReader(f):
-                hospital = row.get("hospital", "")
-                acc_str  = row.get("forecast_accuracy", "")
-                if not hospital or not acc_str:
+                hospital   = row.get("hospital",         "")
+                bucket_utc = row.get("bucket_utc",       "")
+                acc_str    = row.get("forecast_accuracy", "")
+                d_type     = row.get("day_type",          "").strip()
+                t_band     = row.get("time_band",         "").strip()
+                if not hospital or not bucket_utc or not acc_str:
                     continue
                 try:
-                    result.setdefault(hospital, []).append(float(acc_str))
+                    segment = f"{d_type}_{t_band}" if d_type and t_band else ""
+                    seen.setdefault(hospital, {})[bucket_utc] = (float(acc_str), segment)
                 except ValueError:
                     pass
     except Exception:
         return {}
-    return {
-        h: round(sum(rows[-n:]) / len(rows[-n:]), 1)
-        for h, rows in result.items() if rows
-    }
+
+    result = {}
+    for h, buckets in seen.items():
+        ordered   = sorted(buckets.items())                        # ascending bucket_utc
+        same_seg  = [acc for _, (acc, seg) in ordered if seg == current_segment]
+        pool      = same_seg if len(same_seg) >= n else [acc for _, (acc, _) in ordered]
+        last_n    = pool[-n:]
+        if not last_n:
+            continue
+        mean_acc  = round(sum(last_n) / len(last_n), 1)
+        # Last 3 distinct values oldest-first — for the trend display
+        trend     = [round(v, 1) for v in last_n[-3:]]
+        result[h] = {"mean": mean_acc, "trend": trend}
+    return result
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────
@@ -434,7 +467,9 @@ def main() -> None:
         )
         outlook["last_updated_display"] = last_updated_map.get(outlook["site"], "")
         outlook["scraper_sync_mins"]    = scraper_sync_map.get(outlook["site"])
-        outlook["recent_accuracy"]      = recent_accuracy_map.get(outlook["site"])
+        _acc_data = recent_accuracy_map.get(outlook["site"]) or {}
+        outlook["recent_accuracy"]       = _acc_data.get("mean")
+        outlook["recent_accuracy_trend"] = _acc_data.get("trend", [])
 
         # Add unified metadata block for Clinical Pulse architecture
         cache_lag = cache_lag_map.get(outlook["site"])
@@ -550,7 +585,7 @@ def main() -> None:
             "CRISIS_AMBER_P90_RATIO":       float(_ui_cfg.get("CRISIS_AMBER_P90_RATIO",       0.80)),
             "CRISIS_CRITICAL_P90_RATIO":    float(_ui_cfg.get("CRISIS_CRITICAL_P90_RATIO",    1.00)),
             "MAX_WAIT_CRITICAL_P90_RATIO":  float(_ui_cfg.get("MAX_WAIT_CRITICAL_P90_RATIO",  5)),
-            "RECENT_ACCURACY_LOOKBACK":     int(_ui_cfg.get("RECENT_ACCURACY_LOOKBACK",       6)),
+            "RECENT_ACCURACY_LOOKBACK":     int(_ui_cfg.get("RECENT_ACCURACY_LOOKBACK",       12)),
         },
     }
 

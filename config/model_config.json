@@ -1,27 +1,194 @@
 {
   "_comment": "ML forecast model configuration. Read by predict_next.py at startup. evolve_model.py writes updated per_hospital_damping values here after each evolution run. Manual overrides in config/overrides.json take priority over everything in this file.",
-
-  "_section_forecast": "Core projection parameters. horizon_min / cadence_min define the forecast window; momentum_damping is the global default dampening applied to linear extrapolation.",
-  "horizon_min":       60,
-  "cadence_min":       15,
-  "momentum_damping":  0.50,
-  "momentum_ceiling":  30.0,
-  "max_wait_min":      480,
-  "los_target_pct":    70.0,
-
-  "_section_confidence": "Confidence score weights — must sum to 1.0.",
-  "confidence_weight_los":      0.50,
-  "confidence_weight_momentum": 0.30,
-  "confidence_weight_p90":      0.20,
-  "confidence_high_threshold":  0.70,
-  "confidence_moderate_threshold": 0.40,
-
+  "_section_forecast": "Core projection parameters. horizon_min / cadence_min define the forecast window; momentum_damping is the global default dampening applied to linear extrapolation. momentum_floor_ratio: projected wait cannot fall below this fraction of the current wait (prevents a single momentum spike predicting near-zero when the ED is clearly still busy).",
+  "horizon_min": 60,
+  "cadence_min": 15,
+  "momentum_damping": 0.5,
+  "momentum_floor_ratio": 0.5,
+  "momentum_ceiling": 30.0,
+  "max_wait_min": 480,
+  "los_target_pct": 70.0,
+  "_section_confidence": "Confidence score weights \u2014 must sum to 1.0.",
+  "confidence_weight_los": 0.5,
+  "confidence_weight_momentum": 0.3,
+  "confidence_weight_p90": 0.2,
+  "confidence_high_threshold": 0.7,
+  "confidence_moderate_threshold": 0.4,
   "_section_evolution": "Safety constraints for evolve_model.py. Evolved damping values are clamped to [damping_min, damping_max]. Rows with error above anomaly_error_pct are excluded from training.",
-  "damping_min":        0.50,
-  "damping_max":        1.20,
-  "anomaly_error_pct":  200.0,
+  "damping_min": 0.5,
+  "damping_max": 1.2,
+  "anomaly_error_pct": 200.0,
   "min_rows_to_evolve": 24,
-
+  "_section_regression": "Ridge regression model \u2014 Phase 2. GCV (Generalised Cross-Validation) selects the best alpha per hospital from regression_alpha_candidates \u2014 equivalent to leave-one-out CV, computed analytically via SVD. regression_chosen_alphas records selected values per hospital (high alpha = noisy data needs more shrinkage; low alpha = smooth data). hospital_model_type and regression_coefficients are written by evolve_model.py \u2014 do not edit manually.",
+  "gcv_denom_floor": 1e-10,
+  "regression_alpha_candidates": [
+    0.01,
+    0.05,
+    0.1,
+    0.5,
+    1.0,
+    2.0,
+    5.0,
+    10.0,
+    50.0,
+    100.0,
+    500.0,
+    1000.0
+  ],
+  "regression_chosen_alphas": {
+    "Angliss Hospital": 1000.0,
+    "Box Hill Hospital": 1000.0,
+    "Casey Hospital": 1000.0,
+    "Dandenong Hospital": 1000.0,
+    "Maroondah Hospital": 1000.0,
+    "Monash Medical Centre - Clayton": 1000.0,
+    "Royal Melbourne Hospital": 1000.0
+  },
+  "min_rows_regression": 50,
+  "hospital_model_type": {
+    "Angliss Hospital": "ridge",
+    "Box Hill Hospital": "ridge",
+    "Casey Hospital": "ridge",
+    "Dandenong Hospital": "ridge",
+    "Maroondah Hospital": "ridge",
+    "Monash Medical Centre - Clayton": "ridge",
+    "Royal Melbourne Hospital": "ridge"
+  },
+  "regression_coefficients": {
+    "Angliss Hospital": {
+      "intercept": 0.24398,
+      "current_wait": 0.589766,
+      "momentum": 0.11085,
+      "treating_count": 0.726147,
+      "hour_sin": 0.173274,
+      "hour_cos": 0.357152,
+      "dow_sin": -0.174926,
+      "dow_cos": 0.186321,
+      "is_holiday": 0.0
+    },
+    "Box Hill Hospital": {
+      "intercept": 0.232771,
+      "current_wait": 0.676137,
+      "momentum": 0.110604,
+      "treating_count": 0.255136,
+      "hour_sin": 0.266612,
+      "hour_cos": -0.041601,
+      "dow_sin": -0.213258,
+      "dow_cos": 0.142756,
+      "is_holiday": 0.0
+    },
+    "Casey Hospital": {
+      "intercept": 0.201887,
+      "current_wait": 0.627008,
+      "momentum": -0.057074,
+      "treating_count": 0.308322,
+      "hour_sin": 0.259644,
+      "hour_cos": 0.008292,
+      "dow_sin": 0.024447,
+      "dow_cos": 0.157761,
+      "is_holiday": 0.0
+    },
+    "Dandenong Hospital": {
+      "intercept": 0.136412,
+      "current_wait": 0.541978,
+      "momentum": 0.077238,
+      "treating_count": 0.3286,
+      "hour_sin": -0.086175,
+      "hour_cos": -0.127735,
+      "dow_sin": 0.00206,
+      "dow_cos": 0.117624,
+      "is_holiday": 0.0
+    },
+    "Maroondah Hospital": {
+      "intercept": 0.106568,
+      "current_wait": 0.872519,
+      "momentum": -0.02575,
+      "treating_count": 0.225269,
+      "hour_sin": 0.06316,
+      "hour_cos": 0.470725,
+      "dow_sin": -0.113925,
+      "dow_cos": 0.156691,
+      "is_holiday": 0.0
+    },
+    "Monash Medical Centre - Clayton": {
+      "intercept": 0.10412,
+      "current_wait": 0.529273,
+      "momentum": -0.118163,
+      "treating_count": 0.240554,
+      "hour_sin": -0.08504,
+      "hour_cos": -0.070306,
+      "dow_sin": -0.088596,
+      "dow_cos": 0.055661,
+      "is_holiday": 0.0
+    },
+    "Royal Melbourne Hospital": {
+      "intercept": 0.119373,
+      "current_wait": 0.745251,
+      "momentum": -0.149434,
+      "treating_count": 0.547257,
+      "hour_sin": -0.178619,
+      "hour_cos": 0.165844,
+      "dow_sin": -0.163366,
+      "dow_cos": 0.176978,
+      "is_holiday": 0.0
+    }
+  },
   "_section_per_hospital": "Per-hospital damping factors written by evolve_model.py. Empty until enough forecast_audit.csv rows accumulate (min_rows_to_evolve per hospital). Values here override the global momentum_damping.",
-  "per_hospital_damping": {}
+  "per_hospital_damping": {
+    "Angliss Hospital": {
+      "weekday_afternoon": 0.5,
+      "weekday_evening": 0.7,
+      "weekday_morning": 0.5,
+      "weekday_overnight": 0.5,
+      "weekend_afternoon": 0.5,
+      "weekend_evening": 0.5
+    },
+    "Box Hill Hospital": {
+      "weekday_afternoon": 0.5,
+      "weekday_evening": 0.5,
+      "weekday_morning": 0.5,
+      "weekday_overnight": 0.5,
+      "weekend_afternoon": 0.5,
+      "weekend_evening": 0.5
+    },
+    "Casey Hospital": {
+      "weekday_afternoon": 0.5,
+      "weekday_evening": 0.5,
+      "weekday_morning": 0.5,
+      "weekday_overnight": 0.5,
+      "weekend_afternoon": 0.5,
+      "weekend_evening": 0.5
+    },
+    "Dandenong Hospital": {
+      "weekday_afternoon": 0.5,
+      "weekday_evening": 0.5,
+      "weekday_morning": 0.5,
+      "weekday_overnight": 0.5,
+      "weekend_afternoon": 0.5,
+      "weekend_evening": 0.5
+    },
+    "Maroondah Hospital": {
+      "weekday_afternoon": 0.5,
+      "weekday_evening": 0.5,
+      "weekday_morning": 0.5,
+      "weekday_overnight": 0.5,
+      "weekend_afternoon": 0.5,
+      "weekend_evening": 0.5
+    },
+    "Monash Medical Centre - Clayton": {
+      "weekday_afternoon": 0.5,
+      "weekday_evening": 0.5,
+      "weekday_morning": 0.5,
+      "weekday_overnight": 0.7,
+      "weekend_afternoon": 0.5,
+      "weekend_evening": 0.5
+    },
+    "Royal Melbourne Hospital": {
+      "weekday_afternoon": 0.5,
+      "weekday_evening": 0.5,
+      "weekday_morning": 0.5,
+      "weekday_overnight": 0.5,
+      "weekend_evening": 0.5
+    }
+  }
 }

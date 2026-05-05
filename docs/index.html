@@ -243,6 +243,13 @@
       font-size:.7rem;font-weight:700;
     }
     .forecast-badge-cal{background:#f5f5f5;color:#9ca3af;border:1px solid #e5e7eb;font-style:italic}
+    .acc-hist-block{margin-top:4px;font-size:.68rem;line-height:1.6}
+    .acc-hist-label{font-size:.62rem;color:#a5b0d0;font-weight:600;letter-spacing:.04em;
+                    text-transform:uppercase;margin-bottom:1px}
+    .acc-hist-row{display:flex;gap:.4rem;color:#9ca3af}
+    .acc-hist-row .ah-time{min-width:3.8rem;color:#bbb;flex-shrink:0}
+    .acc-hist-row .ah-val{flex:1}
+    .acc-hist-row .ah-pct{font-weight:700;color:#7c8fc5;flex-shrink:0}
 
     /* Gap 3: overall metric row + max-wait outlier warning */
     .overall-metric{font-size:.75rem;color:#9090a8;margin-bottom:.18rem}
@@ -258,7 +265,7 @@
       50%{border-color:#d97706;box-shadow:0 0 0 2px #fbbf2466}
     }
     .max-warn-critical{animation:max-warn-pulse 1.2s ease-in-out infinite;border-width:2px}
-    .crisis-headline{font-size:1.75rem;font-weight:800;line-height:1;padding:.25rem 0;margin:.1rem 0}
+    .crisis-headline{font-size:1.4rem;font-weight:800;line-height:1;padding:.25rem 0;margin:.1rem 0}
     .crisis-long{color:var(--amber)}
     .crisis-very-long{color:var(--red)}
     .insights-subheader{font-size:.52rem;text-transform:uppercase;letter-spacing:.1em;color:#ccc;font-weight:700;margin:.55rem 0 .3rem}
@@ -648,6 +655,43 @@ function currentVahiQLabel() {
   return (_lastOutlook?.vahi_qly_label) || ("Q" + (Math.floor(new Date().getMonth() / 3) + 1));
 }
 
+// ── Forecast accuracy helpers ──────────────────────────────────────────────────
+function _recentForecasts(siteName, n) {
+  // Return last n completed forecasts (newest first) from history_timeline snapshots.
+  // A "completed" forecast has both forecast_accuracy and actual_60m_wait_min set.
+  if (!_histTimeline?.snapshots) return [];
+  const out = [];
+  for (let i = _histTimeline.snapshots.length - 1; i >= 0 && out.length < n; i--) {
+    const snap = _histTimeline.snapshots[i];
+    const hs   = snap.sites?.find(s => s.site === siteName);
+    if (hs?.forecast_accuracy != null && hs?.actual_60m_wait_min != null) {
+      out.push({
+        bucket_utc: snap.bucket_utc,
+        predicted:  hs.predicted_wait_min,
+        actual:     hs.actual_60m_wait_min,
+        accuracy:   hs.forecast_accuracy,
+      });
+    }
+  }
+  return out; // newest first
+}
+
+function _fmtBucketTime(bucket_utc) {
+  try {
+    return new Date(bucket_utc).toLocaleTimeString('en-AU',
+      { hour: '2-digit', minute: '2-digit', timeZone: 'Australia/Melbourne' });
+  } catch(e) { return ''; }
+}
+
+function _fmtActualTime(bucket_utc) {
+  // T+60: the time at which the actual wait was measured (forecast bucket + 60 min)
+  try {
+    const t = new Date(new Date(bucket_utc).getTime() + 60 * 60 * 1000);
+    return t.toLocaleTimeString('en-AU',
+      { hour: '2-digit', minute: '2-digit', timeZone: 'Australia/Melbourne' });
+  } catch(e) { return ''; }
+}
+
 // ── Card renderer ─────────────────────────────────────────────────────────────
 function renderCard(s) {
   try {
@@ -721,14 +765,55 @@ function renderCard(s) {
       ? `<div class="crisis-headline ${_crisisCritical ? 'crisis-very-long' : 'crisis-long'}">&#9888; ${_crisisCritical ? 'VERY LONG WAIT' : 'LONG WAIT'}</div>`
       : "";
 
-    const acc = s.recent_accuracy;
-    const accuracyBadgeHtml = `<span class="badge ${acc != null ? 'forecast-badge' : 'forecast-badge-cal'}">${acc != null ? 'Recent&nbsp;Accuracy&nbsp;' + acc + '%' : '&#8987; Calibrating&hellip;'}</span>`;
+    // ── Accuracy badge: T-60 forecast vs current actual ──────────────────────
+    // Live mode:       pull last 3 completed forecasts from _histTimeline
+    // Historical mode: use the snapshot's own _forecast_accuracy / _actual_60m
+    let accuracyBadgeHtml, histAccuracyHtml = "";
 
-    const histAccuracyHtml = s._is_historical
-      ? (s._forecast_accuracy != null && s._forecast_accuracy > 0
-         ? `<div class="hist-accuracy">&#127919; 60m forecast was <strong>${Math.round(s._forecast_accuracy)}%</strong> accurate — predicted&nbsp;${Math.round(s.predicted_wait_min ?? 0)}m${s._actual_60m != null ? `, actual&nbsp;${Math.round(s._actual_60m)}m` : ""}</div>`
-         : `<div class="hist-accuracy hist-no-acc">&#8987; Calibrating&hellip;</div>`)
-      : "";
+    // ── Accuracy rows: forecast time · predicted Xm → actual T+60 Ym · ZZ% ──
+    // Each row shows WHEN the forecast was made and WHEN the actual was measured,
+    // so the timepoints are unambiguous.
+    //
+    // Live mode:       3 rows from _histTimeline (newest first)
+    // Historical mode: 1 row from the snapshot's own _forecast_accuracy
+    function _accRow(bucket_utc, predicted, actual, accuracy) {
+      return `<div class="acc-hist-row">` +
+        `<span class="ah-time">${_fmtBucketTime(bucket_utc)}</span>` +
+        `<span class="ah-val">` +
+        `⏱&thinsp;${Math.round(predicted)}m&thinsp;→&thinsp;` +
+        `✓&thinsp;${_fmtActualTime(bucket_utc)}&thinsp;${Math.round(actual)}m` +
+        `</span>` +
+        `<span class="ah-pct">${Math.round(accuracy)}%</span>` +
+        `</div>`;
+    }
+
+    if (s._is_historical) {
+      if (s._forecast_accuracy != null && s._forecast_accuracy > 0 && s._actual_60m != null) {
+        accuracyBadgeHtml =
+          `<div class="acc-hist-block">` +
+          `<div class="acc-hist-label">Forecast Accuracy</div>` +
+          _accRow(s.latest_obs_utc ?? "", s.predicted_wait_min ?? 0,
+                  s._actual_60m, s._forecast_accuracy) +
+          `</div>`;
+      } else {
+        accuracyBadgeHtml = `<span class="badge forecast-badge-cal">&#8987; Calibrating&hellip;</span>`;
+      }
+    } else {
+      const forecasts = _recentForecasts(s.site, 3);
+      if (forecasts.length > 0) {
+        const rows = forecasts.map(f => _accRow(f.bucket_utc, f.predicted, f.actual, f.accuracy)).join("");
+        accuracyBadgeHtml =
+          `<div class="acc-hist-block">` +
+          `<div class="acc-hist-label">Forecast Accuracy</div>` +
+          rows +
+          `</div>`;
+      } else if (s.recent_accuracy != null) {
+        accuracyBadgeHtml =
+          `<span class="badge forecast-badge">Recent&nbsp;Accuracy&nbsp;${s.recent_accuracy}%</span>`;
+      } else {
+        accuracyBadgeHtml = `<span class="badge forecast-badge-cal">&#8987; Calibrating&hellip;</span>`;
+      }
+    }
 
     // In-60min triage split row (Cat 2-3 and Cat 4-5 forecasts)
     const triage60Html = (urgentForecast != null || minorForecast != null) ? `
@@ -803,7 +888,6 @@ function renderCard(s) {
             ${accuracyBadgeHtml}
           </div>
 
-          ${histAccuracyHtml}
         </div>
 
         <details class="system-insights">

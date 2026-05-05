@@ -1,6 +1,6 @@
 # Dataflow — Hospital Monitor Pipeline
 
-**Updated:** 2026-05-04
+**Updated:** 2026-05-05
 
 > Companion to [DESIGN.md](DESIGN.md). This page covers *how data moves* — scraper types, Bronze → Silver → Gold pipeline, timestamp provenance, branch structure, and Vercel configuration.
 
@@ -405,18 +405,48 @@ Last 3 hours of 15-min snapshots (window configurable via `UI_DISPLAY_WINDOW_MIN
 
 Full historical accuracy data lives in `forecast_audit.csv` (SSD, never filtered by UI window).
 
-### `forecast_audit.csv` (SSD, ML input)
+### `forecast_audit.csv` (SSD, ML training log)
 
-Written by `get_history.py` whenever a T+60 observation is available to compare against a prior forecast. Powers `evolve_model.py`'s per-hospital per-segment damping optimization.
+Written by `get_history.py` whenever a T+60 observation is available. Powers `evolve_model.py`'s Ridge regression and damping optimisation. Full schema — see `Forecast_Logic.md → forecast_audit.csv schema`.
 
-| Key columns | Notes |
-|---|---|
-| `bucket_utc` | Forecast time |
-| `hospital`, `cohort`, `source_type` | Identifiers |
-| `day_type`, `time_band` | Segmentation for ML (weekday/weekend/public_holiday × overnight/morning/afternoon/evening) |
-| `current_wait_min`, `wait_momentum`, `treating_count` | Model inputs |
-| `actual_wait_min`, `predicted_wait_min`, `error_pct` | Accuracy |
-| `cache_lag_minutes`, `fidelity_status` | Diagnostic — correlate errors with data staleness |
+| Column group | Columns | Notes |
+|---|---|---|
+| Identity | `bucket_utc`, `bucket_local_melb`, `hospital`, `cohort`, `source_type` | `bucket_local_melb` is ISO 8601 with DST-aware UTC offset (AEST +10:00 / AEDT +11:00) |
+| Segmentation | `day_type`, `time_band` | weekday/weekend/public_holiday × overnight/morning/afternoon/evening |
+| Model inputs | `current_wait_min`, `wait_momentum`, `treating_count` | All available at prediction time — no leakage |
+| Ground truth | `actual_wait_min` | T+60 observation |
+| Live forecast | `predicted_wait_min`, `error_pct`, `forecast_accuracy` | Frozen — what was published live at the time |
+| Diagnostic | `cache_lag_minutes`, `fidelity_status` | Correlate errors with data staleness; not a model input |
+| Backtest | `backtest_predicted_wait_min`, `backtest_error_pct`, `backtest_accuracy` | Current-model retrodiction — recomputed by `backtest_model.py` after each model change |
+
+**Self-evolving loop:**
+```
+forecast_audit.csv grows (every 15 min, T+60 rows appended)
+    ↓  weekly  (Sunday 08:00 AEST)
+evolve_model.py
+    ├── Ridge regression fit per hospital (≥50 rows)
+    ├── Auto-promote if ridge_mae < damping_mae
+    └── Writes regression_coefficients + hospital_model_type → model_config.json
+    ↓  next pipeline cycle
+predict_wait() picks up new coefficients automatically
+    ↓  after any model change (manual or weekly)
+backtest_model.py — recomputes backtest_* columns on all historical rows
+```
+
+Run manually after any model change — use the batch script:
+```bash
+bash run_backtest.sh          # evolve (GCV + damping) → recompute backtest → print audit
+```
+
+Or step by step:
+```bash
+python3 scripts/evolve_model.py --audit   # preview without writing
+python3 scripts/evolve_model.py           # fit Ridge (GCV alpha) + damping, write model_config.json
+python3 scripts/backtest_model.py --audit # compare live vs current model on all history
+python3 scripts/backtest_model.py         # write backtest_* columns to forecast_audit.csv
+```
+
+**No hardcoded values** — all model parameters (`regression_alpha_candidates`, `gcv_denom_floor`, `min_rows_regression`, `momentum_floor_ratio`, etc.) live in `config/model_config.json`. See DESIGN.md §10.
 
 ---
 
@@ -444,7 +474,8 @@ run_monitor.sh
   └── 3. publish_latest.py --push
           a. Load latest Silver row per hospital
           b. Read Bronze Raw for Paeds data (Monash campuses) and status_sites (raw_only)
-          c. Compute 60-min outlook via predict_next.py (effective damping from model_config.json)
+          c. Compute 60-min outlook via predict_next.predict_wait() — dispatches to Ridge regression
+             or damped extrapolation per hospital_model_type in model_config.json
           d. Apply UI_DISPLAY_WINDOW_MINS filter (default 180 min)
           e. Write /tmp/hospital_monitor_latest.json
           f. Build 3h history timeline via get_history.py

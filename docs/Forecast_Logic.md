@@ -4,9 +4,13 @@
 
 ## Overview
 
-60-minute wait-time forecast engine using a Hybrid Momentum-Damping Model with a self-evolving calibration loop. Three tiers: rule-based heuristic (always active), ML damping loop (active — runs weekly via `evolve_model.py`), and human override layer (always available).
+60-minute wait-time forecast engine with a self-evolving ML loop. Three tiers: Ridge regression (Phase 2, active), damped linear extrapolation fallback (Phase 1), and human override layer. All dispatch is transparent via `predict_wait()`.
 
-Covers **7 full-pipeline hospitals**: Eastern Health (Box Hill, Angliss, Maroondah) and Monash Health (Casey, Clayton, Dandenong) and Melbourne Health (Royal Melbourne Hospital). Royal Children's Hospital is `raw_only` — status card only, no forecast.
+**Self-evolving loop:** every 15-min scrape appends a completed T+60 row to `forecast_audit.csv` → weekly `evolve_model.py` re-fits Ridge coefficients from all accumulated history → auto-promotes or demotes each hospital → `model_config.json` updated → next pipeline cycle picks up new coefficients. No human intervention required.
+
+Covers **7 full-pipeline hospitals**: Eastern Health (Box Hill, Angliss, Maroondah), Monash Health (Casey, Clayton, Dandenong), Melbourne Health (Royal Melbourne Hospital). Royal Children's Hospital is `raw_only` — status card only, no forecast.
+
+**Current model status (2026-05-05):** All 7 hospitals on Ridge regression. Weekly re-evaluation every Sunday 08:00 AEST.
 
 ---
 
@@ -15,19 +19,20 @@ Covers **7 full-pipeline hospitals**: Eastern Health (Box Hill, Angliss, Maroond
 ### 60-Minute Projection Formula
 
 ```
-W60 = clamp(max(Wnow × 0.50,  Wnow + M15 × 4 × D),  max=480)
+W60 = clamp(max(Wnow × F,  Wnow + M15 × 4 × D),  max=480)
 ```
 
-| Symbol | Meaning |
-|---|---|
-| `W60` | Projected minimum wait in 60 minutes |
-| `Wnow` | Current minimum wait (minutes, from Silver) |
-| `M15` | Wait-time momentum per 15-min cadence (Silver column `wait_momentum`) |
-| `4` | Horizon steps: 60 min ÷ 15 min cadence |
-| `D` | Effective damping factor — resolved by `get_effective_damping()` |
+| Symbol | Meaning | Config key |
+|---|---|---|
+| `W60` | Projected minimum wait in 60 minutes | — |
+| `Wnow` | Current minimum wait (minutes, from Silver) | — |
+| `M15` | Wait-time momentum per 15-min cadence (Silver column `wait_momentum`) | — |
+| `4` | Horizon steps: 60 min ÷ 15 min cadence | `horizon_min` / `cadence_min` |
+| `D` | Effective damping factor — resolved by `get_effective_damping()` | `momentum_damping` |
+| `F` | Floor ratio — projected wait cannot fall below F × Wnow | `momentum_floor_ratio` |
 
-Floor `Wnow × 0.50`: a single momentum spike cannot predict near-zero wait when the system is clearly still busy.  
-Ceiling `480 min`: 8-hour hard cap.
+Floor `Wnow × F` (`momentum_floor_ratio`, default 0.50, in `config/model_config.json`): a single improving-momentum spike cannot predict near-zero wait when the ED is clearly still busy. Reduce `F` for hospitals that genuinely clear fast; increase it to make the model more conservative.  
+Ceiling `480 min`: 8-hour hard cap (`max_wait_min`).
 
 ### Momentum (`wait_momentum`)
 
@@ -97,17 +102,140 @@ accuracy = 100 − (|W60_predicted − W60_actual| / W60_actual × 100)
 
 Computed in `get_history.py` for each snapshot where the T+60 observation is available (±15-min tolerance). Written to `forecast_audit.csv` on the SSD.
 
-**Recent Accuracy (UI badge):** `publish_latest.py` reads `forecast_audit.csv` at publish time and takes the last 6 completed T+60 comparisons per hospital (≈ 90 min of resolved forecasts), averages their `forecast_accuracy`, and embeds it as `recent_accuracy` on each site in `latest.json`. This means every device and browser sees the same server-computed value immediately — no client-side calibration period.
+**Recent Accuracy (UI badge):** `publish_latest.py` reads `forecast_audit.csv` at publish time and computes two values per hospital, embedded in `latest.json`:
+- `recent_accuracy` — mean over the last `RECENT_ACCURACY_LOOKBACK` (12) same-segment distinct rows
+- `recent_accuracy_trend` — the last 3 individual values, oldest-first
+
+The badge displays the trend inline: `Recent Accuracy ↑ 88% · 91% · 90%`. The direction arrow (↑ ↓ →) is derived from first vs last value. If fewer than 3 trend values exist, the mean is shown as fallback. Every device sees the same server-computed values immediately — no client-side calibration period.
+
+**Segment-aware:** the `n` comparisons are drawn from rows whose `day_type + time_band` match the *current* Melbourne moment (e.g. `weekday_morning`). This gives a like-for-like view — Box Hill's 9am weekday badge reflects weekday morning forecasts only, not weekend evenings or public holidays. Falls back to the last `n` rows across all segments if the matching segment has fewer than `n` completed comparisons (early calibration, infrequent segments such as `public_holiday`).
+
+**Deduplication:** `forecast_audit.csv` re-appends the same completed bucket on every pipeline cycle while it remains in the 3h Silver window (~4 writes per forecast). `_load_recent_accuracy` deduplicates on `(hospital, bucket_utc)` — same as `evolve_model.py` — so "last n" always means n distinct forecast snapshots, not n raw CSV rows.
 
 - **All triage categories combined** — per-category breakdown is not available from source portals.
-- **"Calibrating"** shown when fewer than 6 completed comparisons exist (e.g. first 90 min after a new hospital is added, or `forecast_audit.csv` is absent).
-- 6 predictions chosen as the window: recent enough to reflect current conditions, enough points to smooth single-scrape noise.
+- **"Calibrating"** shown when fewer than `RECENT_ACCURACY_LOOKBACK` completed comparisons exist (e.g. first 90 min after a new hospital is added, or `forecast_audit.csv` is absent).
+- `RECENT_ACCURACY_LOOKBACK` (default 12) set in `config/ui_config.json`.
+
+### `forecast_audit.csv` schema
+
+| Column | Source | Notes |
+|---|---|---|
+| `bucket_utc` | Scrape bucket | UTC, floored to 15 min |
+| `hospital` | Hospital name | |
+| `cohort` | "Adult" | Paediatric not yet forecast |
+| `source_type` | `html_js` / `powerbi` | For interpreting `cache_lag_minutes` |
+| `day_type` | `weekday` / `weekend` / `public_holiday` | Victorian calendar |
+| `time_band` | `overnight` / `morning` / `afternoon` / `evening` | Melbourne local |
+| `current_wait_min` | Silver `min_wait_mins` | Model input |
+| `wait_momentum` | Silver `wait_momentum` | Model input |
+| `treating_count` | Silver `treating` | Capacity signal — active Ridge feature |
+| `actual_wait_min` | T+60 observation | Ground truth |
+| `predicted_wait_min` | Live forecast at T | Frozen — what was actually published |
+| `error_pct` | Live error | Based on `predicted_wait_min` |
+| `forecast_accuracy` | Live accuracy | 100 − min(error_pct, 100) |
+| `cache_lag_minutes` | Diagnostic | See `dataflow.md` |
+| `fidelity_status` | Diagnostic | `SYNCED` / `API_LEAD_ACTIVE` / `PORTAL_STALE_WARNING` |
+| `bucket_local_melb` | `bucket_utc` in Melbourne local | ISO 8601 with UTC offset — AEST `+10:00`, AEDT `+11:00` |
+| `backtest_predicted_wait_min` | `backtest_model.py` | Current-formula prediction for this row |
+| `backtest_error_pct` | `backtest_model.py` | \|backtest − actual\| / actual × 100 |
+| `backtest_accuracy` | `backtest_model.py` | 100 − min(backtest_error_pct, 100) |
 
 ---
 
-## Tier 2: Self-Evolving Damping — `evolve_model.py`
+## Tier 1b: Backtesting — `backtest_model.py`
 
-**Status: Active — runs weekly (Sunday 08:00 AEST local cron).**
+Run after any model change (evolved damping, formula tweak, `momentum_floor_ratio` adjustment) to recompute what the *current* model would have predicted on all historical rows.
+
+```bash
+python3 scripts/backtest_model.py --dry-run  # preview — no file write
+python3 scripts/backtest_model.py            # rewrite forecast_audit.csv in-place
+python3 scripts/backtest_model.py --audit    # per-hospital per-segment live vs backtest table
+```
+
+**What it does:** For every row in `forecast_audit.csv`, calls `predict_wait(hospital, current_wait_min, wait_momentum, treating_count, bucket_melb)` — the same dispatcher used at live prediction time. This routes to Ridge regression or damping per `hospital_model_type`, using current `model_config.json` + `overrides.json`. Writes `backtest_predicted_wait_min`, `backtest_error_pct`, `backtest_accuracy` columns. Fills `bucket_local_melb` for any older rows missing the field.
+
+**What it preserves:** `predicted_wait_min`, `error_pct`, `forecast_accuracy` are **never modified** — they remain the frozen live-at-the-time record.
+
+**DST handling:** `bucket_local_melb` uses `ZoneInfo("Australia/Melbourne")`, which switches automatically between AEST (+10:00) and AEDT (+11:00). The UTC offset embedded in the ISO 8601 string makes historical rows unambiguous across DST transitions.
+
+**Preferred workflow — use the batch script:**
+
+```bash
+bash run_backtest.sh   # evolve → recompute backtest columns → print audit (all in one)
+```
+
+Or step by step:
+
+```bash
+python3 scripts/evolve_model.py          # re-fit Ridge (GCV) + damping, write model_config.json
+python3 scripts/backtest_model.py        # recompute backtest columns
+python3 scripts/backtest_model.py --audit  # review improvement table
+```
+
+---
+
+## Tier 2: Ridge Regression — Phase 2 (`evolve_model.py`)
+
+**Status: Active — auto-promoted hospitals use Ridge from next pipeline cycle.**
+
+### Feature vector (9 features including intercept)
+
+| Feature | Encoding | Why |
+|---|---|---|
+| intercept | 1.0 | baseline |
+| `current_wait` | raw minutes | anchor — level signal |
+| `momentum` | raw min/15min | trend direction |
+| `treating_count` | raw count | capacity pressure — high treating + rising wait = sustained pressure |
+| `hour_sin`, `hour_cos` | `sin/cos(2π × hour / 24)` | continuous daily cycle — hour 23 adjacent to hour 0 |
+| `dow_sin`, `dow_cos` | `sin/cos(2π × dow / 7)` | continuous weekly cycle — Sunday adjacent to Monday |
+| `is_holiday` | 0 or 1 | Victorian public holiday flag |
+
+`hour_sin/cos` and `dow_sin/cos` outperform the coarse `time_band` and `day_type` buckets used by Phase 1 because they capture the smooth cyclical shape of ED demand rather than sharp step-function boundaries.
+
+### Ridge solver — GCV alpha selection (numpy, no external ML library)
+
+Alpha is selected automatically per hospital via **GCV (Generalised Cross-Validation)**, analytically equivalent to leave-one-out CV and computed via SVD — no iteration, no held-out splits, no external dependency beyond numpy.
+
+```
+X = U S Vᵀ                              ← SVD of feature matrix
+d_α = s² / (s² + α)                     ← shrinkage per singular component
+ŷ   = U @ (d_α × Uᵀy)                  ← Ridge predictions for candidate α
+GCV(α) = MSE(y, ŷ) / (1 − mean(d_α))²  ← penalises over-fitted models
+```
+
+The alpha with the lowest GCV score is selected from `regression_alpha_candidates` in `model_config.json`. `gcv_denom_floor` (also in `model_config.json`) prevents division by zero numerically.
+
+The chosen alpha per hospital is written to `regression_chosen_alphas` in `model_config.json` after each run — useful for diagnosing data quality (high alpha = noisy data needs heavy shrinkage; low alpha = smooth, predictable data).
+
+**No hardcoded values** — all tuning parameters (`regression_alpha_candidates`, `gcv_denom_floor`, `min_rows_regression`) live in `model_config.json`. See DESIGN.md §10.
+
+### Auto-promotion logic
+
+`evolve_model.py` runs Ridge for every hospital with ≥ `min_rows_regression` rows (default 50). It compares `ridge_mae` vs `damping_mae` on the same rows:
+- If `ridge_mae < damping_mae` → writes coefficients to `regression_coefficients`, sets `hospital_model_type[hospital] = "ridge"`
+- If not → keeps "damping", demotes back if previously promoted
+
+Promotion is fully automatic — no manual config. `overrides.json → model_type_per_site` overrides for emergency reset.
+
+### Current promotion status (first run — 2026-05-05)
+
+| Hospital | Ridge MAE | Damping MAE | Δ | Status |
+|---|---|---|---|---|
+| Angliss Hospital | 14.4 m | 17.8 m | −3.4 m | ridge |
+| Box Hill Hospital | 15.4 m | 18.7 m | −3.3 m | ridge |
+| Casey Hospital | 9.3 m | 14.3 m | −5.0 m | ridge |
+| Dandenong Hospital | 9.4 m | 13.8 m | −4.4 m | ridge |
+| Maroondah Hospital | 11.0 m | 15.0 m | −4.0 m | ridge |
+| Monash Medical Centre - Clayton | 8.4 m | 10.7 m | −2.3 m | ridge |
+| Royal Melbourne Hospital | 17.0 m | 30.3 m | −13.2 m | ridge |
+
+RMH shows the largest gain (−13.2 m MAE) — it has `ctx_source="ESTIMATE"` (no real VAHI benchmarks), meaning the damping model had weak context, while Ridge learns directly from observed patterns.
+
+---
+
+## Tier 2b: Self-Evolving Damping — `evolve_model.py` (Phase 1, retained as fallback)
+
+**Status: Active — runs weekly (Sunday 08:00 AEST local cron). Used when Ridge is not promoted.**
 
 ### Segmentation
 

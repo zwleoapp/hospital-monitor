@@ -44,35 +44,51 @@ Safety
   - Merge, never replace
   - Full audit log: old/new damping, MAE before/after, segment breakdown
 
-Future path
-───────────
-  Once you have ~500 rows per hospital (≈6 months), replace this grid search
-  with multivariate Ridge regression using current_wait, momentum,
-  treating_count, hour_sin/cos, is_weekend, is_holiday as features.
-  The forecast_audit.csv schema already captures all required inputs.
+Phase 2 — Ridge regression (runs alongside grid search)
+─────────────────────────────────────────────────────────
+For each hospital with ≥ min_rows_regression deduplicated rows:
+  1. Build feature matrix X (intercept, current_wait, momentum, treating_count,
+     hour_sin, hour_cos, dow_sin, dow_cos, is_holiday) from bucket_local_melb
+  2. Solve closed-form Ridge: coef = (X.T @ X + alpha * I)^-1 @ X.T @ y
+     alpha = regression_alpha from model_config.json (default 1.0)
+  3. Compute ridge_mae vs damping_mae on the same rows
+  4. If ridge_mae < damping_mae: write coefficients + set hospital_model_type = "ridge"
+     Else: keep "damping" — regression only replaces when it clearly wins
+
+Auto-promotion is automatic — no manual per-hospital config needed.
+predict_next.predict_wait() dispatches transparently.
 
 Usage
 ─────
   python3 scripts/evolve_model.py            # evolve and write
   python3 scripts/evolve_model.py --dry-run  # compute only, don't write
-  python3 scripts/evolve_model.py --audit    # per-segment breakdown table
+  python3 scripts/evolve_model.py --audit    # per-segment breakdown + regression comparison
 """
 
 import sys
 import csv
 import json
+import math
 import argparse
 import pathlib
 from collections import defaultdict
 from datetime import datetime, timezone
 
+import numpy as np
+
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
-from config.paths import FORECAST_AUDIT_CSV, SSD       # noqa: E402
-from predict_next import time_band, day_type            # noqa: E402
+from config.paths import FORECAST_AUDIT_CSV, SSD                        # noqa: E402
+from predict_next import (time_band, day_type,                          # noqa: E402
+                           REGRESSION_FEATURE_NAMES, _VIC_HOLIDAYS)
 
 _REPO          = pathlib.Path(__file__).resolve().parent.parent
 _MODEL_CFG     = _REPO / "config" / "model_config.json"
 _EVOLUTION_LOG = SSD / "model_evolution_log.jsonl"
+
+# Loaded once at import — avoids repeated file reads inside the hot path.
+_gcv_denom_floor: float = float(
+    json.loads(_MODEL_CFG.read_text()).get("gcv_denom_floor", 1e-10)
+)
 
 
 def _load_model_cfg() -> dict:
@@ -83,10 +99,10 @@ def _load_model_cfg() -> dict:
 
 
 def _project(current: float, momentum: float, damping: float,
-             steps: float, max_wait: int) -> float:
+             steps: float, max_wait: int, floor_ratio: float = 0.50) -> float:
     """Mirror of predict_next.project_wait — must stay in sync with that formula."""
     projected = current + momentum * steps * damping
-    return max(current * 0.50, min(max_wait, projected))
+    return max(current * floor_ratio, min(max_wait, projected))
 
 
 def _current_damping_for(hospital: str, segment: str, ph: dict,
@@ -141,15 +157,16 @@ def load_audit(path: pathlib.Path, anomaly_pct: float) -> list[dict]:
                 t_band = time_band(dt.hour)
 
             rows.append({
-                "hospital":   row["hospital"],
-                "bucket_utc": row["bucket_utc"],
-                "day_type":   d_type,
-                "time_band":  t_band,
-                "segment":    f"{d_type}_{t_band}",
-                "current":    float(row.get("current_wait_min") or 0),
-                "momentum":   float(row.get("wait_momentum")    or 0),
-                "treating":   float(row.get("treating_count")   or 0),
-                "actual":     float(row["actual_wait_min"]),
+                "hospital":        row["hospital"],
+                "bucket_utc":      row["bucket_utc"],
+                "bucket_local_melb": row.get("bucket_local_melb", ""),
+                "day_type":        d_type,
+                "time_band":       t_band,
+                "segment":         f"{d_type}_{t_band}",
+                "current":         float(row.get("current_wait_min") or 0),
+                "momentum":        float(row.get("wait_momentum")    or 0),
+                "treating":        float(row.get("treating_count")   or 0),
+                "actual":          float(row["actual_wait_min"]),
             })
         except (ValueError, KeyError):
             continue
@@ -165,13 +182,14 @@ def evolve(rows: list[dict], mcfg: dict, audit: bool = False
         evolved  — {hospital: {segment: damping}}
         details  — {hospital: {old, new (dict), mae_before, mae_after, rows}}
     """
-    d_min    = float(mcfg.get("damping_min",        0.50))
-    d_max    = float(mcfg.get("damping_max",        1.20))
-    max_wait = int(mcfg.get("max_wait_min",          480))
-    min_rows = int(mcfg.get("min_rows_to_evolve",    24))
-    steps    = float(mcfg.get("horizon_min",          60)) / float(mcfg.get("cadence_min", 15))
-    global_d = float(mcfg.get("momentum_damping",   0.50))
-    ph       = mcfg.get("per_hospital_damping", {})
+    d_min       = float(mcfg.get("damping_min",          0.50))
+    d_max       = float(mcfg.get("damping_max",          1.20))
+    max_wait    = int(mcfg.get("max_wait_min",            480))
+    min_rows    = int(mcfg.get("min_rows_to_evolve",      24))
+    steps       = float(mcfg.get("horizon_min",            60)) / float(mcfg.get("cadence_min", 15))
+    global_d    = float(mcfg.get("momentum_damping",     0.50))
+    floor_ratio = float(mcfg.get("momentum_floor_ratio", 0.50))
+    ph          = mcfg.get("per_hospital_damping", {})
 
     candidates = [round(d_min + i * 0.05, 2)
                   for i in range(round((d_max - d_min) / 0.05) + 1)]
@@ -196,13 +214,13 @@ def evolve(rows: list[dict], mcfg: dict, audit: bool = False
             continue
 
         cur_d      = _current_damping_for(hospital, segment, ph, global_d)
-        cur_errors = [abs(_project(r["current"], r["momentum"], cur_d, steps, max_wait)
+        cur_errors = [abs(_project(r["current"], r["momentum"], cur_d, steps, max_wait, floor_ratio)
                           - r["actual"]) for r in seg_rows]
         cur_mae    = sum(cur_errors) / n
 
         best_d, best_mae = cur_d, cur_mae
         for d in candidates:
-            errors = [abs(_project(r["current"], r["momentum"], d, steps, max_wait)
+            errors = [abs(_project(r["current"], r["momentum"], d, steps, max_wait, floor_ratio)
                           - r["actual"]) for r in seg_rows]
             mae = sum(errors) / n
             if mae < best_mae:
@@ -240,13 +258,13 @@ def evolve(rows: list[dict], mcfg: dict, audit: bool = False
         # "before" uses the current damping per segment; "after" uses new
         mae_before = (sum(abs(_project(r["current"], r["momentum"],
                                _current_damping_for(hospital, r["segment"], ph, global_d),
-                               steps, max_wait) - r["actual"])
+                               steps, max_wait, floor_ratio) - r["actual"])
                          for r in hospital_rows) / len(hospital_rows)
                       if hospital_rows else 0.0)
         mae_after  = (sum(abs(_project(r["current"], r["momentum"],
                                new_segments.get(r["segment"],
                                    _current_damping_for(hospital, r["segment"], ph, global_d)),
-                               steps, max_wait) - r["actual"])
+                               steps, max_wait, floor_ratio) - r["actual"])
                          for r in hospital_rows) / len(hospital_rows)
                       if hospital_rows else 0.0)
 
@@ -263,6 +281,166 @@ def evolve(rows: list[dict], mcfg: dict, audit: bool = False
         }
 
     return evolved, details
+
+
+def _ridge_gcv(X: np.ndarray, y: np.ndarray,
+               alpha_candidates: list[float]) -> tuple[np.ndarray, float]:
+    """
+    Fit Ridge regression by GCV (Generalised Cross-Validation).
+
+    GCV is analytically equivalent to leave-one-out CV and computed via SVD —
+    no iteration, no held-out splits, no dependency beyond numpy.
+
+    GCV score for a given alpha:
+      d_α   = s² / (s² + α)          ← shrinkage per singular component
+      ŷ     = U @ (d_α × Uᵀy)        ← Ridge predictions
+      GCV(α) = MSE(y, ŷ) / (1 − mean(d_α))²
+
+    The denominator penalises over-fitted models (high effective df).
+    The alpha with the lowest GCV score is selected.
+
+    Args:
+        X: feature matrix, shape (n, p). Must include the intercept column.
+        y: target vector, shape (n,).
+        alpha_candidates: list of alpha values to evaluate.
+
+    Returns:
+        (coef, chosen_alpha) — coefficient vector and the selected alpha.
+    """
+    U, s, Vt = np.linalg.svd(X, full_matrices=False)
+    d   = s ** 2
+    Uty = U.T @ y
+
+    best_alpha, best_gcv = alpha_candidates[0], float("inf")
+    for alpha in alpha_candidates:
+        d_alpha  = d / (d + alpha)
+        y_hat    = U @ (d_alpha * Uty)
+        mse      = float(np.mean((y - y_hat) ** 2))
+        denom    = (1.0 - float(np.mean(d_alpha))) ** 2
+        gcv      = mse / max(denom, _gcv_denom_floor)
+        if gcv < best_gcv:
+            best_gcv, best_alpha = gcv, alpha
+
+    # Final coefficients with chosen alpha
+    coef = Vt.T @ ((s / (d + best_alpha)) * Uty)
+    return coef, best_alpha
+
+
+def _make_features(row: dict) -> list[float] | None:
+    """
+    Build the 9-element feature vector from a forecast_audit.csv row.
+    Returns None if bucket_local_melb is missing (old rows without DST-aware timestamp).
+    """
+    local_str = row.get("bucket_local_melb", "").strip()
+    if not local_str:
+        return None
+    try:
+        dt   = datetime.fromisoformat(local_str)
+        hour = dt.hour + dt.minute / 60.0
+        dow  = dt.weekday()
+        is_hol = 1.0 if dt.date() in _VIC_HOLIDAYS else 0.0
+        return [
+            1.0,
+            float(row.get("current") or row.get("current_wait_min") or 0),
+            float(row.get("momentum") or row.get("wait_momentum") or 0),
+            float(row.get("treating") or row.get("treating_count") or 0),
+            math.sin(2 * math.pi * hour / 24),
+            math.cos(2 * math.pi * hour / 24),
+            math.sin(2 * math.pi * dow  / 7),
+            math.cos(2 * math.pi * dow  / 7),
+            is_hol,
+        ]
+    except (ValueError, KeyError):
+        return None
+
+
+def evolve_regression(rows: list[dict], mcfg: dict, audit: bool = False
+                      ) -> tuple[dict[str, dict], dict[str, dict]]:
+    """
+    Fit per-hospital Ridge regression and auto-promote if it beats damping MAE.
+
+    Returns:
+        promoted   — {hospital: {feature_name: coef}} for hospitals where ridge wins
+        reg_details — {hospital: {ridge_mae, damping_mae, promoted, n_rows}}
+    """
+    alpha_candidates = mcfg.get("regression_alpha_candidates", [1.0])
+    min_rows    = int(mcfg.get("min_rows_regression",   50))
+    max_wait    = int(mcfg.get("max_wait_min",          480))
+    floor_ratio = float(mcfg.get("momentum_floor_ratio", 0.50))
+    steps       = float(mcfg.get("horizon_min", 60)) / float(mcfg.get("cadence_min", 15))
+    global_d    = float(mcfg.get("momentum_damping", 0.50))
+    ph          = mcfg.get("per_hospital_damping", {})
+
+    # Group rows with features by hospital
+    by_hospital: dict[str, list[tuple]] = defaultdict(list)
+    for r in rows:
+        feats = _make_features(r)
+        if feats is None:
+            continue
+        by_hospital[r["hospital"]].append((feats, r["actual"], r))
+
+    promoted:    dict[str, dict] = {}
+    chosen_alphas: dict[str, float] = {}
+    reg_details: dict[str, dict] = {}
+
+    if audit:
+        print(f"\n  {'Hospital':<34} {'n':>5} {'α':>8} {'Ridge MAE':>10} "
+              f"{'Damp MAE':>10} {'Δ':>8} {'Promoted':>10}")
+        print("  " + "─" * 88)
+
+    for hospital in sorted(by_hospital):
+        pairs = by_hospital[hospital]
+        if len(pairs) < min_rows:
+            if audit:
+                print(f"  {hospital:<34} {len(pairs):>5}  — skip (need {min_rows})")
+            continue
+
+        X = np.array([p[0] for p in pairs], dtype=float)
+        y = np.array([p[1] for p in pairs], dtype=float)
+
+        # GCV: select best alpha analytically (equivalent to leave-one-out CV)
+        coef, chosen_alpha = _ridge_gcv(X, y, alpha_candidates)
+
+        # Clamp ridge predictions identically to project_wait
+        y_ridge = np.array([max(p[2]["current"] * floor_ratio,
+                                min(max_wait, float(X[i] @ coef)))
+                            for i, p in enumerate(pairs)])
+        ridge_mae = float(np.mean(np.abs(y_ridge - y)))
+
+        # Damping MAE for the same rows
+        damping_errors = [
+            abs(_project(p[2]["current"], p[2]["momentum"],
+                         _current_damping_for(hospital, p[2]["segment"], ph, global_d),
+                         steps, max_wait, floor_ratio) - p[2]["actual"])
+            for p in pairs
+        ]
+        damping_mae = sum(damping_errors) / len(damping_errors)
+
+        delta        = ridge_mae - damping_mae
+        will_promote = ridge_mae < damping_mae
+
+        if audit:
+            mark = " ✓" if will_promote else ""
+            print(f"  {hospital:<34} {len(pairs):>5} {chosen_alpha:>8g} "
+                  f"{ridge_mae:>9.1f}m {damping_mae:>9.1f}m "
+                  f"{delta:>+7.1f}m {'ridge' if will_promote else 'damping':>10}{mark}")
+
+        if will_promote:
+            promoted[hospital] = {
+                name: round(float(c), 6)
+                for name, c in zip(REGRESSION_FEATURE_NAMES, coef)
+            }
+            chosen_alphas[hospital] = chosen_alpha
+
+        reg_details[hospital] = {
+            "ridge_mae":    round(ridge_mae,    2),
+            "damping_mae":  round(damping_mae,  2),
+            "chosen_alpha": chosen_alpha,
+            "promoted":     will_promote,
+            "n_rows":       len(pairs),
+        }
+
+    return promoted, chosen_alphas, reg_details
 
 
 def main() -> None:
@@ -304,28 +482,55 @@ def main() -> None:
               f"{d['mae_before']:>10.1f}m {d['mae_after']:>9.1f}m "
               f" {direction}{abs(d['improvement_pct']):>4.1f}% {d['total_rows']:>6}")
 
+    # ── Phase 2: Ridge regression (GCV alpha selection) ──────────────────────
+    promoted, chosen_alphas, reg_details = evolve_regression(rows, mcfg, audit=args.audit)
+
+    if reg_details:
+        print(f"\n  Ridge regression: {len(promoted)} hospital(s) promoted "
+              f"out of {len(reg_details)} evaluated.")
+
     if args.dry_run:
         print("\n  [dry-run] model_config.json NOT updated.")
         return
 
-    # ── Merge (not replace) ───────────────────────────────────────────────────
-    existing = mcfg.get("per_hospital_damping", {})
+    # ── Merge Phase 1: per_hospital_damping (not replace) ────────────────────
+    existing_damping = mcfg.get("per_hospital_damping", {})
     for hospital, new_segs in evolved.items():
-        entry = existing.get(hospital, {})
+        entry = existing_damping.get(hospital, {})
         if not isinstance(entry, dict):
-            entry = {}           # upgrade legacy flat float to nested dict
+            entry = {}
         entry.update(new_segs)
-        existing[hospital] = entry
-    mcfg["per_hospital_damping"] = existing
+        existing_damping[hospital] = entry
+    mcfg["per_hospital_damping"] = existing_damping
+
+    # ── Merge Phase 2: regression_coefficients + hospital_model_type ─────────
+    existing_coefs    = mcfg.get("regression_coefficients", {})
+    existing_modtype  = mcfg.get("hospital_model_type", {})
+    for hospital, coef_dict in promoted.items():
+        existing_coefs[hospital]   = coef_dict
+        existing_modtype[hospital] = "ridge"
+    # Demote hospitals where regression no longer beats damping
+    for hospital, d in reg_details.items():
+        if not d["promoted"] and existing_modtype.get(hospital) == "ridge":
+            existing_modtype[hospital] = "damping"
+    mcfg["regression_coefficients"]  = existing_coefs
+    mcfg["hospital_model_type"]      = existing_modtype
+    existing_alphas = mcfg.get("regression_chosen_alphas", {})
+    existing_alphas.update(chosen_alphas)
+    mcfg["regression_chosen_alphas"] = existing_alphas
+
     _MODEL_CFG.write_text(json.dumps(mcfg, indent=2))
-    print(f"\n  model_config.json updated — {len(evolved)} hospital(s) evolved, "
-          f"{len(existing) - len(evolved)} retained from previous run.")
+    print(f"\n  model_config.json updated — "
+          f"{len(evolved)} hospital(s) damping evolved, "
+          f"{len(promoted)} promoted to ridge.")
 
     # ── Audit log ─────────────────────────────────────────────────────────────
     log_entry = {
-        "run_utc":    datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-        "audit_rows": len(rows),
-        "hospitals":  details,
+        "run_utc":          datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "audit_rows":       len(rows),
+        "damping":          details,
+        "regression":       reg_details,
+        "chosen_alphas":    chosen_alphas,
     }
     try:
         with open(_EVOLUTION_LOG, "a") as fh:

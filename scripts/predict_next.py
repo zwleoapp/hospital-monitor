@@ -1,40 +1,27 @@
 # data-class: public-aggregate
 """
-predict_next.py — Rule-based 60-minute ED wait-time outlook.
+predict_next.py — 60-minute ED wait-time outlook.
 
-This is the Phase 1 heuristic baseline.  It makes no assumptions beyond three
-observable inputs so the trained ML model has a clear, reproducible bar to beat:
+Two model tiers, selected per-hospital by evolve_model.py:
 
-  Input (from Silver CSV, most-recent row per hospital):
-    current_wait_min   min_wait_mins from live Bronze
-    wait_momentum      change per 15-min cadence (computed in transform_silver.py)
-    ctx_*              VAHI quarterly benchmarks
+  Phase 1 — Damped linear extrapolation (default):
+    W60 = clamp(max(Wnow × F,  Wnow + M15 × 4 × D),  max=480)
+    D resolved by get_effective_damping() from model_config.json per_hospital_damping.
 
-  Projection formula (damped linear extrapolation):
-    horizon = 60 min = 4 cadence steps
-    projected = current_wait + momentum * 4 * MOMENTUM_DAMPING
-    clamped to [0, MAX_WAIT_MIN]
+  Phase 2 — Ridge regression (auto-promoted when regression MAE < damping MAE):
+    W60 = clamp(X @ coef,  floor=Wnow × F,  max=480)
+    Features: intercept, current_wait, momentum, treating_count,
+              hour_sin, hour_cos, dow_sin, dow_cos, is_holiday
+    Coefficients written by evolve_model.py to model_config.json regression_coefficients.
 
-  Confidence score (0.0 – 1.0):
-    Composite of three signals, each grounded in the baseline chart:
-      los_score      = min(1, ctx_los_pct_under_4hr / 70)   weight 0.50
-                       How close is the hospital to the 70% national target?
-                       High → system in "normal" regime → more predictable.
-      momentum_score = max(0, 1 - |momentum| / MOMENTUM_CEILING)  weight 0.30
-                       Stable trend → more predictable.
-      p90_score      = max(0, 1 - max(0, wait - p90) / p90)       weight 0.20
-                       Is current wait within historical norms?
+Dispatch via predict_wait(hospital, current_wait, momentum, treating_count, dt).
+All callers use this single entry point — model type is transparent to consumers.
 
-    confidence_label: High (>=0.70) | Moderate (>=0.40) | Low (<0.40)
-
-Output (stdout + optional --out <path>.json):
-  JSON matching the DESIGN.md §6 publisher schema:
-  { generated_utc, horizon_min, sites: [{site, latest_obs_utc,
-    current_wait_min, predicted_wait_min, confidence, confidence_label,
-    wait_momentum, ctx_source}] }
+Confidence score (0.0–1.0), label: High/Moderate/Low — unchanged across both models.
 """
 
 import sys
+import math
 import json
 import argparse
 import pathlib
@@ -63,12 +50,13 @@ def _load_model_cfg() -> dict:
 
 _mcfg = _load_model_cfg()
 
-HORIZON_MIN       = int(_mcfg.get("horizon_min",       60))
-CADENCE_MIN       = int(_mcfg.get("cadence_min",       15))
-MOMENTUM_DAMPING  = float(_mcfg.get("momentum_damping", 0.50))
-MOMENTUM_CEILING  = float(_mcfg.get("momentum_ceiling", 30.0))
-MAX_WAIT_MIN      = int(_mcfg.get("max_wait_min",       480))
-LOS_TARGET_PCT    = float(_mcfg.get("los_target_pct",   70.0))
+HORIZON_MIN          = int(_mcfg.get("horizon_min",          60))
+CADENCE_MIN          = int(_mcfg.get("cadence_min",          15))
+MOMENTUM_DAMPING     = float(_mcfg.get("momentum_damping",    0.50))
+MOMENTUM_FLOOR_RATIO = float(_mcfg.get("momentum_floor_ratio", 0.50))
+MOMENTUM_CEILING     = float(_mcfg.get("momentum_ceiling",    30.0))
+MAX_WAIT_MIN         = int(_mcfg.get("max_wait_min",          480))
+LOS_TARGET_PCT       = float(_mcfg.get("los_target_pct",      70.0))
 DAMPING_MIN       = float(_mcfg.get("damping_min",      0.50))
 DAMPING_MAX       = float(_mcfg.get("damping_max",      1.20))
 ANOMALY_ERROR_PCT = float(_mcfg.get("anomaly_error_pct", 200.0))
@@ -80,10 +68,19 @@ _CW_P90      = float(_mcfg.get("confidence_weight_p90",      0.20))
 _CONF_HIGH   = float(_mcfg.get("confidence_high_threshold",  0.70))
 _CONF_MOD    = float(_mcfg.get("confidence_moderate_threshold", 0.40))
 
-# Per-hospital damping written by evolve_model.py.
-# Schema: {hospital: {day_type_band: float}} — granular by day_type + time_band.
-# Legacy flat {hospital: float} also supported for backward compat.
+# Per-hospital damping written by evolve_model.py (Phase 1).
 _PER_HOSPITAL_DAMPING: dict = _mcfg.get("per_hospital_damping", {})
+
+# Phase 2 — Ridge regression config (written by evolve_model.py).
+# hospital_model_type: {hospital: "ridge" | "damping"}
+# regression_coefficients: {hospital: {feature_name: coef_value}}
+_HOSPITAL_MODEL_TYPE:      dict = _mcfg.get("hospital_model_type",      {})
+_REGRESSION_COEFFICIENTS:  dict = _mcfg.get("regression_coefficients",  {})
+
+REGRESSION_FEATURE_NAMES = [
+    "intercept", "current_wait", "momentum", "treating_count",
+    "hour_sin", "hour_cos", "dow_sin", "dow_cos", "is_holiday",
+]
 
 # Victorian public holiday calendar (auto-updated yearly by the holidays package)
 _VIC_HOLIDAYS = _holidays_lib.country_holidays("AU", subdiv="VIC")
@@ -217,14 +214,84 @@ def project_wait(current_wait: float, momentum: float, damping: float | None = N
 
     steps = HORIZON_MIN / CADENCE_MIN = 4 cadence units.
     Damping prevents runaway compounding (mean-reverting assumption).
-    Floor at 50% of current_wait: a one-cycle momentum spike shouldn't predict
-    near-zero wait when the system is clearly still busy.
+    Floor at MOMENTUM_FLOOR_RATIO × current_wait (config/model_config.json):
+    a one-cycle momentum spike should not predict near-zero wait when the ED
+    is clearly still busy. Configurable so evolve_model.py or manual tuning
+    can relax the floor for hospitals that genuinely clear fast.
     """
     d = damping if damping is not None else MOMENTUM_DAMPING
     steps = HORIZON_MIN / CADENCE_MIN
     projected = current_wait + momentum * steps * d
-    floor = current_wait * 0.50
+    floor = current_wait * MOMENTUM_FLOOR_RATIO
     return round(max(floor, min(MAX_WAIT_MIN, projected)), 1)
+
+
+def _regression_features(current_wait: float, momentum: float,
+                         treating_count: float, dt: datetime) -> list[float]:
+    """Build the 9-element feature vector for Ridge prediction."""
+    hour = dt.hour + dt.minute / 60.0
+    dow  = dt.weekday()
+    from zoneinfo import ZoneInfo as _ZI
+    is_hol = 1.0 if dt.date() in _VIC_HOLIDAYS else 0.0
+    return [
+        1.0,
+        current_wait,
+        momentum,
+        treating_count,
+        math.sin(2 * math.pi * hour / 24),
+        math.cos(2 * math.pi * hour / 24),
+        math.sin(2 * math.pi * dow  / 7),
+        math.cos(2 * math.pi * dow  / 7),
+        is_hol,
+    ]
+
+
+def predict_regression(hospital: str, current_wait: float, momentum: float,
+                       treating_count: float, dt: datetime) -> float:
+    """
+    Ridge regression prediction for hospitals promoted to Phase 2.
+    Falls back to project_wait (damping) if coefficients unavailable.
+    Output clamped identically to project_wait: [Wnow × floor_ratio, MAX_WAIT_MIN].
+    """
+    coef_dict = _REGRESSION_COEFFICIENTS.get(hospital)
+    if not coef_dict:
+        return project_wait(current_wait, momentum,
+                            get_effective_damping(hospital, dt))
+
+    feats = _regression_features(current_wait, momentum, treating_count, dt)
+    raw = sum(coef_dict.get(name, 0.0) * val
+              for name, val in zip(REGRESSION_FEATURE_NAMES, feats))
+
+    floor = current_wait * MOMENTUM_FLOOR_RATIO
+    return round(max(floor, min(MAX_WAIT_MIN, raw)), 1)
+
+
+def predict_wait(hospital: str, current_wait: float, momentum: float,
+                 treating_count: float = 0.0,
+                 dt: datetime | None = None) -> float:
+    """
+    Single dispatch point for all callers.
+
+    Routes to Ridge regression (Phase 2) or damped extrapolation (Phase 1)
+    based on hospital_model_type in model_config.json. Falls back to damping
+    if ridge coefficients are absent. overrides.json model_type_per_site
+    takes priority over the config file value.
+    """
+    ov = _load_overrides()
+    override_type = (ov.get("model_type_per_site") or {}).get(hospital)
+    model_type = override_type or _HOSPITAL_MODEL_TYPE.get(hospital, "damping")
+
+    ref_dt = dt
+    if ref_dt is None:
+        from zoneinfo import ZoneInfo as _ZI
+        ref_dt = datetime.now(timezone.utc).astimezone(_ZI("Australia/Melbourne"))
+
+    if model_type == "ridge" and hospital in _REGRESSION_COEFFICIENTS:
+        return predict_regression(hospital, current_wait, momentum,
+                                  treating_count, ref_dt)
+
+    damping = get_effective_damping(hospital, ref_dt)
+    return project_wait(current_wait, momentum, damping)
 
 
 def confidence_score(
@@ -299,12 +366,10 @@ def build_outlook(silver_row: pd.Series) -> dict:
     vahi_median_cat123 = None if pd.isna(raw_med123) else int(raw_med123)
     vahi_median_cat45  = None if pd.isna(raw_med45)  else int(raw_med45)
 
-    # Pass the observation datetime so damping resolves to the correct day_type + band
     from zoneinfo import ZoneInfo as _ZI
     obs_melb = silver_row["timestamp"].astimezone(_ZI("Australia/Melbourne"))
-    damping = get_effective_damping(hospital, dt=obs_melb)
     projected, (confidence, label) = (
-        project_wait(current_wait, momentum, damping),
+        predict_wait(hospital, current_wait, momentum, float(treating_count), obs_melb),
         confidence_score(current_wait, momentum, los_pct, p90),
     )
 

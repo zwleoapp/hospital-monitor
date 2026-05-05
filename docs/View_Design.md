@@ -59,12 +59,27 @@ CSS: `.triage60-row .triage60-lbl .triage60-item .triage60-cat .triage60-val`
 
 ### 5. Trend + confidence + accuracy
 ```
-↑ Worsening  High confidence 82%   Recent Accuracy 83%
+↑ Worsening  High confidence 82%
+
+FORECAST ACCURACY
+04:30pm  ⏱ 49m → ✓ 05:30pm 48m   98%
+04:15pm  ⏱ 51m → ✓ 05:15pm 48m   93%
+04:00pm  ⏱ 53m → ✓ 05:00pm 50m   96%
 ```
 - Trend arrow and label from `wait_momentum` (Rising / Improving / Stable)
 - Confidence label from `confidence_label` (High / Moderate / Low)
-- **Recent Accuracy badge** from `s.recent_accuracy` in `latest.json` — server-computed average of last 6 completed T+60 predictions. Shows `Calibrating…` when fewer than 6 exist.
-- CSS: `.forecast-badge` (accuracy known) | `.forecast-badge-cal` (calibrating, italic grey)
+- **Forecast Accuracy block** — 3 rows, newest first, from `history_timeline.json` snapshots loaded in-browser. Each row shows:
+  - **Left:** forecast time (Melbourne local, when the prediction was made)
+  - **⏱ Xm:** the 60-min prediction made at that time
+  - **→ ✓ T+60 Ym:** actual wait observed at T+60 (Melbourne local), with ✓ icon
+  - **Right:** accuracy % (bold blue)
+  - ⏱ = prediction icon &nbsp; ✓ = actual/confirmed icon
+- Falls back to `s.recent_accuracy` mean badge if history not yet loaded; `Calibrating…` if no data
+- CSS: `.acc-hist-block` (wrapper) · `.acc-hist-label` (header) · `.acc-hist-row` (each row)
+  - `.ah-time` (forecast time, grey, fixed width) · `.ah-val` (icons + values) · `.ah-pct` (%, bold blue)
+- Historical mode (time-nav): single row using the snapshot's own `_forecast_accuracy` + `_actual_60m`
+- Data source: `_recentForecasts(siteName, 3)` — walks `_histTimeline.snapshots` newest-first,
+  returns completed forecasts where `forecast_accuracy != null && actual_60m_wait_min != null`
 
 ### 6. Paediatric section (Monash Casey + Clayton only)
 ```

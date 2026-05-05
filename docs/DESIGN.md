@@ -1,6 +1,6 @@
 # DESIGN — Predictive ED Wait Time Engine
 
-**Version:** 1.8 · **Updated:** 2026-05-03 · **Owner:** G
+**Version:** 1.9 · **Updated:** 2026-05-05 · **Owner:** G
 
 > This document is the **Single Source of Truth (SSOT)**. Every architectural change updates this doc *before* the code is merged. Both Gemini (strategy) and Claude (DS co-design / tactical execution) read it on every session.
 >
@@ -52,7 +52,7 @@ Everything runs on the Raspberry Pi. No cloud spend.
    ├── Audit:    forecast_audit.csv               (ML training log, SSD)
    ├── Silver:   melbourne_southeast_silver.csv    (rebuilt each cycle)
    │              Context join: VAHI → AIHW → ctx_defaults (3-tier LEFT join)
-   ├── Model:    config/model_config.json          (per_hospital_damping, weekly evolve)
+   ├── Model:    config/model_config.json          (Ridge coefficients + damping fallback, weekly evolve)
    └── Export:   /tmp/latest.json  +  history_timeline.json
                   │  sites[]           (7 full-pipeline hospitals)
                   │  status_sites[]    (raw_only hospitals, e.g. RCH)
@@ -128,15 +128,20 @@ Phase 1 is deliberately small, but the lifecycle shape is set now so Phase 2 is 
 
 | Stage | Phase 1 (Pi) | Phase 2 (Databricks) |
 |---|---|---|
-| Training data | Silver CSV, last N days | Gold Delta snapshot (content-hashed) |
-| Holdout | Last 14 days frozen, never trained on | Same; enforced in code |
-| Model store | `/models/v<n>.pkl` + `manifest.csv` | MLflow model registry |
-| Cadence | Weekly cron on Pi | Weekly Databricks job |
-| Evaluation | MAE on holdout; logged to `models/eval_log.csv` | Same; logged to MLflow runs |
-| Drift monitor | Population Stability Index (PSI) on `load_ratio` and `temp_c` between latest week and training window; flag if PSI > 0.2 | Same; alerts via Databricks job email |
-| Promotion | New model only replaces champion if MAE on holdout is ≥ 5% better | Same, gated in MLflow |
+| Training data | `forecast_audit.csv` — all deduplicated rows per hospital | Gold Delta snapshot (content-hashed) |
+| Model | Ridge regression (Phase 2 active) or damped extrapolation fallback | Same pattern, higher data volume |
+| Features | `current_wait`, `momentum`, `treating_count`, `hour_sin/cos`, `dow_sin/cos`, `is_holiday` | Add weather, occupancy lag, seasonal index |
+| Holdout | Per-hospital MAE comparison — regression only replaces damping if MAE strictly improves | Same |
+| Model store | `config/model_config.json` — `regression_coefficients` + `hospital_model_type` | MLflow model registry |
+| Cadence | Weekly cron on Pi (`evolve_model.py`) | Weekly Databricks job |
+| Evaluation | MAE on full audit set; comparison table in `model_evolution_log.jsonl` | Same; logged to MLflow runs |
+| Drift monitor | Auto-demotion: if ridge MAE ≥ damping MAE on re-run, hospital reverts to "damping" | PSI + MLflow alerts |
+| Promotion | Automatic — `evolve_model.py` promotes/demotes each hospital independently | Same, gated in MLflow |
+| Backtest | `backtest_model.py` — recomputes `backtest_*` columns in `forecast_audit.csv` after any model change | Same |
 
-**Leakage rule (both phases):** every feature must be a function only of `t' ≤ t`. Unit-tested.
+**Self-evolving loop:** every pipeline cycle appends to `forecast_audit.csv` → weekly `evolve_model.py` re-fits Ridge coefficients from all accumulated rows → writes updated `model_config.json` → next pipeline cycle picks up new coefficients automatically. No human intervention required once running.
+
+**Leakage rule (both phases):** every feature must be a function only of `t' ≤ t`. `treating_count` and `wait_momentum` at time `t` are inputs; `actual_wait_min` at `t+60` is the target only. Unit-tested.
 
 ---
 
@@ -176,6 +181,20 @@ Key decisions recorded here so future changes are made with context.
 **Rationale:** Adding a new hospital, updating a URL, or changing a regex requires only a config edit — no Python changes, no re-testing scraper logic, no risk of introducing bugs in unrelated hospitals.
 
 **Adding a hospital:** new row in `hospitals.csv` + source entry in `hospitals.json`. If no VAHI data yet, add `ctx_defaults` entry. For status-only sources, set `pipeline=raw_only`.
+
+### ADR-05: Ridge regression per-hospital, auto-promoted (2026-05)
+
+**Decision:** Replace the 1D damping grid search with Ridge regression as the active forecast model, promoted automatically per hospital when MAE strictly improves. Damping model retained as fallback.
+
+**Rationale:** The grid search found `D=0.50` optimal for nearly every segment — a ceiling. The error is not in damping calibration but in feature poverty: a single momentum scalar cannot express that treating_count pressure sustains wait rises, or that Tuesday 9am behaves differently from Friday 9am. Ridge with 9 features (incl. `hour_sin/cos`, `dow_sin/cos`, `treating_count`, `is_holiday`) lowers MAE by 2–13 min per hospital on first fit.
+
+**Feature encoding choice:** `hour_sin/cos` and `dow_sin/cos` (continuous cyclical) over coarse `time_band` / `day_type` buckets because 11pm is adjacent to midnight, Sunday is adjacent to Monday — bucket boundaries create artificial discontinuities that reduce model accuracy.
+
+**Promotion rule:** Auto-promotion only when `ridge_mae < damping_mae` on the same deduplicated rows. Auto-demotion if regression regresses on a subsequent weekly run. No manual per-hospital config needed.
+
+**Solver:** `numpy.linalg.lstsq` with manual L2 regularisation — no new dependencies. `alpha=1.0` (shrinkage) is conservative for datasets of ~150 rows.
+
+**Source differences preserved:** Eastern Health (`html_js`, volatile raw data) and Monash Health (`powerbi`, Power BI-smoothed) have structurally different accuracy baselines. Per-hospital promotion means each hospital gets the model that fits its data rhythm — they are not forced into the same model type.
 
 ### ADR-04: Three-tier Silver context join (2026-05)
 
@@ -230,7 +249,52 @@ This is the simplest possible public surface: no servers, no DNS, no inbound on 
 
 ---
 
-## 10. Config-Driven Architecture
+## 10. No-Hardcode Rule
+
+**Every tuneable value lives in a config file. Scripts contain only logic.**
+
+This is a hard rule, not a preference. A value is "hardcoded" if changing it requires editing a Python or JS file. Config-driven values can be changed by anyone without touching code, without risk of introducing bugs, and without a code review cycle.
+
+### What belongs in config
+
+| Type | File | Examples |
+|---|---|---|
+| ML model parameters | `config/model_config.json` | `momentum_damping`, `momentum_floor_ratio`, `regression_alpha_candidates`, `gcv_denom_floor`, `min_rows_regression`, `damping_min/max` |
+| UI thresholds & display | `config/ui_config.json` | `HOSPITAL_STALE_MINS`, `RECENT_ACCURACY_LOOKBACK`, `TRAFFIC_LIGHT_*`, `CRISIS_*` |
+| Operational hours | `config/ui_config.json` | `OPERATIONAL_START_H / END_H` |
+| Hospital registry | `config/hospitals.csv` | Names, network types, AIHW codes, active flag |
+| Scraper details | `config/hospitals.json` | URLs, Power BI IDs, regex patterns, JS field maps, `ctx_defaults` |
+| File paths | `config/paths.py` | All SSD paths, staging paths |
+| Manual overrides | `config/overrides.json` | Emergency damping resets, model type override per site |
+
+### What is NOT hardcoding
+
+- **Structural constants** that are intrinsic to an algorithm and have no meaningful alternative (e.g. the `1.0` intercept feature in a regression feature vector, `float("inf")` as an initial sentinel value). These are implementation details, not parameters.
+- **Derived values** computed from config at runtime (e.g. `steps = horizon_min / cadence_min`).
+- **Safety guards** are borderline — if a numerical epsilon like `gcv_denom_floor` could ever need tuning, put it in config. If it is purely defensive (prevent divide-by-zero for a value that is never legitimately close to zero), a code comment is sufficient.
+
+### Checklist before merging any script change
+
+- [ ] No new numeric literals that represent thresholds, windows, weights, or limits
+- [ ] No hospital names, URLs, or field names embedded in script logic
+- [ ] No model hyperparameters set inline — they come from `model_config.json`
+- [ ] No UI display constants in `index.html` — they come from `latest.json → ui_thresholds`
+- [ ] Fallback defaults in `mcfg.get("key", DEFAULT)` match the value in the config file (or are a safe minimal sentinel like `[1.0]` — not a duplicate of the full list)
+- [ ] `Forecast_Logic.md` and `DESIGN.md` updated if the model or pipeline changed
+
+### Historical violations fixed
+
+| Date | Violation | Fix |
+|---|---|---|
+| 2026-04-29 | `HOSPITAL_STALE_MINS`, traffic-light thresholds hardcoded in `index.html` | Moved to `ui_config.json`; frontend reads via `ui_thresholds` block in `latest.json` |
+| 2026-05-05 | `momentum_floor_ratio` hardcoded as `0.50` in `project_wait()` and `_project()` | Moved to `model_config.json` |
+| 2026-05-05 | `RECENT_ACCURACY_LOOKBACK` defaulted to `6` in script, not read from config | Now reads from `ui_config.json` |
+| 2026-05-05 | GCV `1e-10` numerical floor hardcoded in `_ridge_gcv()` | Moved to `model_config.json → gcv_denom_floor` |
+| 2026-05-05 | GCV fallback alpha list `[0.01, 0.1, 1.0, 10.0, 100.0, 1000.0]` in script body diverged from config | Replaced with minimal `[1.0]` sentinel; real list always comes from `regression_alpha_candidates` |
+
+---
+
+## 11. Config-Driven Architecture
 
 ### Principle: Separate Logic from Parameters
 
@@ -296,7 +360,7 @@ scrape_timestamp_utc, site, reported_timestamp_str, waiting, treating, wait_str,
 
 ---
 
-## 11. Seasonal Benchmark Computation
+## 12. Seasonal Benchmark Computation
 
 VAHI publishes quarterly ED performance data. From Q1-2026 onward, real data for new quarters is not yet available; `transform_silver.py` forward-fills Q4-2025 values as VAHI_PROXY rows. These are seasonally incorrect (e.g. Box Hill Q4 p90=89m used as a Q1/Q2 benchmark when Q2 actual is ~80m).
 
@@ -321,7 +385,7 @@ Quarter-of-year (`_qoy`) is derived from the **Bronze timestamp** (not the VAHI 
 | Q1-2026 (PROXY) | 89m ← forward-fill | 75m (Q1 avg) | 75m ✓ |
 | Q2-2026 (PROXY) | 89m ← forward-fill | 80m (Q2 avg) | 80m ✓ |
 
-## 11. Triage Split Estimation
+## 13. Triage Split Estimation
 
 The UI renders separate wait estimates for Urgent (Cat 1–3) and Minor (Cat 4–5) by applying VAHI triage median ratios to the current observed wait.
 
@@ -353,7 +417,7 @@ Range is always presented shortest → longest to convey the uncertainty envelop
 
 The triage benchmark chips ("Median Xm") displayed on each hospital card are sourced from `ctx_wait_median_cat45_mins` and `ctx_wait_median_cat123_mins` in the published JSON. Because these columns are overwritten by `_seas_med45`/`_seas_med123` in Silver, they always reflect the YoY seasonal average for the **current quarter-of-year** (e.g. a Q2 observation compares against the average of all historical Q2 VAHI rows, not the most recent quarter's exact value). This ensures "Median" is the right seasonal comparator, not a stale forward-fill.
 
-## 12. Change log
+## 14. Change log
 
 - **1.0 (2026-04-25)** — Restructured around Phase 1 / Phase 2. Added data-safety posture and ML lifecycle. Replaces SSOT v0.2.
 - **1.1 (2026-04-27)** — Merged dashboard design reference (Dual-Clock, Tiered Stale, Vercel). Removed diversion UI.
@@ -363,10 +427,12 @@ The triage benchmark chips ("Median Xm") displayed on each hospital card are sou
 - **1.5 (2026-04-28)** — Command Center layout finalised (§13 updated). Hero hierarchy: times → Confidence + 72h Accuracy badges → 🛡️ p90 (9-in-10 possibility) → All-categories current → Crisis headline (LONG WAIT / VERY LONG WAIT, hero-sized) or trend arrow → Median triage chips. System Insights now has a "System Metrics" subgroup (Strain Index, Clearing Speed). Timeline nav requires >1 snapshot to unlock. "Usual" → "Median" in triage chips.
 - **1.6 (2026-04-29)** — Decoupled data pipeline: data branch capped to 4 files, `ignoreCommand` added to suppress Vercel builds on Pi pushes, `raw.githubusercontent.com` reference removed from §6. DATA HEARTBEAT footer removed from card UI. Companion [dataflow.md](dataflow.md) created for pipeline/Vercel operational detail.
 - **1.7 (2026-04-29)** — Pipeline hardening and AIHW restoration. Full session summary in §14.
+- **1.8 (2026-05-03)** — Server-side `recent_accuracy` (replaced localStorage), `forecast_audit.csv` introduced, `RECENT_ACCURACY_LOOKBACK` config key, `bucket_local_melb` DST-aware timestamp field.
+- **1.9 (2026-05-05)** — Ridge regression Phase 2 active. Per-hospital auto-promotion via `evolve_model.py`. `predict_wait()` dispatcher replaces direct `project_wait()` calls everywhere. `backtest_model.py` added for repeatable model comparison. All 7 hospitals promoted to Ridge on first run (MAE −2 to −13 min vs damping). Self-evolving loop documented in §5. ADR-05 added.
 
 ---
 
-## 13. Dashboard & Operational Design
+## 15. Dashboard & Operational Design
 
 ### Dual-Clock Freshness System
 
@@ -436,14 +502,17 @@ A sidebar panel (desktop) / top horizontal slider (mobile) ranks the top 3 hospi
 
 | Constant | File | Purpose |
 |---|---|---|
-| `HOSPITAL_STALE_MINS` | `docs/index.html` | Per-hospital stale threshold (60 min) |
+| `HOSPITAL_STALE_MINS` | `config/ui_config.json` | Per-hospital stale threshold (60 min) |
 | `NETWORK_ORDER` | `docs/index.html` | Fixed network display order |
-| `OPERATIONAL_START_H / END_H` | `scripts/publish_latest.py` | Publish hours gate (06:00–23:00 Melbourne) |
-| `MOMENTUM_DAMPING` | `scripts/predict_next.py` | Dampens trend extrapolation |
+| `OPERATIONAL_START_H / END_H` | `config/ui_config.json` | Publish hours gate (06:00–23:00 Melbourne) |
+| `momentum_damping` | `config/model_config.json` | Global damping fallback (used when Ridge not promoted) |
+| `regression_alpha` | `config/model_config.json` | Ridge L2 regularisation strength (default 1.0) |
+| `min_rows_regression` | `config/model_config.json` | Min rows before Ridge is attempted (default 50) |
+| `RECENT_ACCURACY_LOOKBACK` | `config/ui_config.json` | Recent accuracy badge window — same segment, last N snapshots (default 12) |
 
 ---
 
-## 14. Session Log — 2026-04-29 Pipeline Hardening
+## 16. Session Log — 2026-04-29 Pipeline Hardening
 
 ### Issues resolved
 

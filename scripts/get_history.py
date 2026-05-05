@@ -95,7 +95,8 @@ from datetime import datetime, timezone, timedelta
 import pandas as pd
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
-from predict_next import project_wait, confidence_score, time_band, day_type  # noqa: E402
+from predict_next import (project_wait, predict_wait, confidence_score,        # noqa: E402
+                          time_band, day_type)
 from config.hospitals import ALL_HOSPITALS, SOURCES       # noqa: E402
 from config.paths import (                                # noqa: E402
     SILVER_CSV          as DEFAULT_SILVER,
@@ -133,7 +134,15 @@ FORECAST_AUDIT_HEADER = [
     "current_wait_min", "wait_momentum", "treating_count",
     "actual_wait_min", "predicted_wait_min", "error_pct", "forecast_accuracy",
     "cache_lag_minutes", "fidelity_status",
+    # bucket_local_melb: ISO 8601 with UTC offset — DST-aware (AEST +10:00, AEDT +11:00)
+    # Always populated at write time; no separate timezone column needed.
+    "bucket_local_melb",
+    # Backtest columns: filled by backtest_model.py, blank on new rows until that script runs.
+    # backtest_* uses the *current* model_config.json formula, not the live-at-the-time value.
+    "backtest_predicted_wait_min", "backtest_error_pct", "backtest_accuracy",
 ]
+
+_MELB_TZ = __import__("zoneinfo").ZoneInfo("Australia/Melbourne")
 
 
 def _log_accuracy_postmortem(df: "pd.DataFrame") -> None:
@@ -245,10 +254,11 @@ def _write_forecast_audit(df: "pd.DataFrame") -> None:
         error_pct  = abs(predicted - actual) / max(actual, 1) * 100
 
         # Temporal classification for the evolve_model.py demand segmentation
-        from zoneinfo import ZoneInfo as _ZI
-        bucket_melb = bucket.astimezone(_ZI("Australia/Melbourne"))
+        bucket_melb = bucket.astimezone(_MELB_TZ)
         d_type = day_type(bucket_melb)
         t_band = time_band(bucket_melb.hour)
+        # ISO 8601 with UTC offset — preserves AEST (+10:00) vs AEDT (+11:00) unambiguously
+        bucket_local_melb = bucket_melb.isoformat(timespec="seconds")
 
         audit_rows.append([
             bucket.strftime("%Y-%m-%dT%H:%M:%SZ"),
@@ -266,6 +276,8 @@ def _write_forecast_audit(df: "pd.DataFrame") -> None:
             float(row["forecast_accuracy"]),
             cache_lag_lookup.get(key, ""),
             fidelity_lookup.get(key, ""),
+            bucket_local_melb,                           # DST-aware Melbourne local time
+            "", "", "",                                  # backtest_* — filled by backtest_model.py
         ])
 
     if not audit_rows:
@@ -306,14 +318,18 @@ def build_timeline(silver_path: pathlib.Path, history_hours: int = HISTORY_HOURS
           .reset_index()
     )
 
-    # Compute 60-min projection for every row.
-    # wait_momentum is NaN for the first observation per hospital (no prior row to diff against).
-    # float(NaN) or 0 returns NaN because NaN is truthy — use pd.notna guard instead.
+    # Compute 60-min projection for every row via predict_wait — dispatches to
+    # Ridge regression or damped extrapolation per hospital_model_type config.
     def _project(row):
-        _mom = row.get("wait_momentum")
-        return project_wait(
-            float(row["min_wait_mins"] or 0),
-            float(_mom) if pd.notna(_mom) else 0.0,
+        _mom      = row.get("wait_momentum")
+        _treating = row.get("treating")
+        bucket_melb = row["bucket"].astimezone(_MELB_TZ)
+        return predict_wait(
+            hospital      = row["hospital"],
+            current_wait  = float(row["min_wait_mins"] or 0),
+            momentum      = float(_mom) if pd.notna(_mom) else 0.0,
+            treating_count= float(_treating) if pd.notna(_treating) else 0.0,
+            dt            = bucket_melb,
         )
 
     df["predicted_wait_min"] = df.apply(_project, axis=1)
