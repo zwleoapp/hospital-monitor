@@ -243,6 +243,7 @@
       font-size:.7rem;font-weight:700;
     }
     .forecast-badge-cal{background:#f5f5f5;color:#9ca3af;border:1px solid #e5e7eb;font-style:italic}
+    .acc-trend{font-size:.68rem;color:#9ca3af;margin-top:2px;letter-spacing:.01em}
 
     /* Gap 3: overall metric row + max-wait outlier warning */
     .overall-metric{font-size:.75rem;color:#9090a8;margin-bottom:.18rem}
@@ -721,8 +722,17 @@ function renderCard(s) {
       ? `<div class="crisis-headline ${_crisisCritical ? 'crisis-very-long' : 'crisis-long'}">&#9888; ${_crisisCritical ? 'VERY LONG WAIT' : 'LONG WAIT'}</div>`
       : "";
 
-    const acc = s.recent_accuracy;
-    const accuracyBadgeHtml = `<span class="badge ${acc != null ? 'forecast-badge' : 'forecast-badge-cal'}">${acc != null ? 'Recent&nbsp;Accuracy&nbsp;' + acc + '%' : '&#8987; Calibrating&hellip;'}</span>`;
+    const acc   = s.recent_accuracy;
+    const trend = Array.isArray(s.recent_accuracy_trend) ? s.recent_accuracy_trend : [];
+    const trendArrow = trend.length >= 2
+      ? (trend[trend.length - 1] > trend[0] ? '↑' : trend[trend.length - 1] < trend[0] ? '↓' : '→')
+      : '';
+    const trendHtml = trend.length > 0
+      ? `<div class="acc-trend">${trendArrow}&thinsp;${trend.map(v => Math.round(v) + '%').join('&thinsp;·&thinsp;')}</div>`
+      : '';
+    const accuracyBadgeHtml = acc != null
+      ? `<span class="badge forecast-badge">Recent&nbsp;Accuracy&nbsp;${acc}%</span>${trendHtml}`
+      : `<span class="badge forecast-badge-cal">&#8987; Calibrating&hellip;</span>`;
 
     const histAccuracyHtml = s._is_historical
       ? (s._forecast_accuracy != null && s._forecast_accuracy > 0
