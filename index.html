@@ -754,23 +754,51 @@ function renderCard(s) {
       ? `<div class="crisis-headline ${_crisisCritical ? 'crisis-very-long' : 'crisis-long'}">&#9888; ${_crisisCritical ? 'VERY LONG WAIT' : 'LONG WAIT'}</div>`
       : "";
 
-    const acc   = s.recent_accuracy;
-    const trend = Array.isArray(s.recent_accuracy_trend) ? s.recent_accuracy_trend : [];
-    const trendArrow = trend.length >= 2
-      ? (trend[trend.length - 1] > trend[0] ? '↑' : trend[trend.length - 1] < trend[0] ? '↓' : '→')
-      : '';
-    const trendStr = trend.length > 0
-      ? `${trendArrow}&thinsp;${trend.map(v => Math.round(v) + '%').join('&thinsp;·&thinsp;')}`
-      : (acc != null ? acc + '%' : null);
-    const accuracyBadgeHtml = trendStr != null
-      ? `<span class="badge forecast-badge">Recent&nbsp;Accuracy&nbsp;${trendStr}</span>`
-      : `<span class="badge forecast-badge-cal">&#8987; Calibrating&hellip;</span>`;
+    // ── Accuracy badge: T-60 forecast vs current actual ──────────────────────
+    // Live mode:       pull last 3 completed forecasts from _histTimeline
+    // Historical mode: use the snapshot's own _forecast_accuracy / _actual_60m
+    let accuracyBadgeHtml, histAccuracyHtml = "";
 
-    const histAccuracyHtml = s._is_historical
-      ? (s._forecast_accuracy != null && s._forecast_accuracy > 0
-         ? `<div class="hist-accuracy">&#127919; 60m forecast was <strong>${Math.round(s._forecast_accuracy)}%</strong> accurate — predicted&nbsp;${Math.round(s.predicted_wait_min ?? 0)}m${s._actual_60m != null ? `, actual&nbsp;${Math.round(s._actual_60m)}m` : ""}</div>`
-         : `<div class="hist-accuracy hist-no-acc">&#8987; Calibrating&hellip;</div>`)
-      : "";
+    if (s._is_historical) {
+      // Historical snapshot view — show this snapshot's own accuracy inline
+      if (s._forecast_accuracy != null && s._forecast_accuracy > 0) {
+        accuracyBadgeHtml =
+          `<span class="badge forecast-badge">Accuracy&nbsp;${Math.round(s._forecast_accuracy)}%` +
+          `&thinsp;·&thinsp;predicted&nbsp;${Math.round(s.predicted_wait_min ?? 0)}m` +
+          (s._actual_60m != null ? `&thinsp;→&thinsp;actual&nbsp;${Math.round(s._actual_60m)}m` : "") +
+          `</span>`;
+      } else {
+        accuracyBadgeHtml = `<span class="badge forecast-badge-cal">&#8987; Calibrating&hellip;</span>`;
+      }
+    } else {
+      // Live mode — most recent completed forecast first, then 2 prior rows
+      const forecasts = _recentForecasts(s.site, 3);
+      const latest    = forecasts[0];
+      if (latest) {
+        accuracyBadgeHtml =
+          `<span class="badge forecast-badge">Accuracy&nbsp;${Math.round(latest.accuracy)}%` +
+          `&thinsp;·&thinsp;predicted&nbsp;${Math.round(latest.predicted)}m` +
+          `&thinsp;→&thinsp;actual&nbsp;${Math.round(latest.actual)}m</span>`;
+
+        // Prior 2 completed forecasts as a compact history block
+        if (forecasts.length > 1) {
+          const rows = forecasts.slice(1).map(f =>
+            `<div class="acc-hist-row">` +
+            `<span class="ah-time">${_fmtBucketTime(f.bucket_utc)}</span>` +
+            `<span class="ah-val">predicted&nbsp;${Math.round(f.predicted)}m&thinsp;→&thinsp;actual&nbsp;${Math.round(f.actual)}m</span>` +
+            `<span class="ah-pct">${Math.round(f.accuracy)}%</span>` +
+            `</div>`
+          ).join("");
+          accuracyBadgeHtml += `<div class="acc-hist">${rows}</div>`;
+        }
+      } else if (s.recent_accuracy != null) {
+        // Fallback: history not loaded yet, use server-computed mean
+        accuracyBadgeHtml =
+          `<span class="badge forecast-badge">Recent&nbsp;Accuracy&nbsp;${s.recent_accuracy}%</span>`;
+      } else {
+        accuracyBadgeHtml = `<span class="badge forecast-badge-cal">&#8987; Calibrating&hellip;</span>`;
+      }
+    }
 
     // In-60min triage split row (Cat 2-3 and Cat 4-5 forecasts)
     const triage60Html = (urgentForecast != null || minorForecast != null) ? `
@@ -845,7 +873,6 @@ function renderCard(s) {
             ${accuracyBadgeHtml}
           </div>
 
-          ${histAccuracyHtml}
         </div>
 
         <details class="system-insights">
