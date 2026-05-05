@@ -265,7 +265,7 @@
       50%{border-color:#d97706;box-shadow:0 0 0 2px #fbbf2466}
     }
     .max-warn-critical{animation:max-warn-pulse 1.2s ease-in-out infinite;border-width:2px}
-    .crisis-headline{font-size:1.75rem;font-weight:800;line-height:1;padding:.25rem 0;margin:.1rem 0}
+    .crisis-headline{font-size:1.4rem;font-weight:800;line-height:1;padding:.25rem 0;margin:.1rem 0}
     .crisis-long{color:var(--amber)}
     .crisis-very-long{color:var(--red)}
     .insights-subheader{font-size:.52rem;text-transform:uppercase;letter-spacing:.1em;color:#ccc;font-weight:700;margin:.55rem 0 .3rem}
@@ -779,8 +779,10 @@ function renderCard(s) {
     function _accRow(bucket_utc, predicted, actual, accuracy) {
       return `<div class="acc-hist-row">` +
         `<span class="ah-time">${_fmtBucketTime(bucket_utc)}</span>` +
-        `<span class="ah-val">predicted&nbsp;${Math.round(predicted)}m` +
-        `&thinsp;→&thinsp;actual&nbsp;${_fmtActualTime(bucket_utc)}&nbsp;${Math.round(actual)}m</span>` +
+        `<span class="ah-val">` +
+        `⏱&thinsp;${Math.round(predicted)}m&thinsp;→&thinsp;` +
+        `✓&thinsp;${_fmtActualTime(bucket_utc)}&thinsp;${Math.round(actual)}m` +
+        `</span>` +
         `<span class="ah-pct">${Math.round(accuracy)}%</span>` +
         `</div>`;
     }
