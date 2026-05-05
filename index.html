@@ -243,11 +243,13 @@
       font-size:.7rem;font-weight:700;
     }
     .forecast-badge-cal{background:#f5f5f5;color:#9ca3af;border:1px solid #e5e7eb;font-style:italic}
-    .acc-hist{font-size:.68rem;color:#9ca3af;margin-top:3px;line-height:1.55}
-    .acc-hist-row{display:flex;gap:.5rem}
-    .acc-hist-row .ah-time{min-width:2.6rem;color:#bbb}
+    .acc-hist-block{margin-top:4px;font-size:.68rem;line-height:1.6}
+    .acc-hist-label{font-size:.62rem;color:#a5b0d0;font-weight:600;letter-spacing:.04em;
+                    text-transform:uppercase;margin-bottom:1px}
+    .acc-hist-row{display:flex;gap:.4rem;color:#9ca3af}
+    .acc-hist-row .ah-time{min-width:3.8rem;color:#bbb;flex-shrink:0}
     .acc-hist-row .ah-val{flex:1}
-    .acc-hist-row .ah-pct{font-weight:600;color:#7c8fc5}
+    .acc-hist-row .ah-pct{font-weight:700;color:#7c8fc5;flex-shrink:0}
 
     /* Gap 3: overall metric row + max-wait outlier warning */
     .overall-metric{font-size:.75rem;color:#9090a8;margin-bottom:.18rem}
@@ -681,6 +683,15 @@ function _fmtBucketTime(bucket_utc) {
   } catch(e) { return ''; }
 }
 
+function _fmtActualTime(bucket_utc) {
+  // T+60: the time at which the actual wait was measured (forecast bucket + 60 min)
+  try {
+    const t = new Date(new Date(bucket_utc).getTime() + 60 * 60 * 1000);
+    return t.toLocaleTimeString('en-AU',
+      { hour: '2-digit', minute: '2-digit', timeZone: 'Australia/Melbourne' });
+  } catch(e) { return ''; }
+}
+
 // ── Card renderer ─────────────────────────────────────────────────────────────
 function renderCard(s) {
   try {
@@ -759,40 +770,42 @@ function renderCard(s) {
     // Historical mode: use the snapshot's own _forecast_accuracy / _actual_60m
     let accuracyBadgeHtml, histAccuracyHtml = "";
 
+    // ── Accuracy rows: forecast time · predicted Xm → actual T+60 Ym · ZZ% ──
+    // Each row shows WHEN the forecast was made and WHEN the actual was measured,
+    // so the timepoints are unambiguous.
+    //
+    // Live mode:       3 rows from _histTimeline (newest first)
+    // Historical mode: 1 row from the snapshot's own _forecast_accuracy
+    function _accRow(bucket_utc, predicted, actual, accuracy) {
+      return `<div class="acc-hist-row">` +
+        `<span class="ah-time">${_fmtBucketTime(bucket_utc)}</span>` +
+        `<span class="ah-val">predicted&nbsp;${Math.round(predicted)}m` +
+        `&thinsp;→&thinsp;actual&nbsp;${_fmtActualTime(bucket_utc)}&nbsp;${Math.round(actual)}m</span>` +
+        `<span class="ah-pct">${Math.round(accuracy)}%</span>` +
+        `</div>`;
+    }
+
     if (s._is_historical) {
-      // Historical snapshot view — show this snapshot's own accuracy inline
-      if (s._forecast_accuracy != null && s._forecast_accuracy > 0) {
+      if (s._forecast_accuracy != null && s._forecast_accuracy > 0 && s._actual_60m != null) {
         accuracyBadgeHtml =
-          `<span class="badge forecast-badge">Accuracy&nbsp;${Math.round(s._forecast_accuracy)}%` +
-          `&thinsp;·&thinsp;predicted&nbsp;${Math.round(s.predicted_wait_min ?? 0)}m` +
-          (s._actual_60m != null ? `&thinsp;→&thinsp;actual&nbsp;${Math.round(s._actual_60m)}m` : "") +
-          `</span>`;
+          `<div class="acc-hist-block">` +
+          `<div class="acc-hist-label">Forecast Accuracy</div>` +
+          _accRow(s.latest_obs_utc ?? "", s.predicted_wait_min ?? 0,
+                  s._actual_60m, s._forecast_accuracy) +
+          `</div>`;
       } else {
         accuracyBadgeHtml = `<span class="badge forecast-badge-cal">&#8987; Calibrating&hellip;</span>`;
       }
     } else {
-      // Live mode — most recent completed forecast first, then 2 prior rows
       const forecasts = _recentForecasts(s.site, 3);
-      const latest    = forecasts[0];
-      if (latest) {
+      if (forecasts.length > 0) {
+        const rows = forecasts.map(f => _accRow(f.bucket_utc, f.predicted, f.actual, f.accuracy)).join("");
         accuracyBadgeHtml =
-          `<span class="badge forecast-badge">Accuracy&nbsp;${Math.round(latest.accuracy)}%` +
-          `&thinsp;·&thinsp;predicted&nbsp;${Math.round(latest.predicted)}m` +
-          `&thinsp;→&thinsp;actual&nbsp;${Math.round(latest.actual)}m</span>`;
-
-        // Prior 2 completed forecasts as a compact history block
-        if (forecasts.length > 1) {
-          const rows = forecasts.slice(1).map(f =>
-            `<div class="acc-hist-row">` +
-            `<span class="ah-time">${_fmtBucketTime(f.bucket_utc)}</span>` +
-            `<span class="ah-val">predicted&nbsp;${Math.round(f.predicted)}m&thinsp;→&thinsp;actual&nbsp;${Math.round(f.actual)}m</span>` +
-            `<span class="ah-pct">${Math.round(f.accuracy)}%</span>` +
-            `</div>`
-          ).join("");
-          accuracyBadgeHtml += `<div class="acc-hist">${rows}</div>`;
-        }
+          `<div class="acc-hist-block">` +
+          `<div class="acc-hist-label">Forecast Accuracy</div>` +
+          rows +
+          `</div>`;
       } else if (s.recent_accuracy != null) {
-        // Fallback: history not loaded yet, use server-computed mean
         accuracyBadgeHtml =
           `<span class="badge forecast-badge">Recent&nbsp;Accuracy&nbsp;${s.recent_accuracy}%</span>`;
       } else {
