@@ -1,5 +1,5 @@
 {
-  "generated_utc": "2026-05-06T11:45:23Z",
+  "generated_utc": "2026-05-06T12:00:15Z",
   "history_hours": 3.0,
   "snapshots": [
     {
@@ -826,8 +826,8 @@
           "predicted_wait_min": 34.5,
           "confidence": 0.775,
           "confidence_label": "High",
-          "forecast_accuracy": 88.7,
-          "actual_60m_wait_min": 31.0
+          "forecast_accuracy": 0.0,
+          "actual_60m_wait_min": 14.0
         },
         {
           "site": "Casey Hospital",
@@ -868,8 +868,8 @@
           "predicted_wait_min": 12.2,
           "confidence": 0.503,
           "confidence_label": "Moderate",
-          "forecast_accuracy": 42.1,
-          "actual_60m_wait_min": 29.0
+          "forecast_accuracy": 12.7,
+          "actual_60m_wait_min": 96.0
         },
         {
           "site": "Monash Medical Centre - Clayton",
@@ -882,8 +882,8 @@
           "predicted_wait_min": 46.1,
           "confidence": 0.69,
           "confidence_label": "Moderate",
-          "forecast_accuracy": 81.8,
-          "actual_60m_wait_min": 39.0
+          "forecast_accuracy": 92.8,
+          "actual_60m_wait_min": 43.0
         },
         {
           "site": "Royal Melbourne Hospital",
@@ -896,8 +896,8 @@
           "predicted_wait_min": 163.1,
           "confidence": 0.578,
           "confidence_label": "Moderate",
-          "forecast_accuracy": 78.3,
-          "actual_60m_wait_min": 134.0
+          "forecast_accuracy": 84.5,
+          "actual_60m_wait_min": 193.0
         }
       ]
     },
@@ -915,8 +915,8 @@
           "predicted_wait_min": 14.6,
           "confidence": 0.852,
           "confidence_label": "High",
-          "forecast_accuracy": null,
-          "actual_60m_wait_min": null
+          "forecast_accuracy": 78.3,
+          "actual_60m_wait_min": 12.0
         },
         {
           "site": "Box Hill Hospital",
@@ -929,8 +929,8 @@
           "predicted_wait_min": 35.5,
           "confidence": 0.775,
           "confidence_label": "High",
-          "forecast_accuracy": null,
-          "actual_60m_wait_min": null
+          "forecast_accuracy": 0.0,
+          "actual_60m_wait_min": 14.0
         },
         {
           "site": "Casey Hospital",
@@ -943,8 +943,8 @@
           "predicted_wait_min": 32.1,
           "confidence": 0.817,
           "confidence_label": "High",
-          "forecast_accuracy": null,
-          "actual_60m_wait_min": null
+          "forecast_accuracy": 65.5,
+          "actual_60m_wait_min": 49.0
         },
         {
           "site": "Dandenong Hospital",
@@ -957,8 +957,8 @@
           "predicted_wait_min": 44.0,
           "confidence": 0.604,
           "confidence_label": "Moderate",
-          "forecast_accuracy": null,
-          "actual_60m_wait_min": null
+          "forecast_accuracy": 100.0,
+          "actual_60m_wait_min": 44.0
         },
         {
           "site": "Maroondah Hospital",
@@ -971,8 +971,8 @@
           "predicted_wait_min": 10.1,
           "confidence": 0.803,
           "confidence_label": "High",
-          "forecast_accuracy": null,
-          "actual_60m_wait_min": null
+          "forecast_accuracy": 10.5,
+          "actual_60m_wait_min": 96.0
         },
         {
           "site": "Monash Medical Centre - Clayton",
@@ -985,8 +985,8 @@
           "predicted_wait_min": 46.5,
           "confidence": 0.72,
           "confidence_label": "High",
-          "forecast_accuracy": null,
-          "actual_60m_wait_min": null
+          "forecast_accuracy": 91.9,
+          "actual_60m_wait_min": 43.0
         },
         {
           "site": "Royal Melbourne Hospital",
@@ -999,8 +999,8 @@
           "predicted_wait_min": 161.0,
           "confidence": 0.589,
           "confidence_label": "Moderate",
-          "forecast_accuracy": null,
-          "actual_60m_wait_min": null
+          "forecast_accuracy": 83.4,
+          "actual_60m_wait_min": 193.0
         }
       ]
     },
@@ -1191,6 +1191,109 @@
           "predicted_wait_min": 117.9,
           "confidence": 0.468,
           "confidence_label": "Moderate",
+          "forecast_accuracy": null,
+          "actual_60m_wait_min": null
+        }
+      ]
+    },
+    {
+      "bucket_utc": "2026-05-06T12:00:00Z",
+      "sites": [
+        {
+          "site": "Angliss Hospital",
+          "timestamp_utc": "2026-05-06T12:00:03Z",
+          "current_wait_min": 12.0,
+          "max_wait_min": 94,
+          "waiting_count": 5,
+          "treating_count": 9,
+          "wait_momentum": 0.0,
+          "predicted_wait_min": 13.9,
+          "confidence": 0.882,
+          "confidence_label": "High",
+          "forecast_accuracy": null,
+          "actual_60m_wait_min": null
+        },
+        {
+          "site": "Box Hill Hospital",
+          "timestamp_utc": "2026-05-06T12:00:03Z",
+          "current_wait_min": 14.0,
+          "max_wait_min": 206,
+          "waiting_count": 17,
+          "treating_count": 41,
+          "wait_momentum": -17.2,
+          "predicted_wait_min": 17.8,
+          "confidence": 0.603,
+          "confidence_label": "Moderate",
+          "forecast_accuracy": null,
+          "actual_60m_wait_min": null
+        },
+        {
+          "site": "Casey Hospital",
+          "timestamp_utc": "2026-05-06T12:00:03Z",
+          "current_wait_min": 49.0,
+          "max_wait_min": 258,
+          "waiting_count": 20,
+          "treating_count": 39,
+          "wait_momentum": 0.0,
+          "predicted_wait_min": 42.8,
+          "confidence": 0.708,
+          "confidence_label": "High",
+          "forecast_accuracy": null,
+          "actual_60m_wait_min": null
+        },
+        {
+          "site": "Dandenong Hospital",
+          "timestamp_utc": "2026-05-06T12:00:03Z",
+          "current_wait_min": 44.0,
+          "max_wait_min": 120,
+          "waiting_count": 17,
+          "treating_count": 59,
+          "wait_momentum": 0.0,
+          "predicted_wait_min": 43.3,
+          "confidence": 0.653,
+          "confidence_label": "Moderate",
+          "forecast_accuracy": null,
+          "actual_60m_wait_min": null
+        },
+        {
+          "site": "Maroondah Hospital",
+          "timestamp_utc": "2026-05-06T12:00:03Z",
+          "current_wait_min": 96.0,
+          "max_wait_min": 218,
+          "waiting_count": 17,
+          "treating_count": 30,
+          "wait_momentum": 67.8,
+          "predicted_wait_min": 89.1,
+          "confidence": 0.383,
+          "confidence_label": "Low",
+          "forecast_accuracy": null,
+          "actual_60m_wait_min": null
+        },
+        {
+          "site": "Monash Medical Centre - Clayton",
+          "timestamp_utc": "2026-05-06T12:00:03Z",
+          "current_wait_min": 43.0,
+          "max_wait_min": 434,
+          "waiting_count": 27,
+          "treating_count": 71,
+          "wait_momentum": 4.0,
+          "predicted_wait_min": 39.4,
+          "confidence": 0.756,
+          "confidence_label": "High",
+          "forecast_accuracy": null,
+          "actual_60m_wait_min": null
+        },
+        {
+          "site": "Royal Melbourne Hospital",
+          "timestamp_utc": "2026-05-06T12:00:03Z",
+          "current_wait_min": 193.0,
+          "max_wait_min": 333,
+          "waiting_count": 25,
+          "treating_count": 26,
+          "wait_momentum": 59.7,
+          "predicted_wait_min": 149.3,
+          "confidence": 0.348,
+          "confidence_label": "Low",
           "forecast_accuracy": null,
           "actual_60m_wait_min": null
         }
