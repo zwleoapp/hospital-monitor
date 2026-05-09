@@ -1,6 +1,6 @@
 {
   "schema_version": "2.1",
-  "generated_utc": "2026-05-09T22:15:12Z",
+  "generated_utc": "2026-05-09T22:30:15Z",
   "horizon_min": 60,
   "vahi_p90_all_mins": 89,
   "vahi_qly_label": "Q2 2026",
@@ -8,14 +8,14 @@
     {
       "site": "Angliss Hospital",
       "network": "Eastern Health",
-      "latest_obs_utc": "2026-05-09T22:15:03Z",
-      "waiting_count": 3,
-      "treating_count": 8,
-      "current_wait_min": 22.0,
-      "max_wait_min": 81,
-      "predicted_wait_min": 19.2,
-      "wait_momentum": 0.0,
-      "confidence": 0.882,
+      "latest_obs_utc": "2026-05-09T22:30:03Z",
+      "waiting_count": 1,
+      "treating_count": 11,
+      "current_wait_min": 13.0,
+      "max_wait_min": 59,
+      "predicted_wait_min": 15.1,
+      "wait_momentum": -9.0,
+      "confidence": 0.792,
       "confidence_label": "High",
       "ctx_source": "VAHI",
       "vahi_p90_mins": 50,
@@ -23,32 +23,32 @@
       "vahi_median_cat45_mins": 6,
       "color": "green",
       "heartbeat_age_mins": 0.2,
-      "strain_index": 0.384,
-      "last_updated_display": "~08:15",
+      "strain_index": 0.302,
+      "last_updated_display": "~08:30",
       "scraper_sync_mins": 0,
-      "recent_accuracy": 52.7,
+      "recent_accuracy": 60.8,
       "recent_accuracy_trend": [
-        92.7,
         81.4,
-        95.0
+        95.0,
+        97.7
       ],
       "metadata": {
         "cache_lag_minutes": 0,
         "fidelity_status": "SYNCED",
         "is_stale": false,
-        "last_portal_update": "08:15",
-        "scrape_timestamp": "2026-05-09T22:15:03Z"
+        "last_portal_update": "08:30",
+        "scrape_timestamp": "2026-05-09T22:30:03Z"
       }
     },
     {
       "site": "Box Hill Hospital",
       "network": "Eastern Health",
-      "latest_obs_utc": "2026-05-09T22:15:03Z",
-      "waiting_count": 15,
-      "treating_count": 14,
+      "latest_obs_utc": "2026-05-09T22:30:03Z",
+      "waiting_count": 12,
+      "treating_count": 19,
       "current_wait_min": 30.0,
-      "max_wait_min": 108,
-      "predicted_wait_min": 24.6,
+      "max_wait_min": 104,
+      "predicted_wait_min": 25.9,
       "wait_momentum": 0.0,
       "confidence": 0.775,
       "confidence_label": "High",
@@ -58,56 +58,56 @@
       "vahi_median_cat45_mins": 6,
       "color": "green",
       "heartbeat_age_mins": 0.2,
-      "strain_index": 0.307,
-      "last_updated_display": "~08:15",
+      "strain_index": 0.324,
+      "last_updated_display": "~08:30",
       "scraper_sync_mins": 0,
-      "recent_accuracy": 47.2,
+      "recent_accuracy": 45.1,
       "recent_accuracy_trend": [
-        64.3,
         46.3,
-        0.0
+        0.0,
+        7.0
       ],
       "metadata": {
         "cache_lag_minutes": 0,
         "fidelity_status": "SYNCED",
         "is_stale": false,
-        "last_portal_update": "08:15",
-        "scrape_timestamp": "2026-05-09T22:15:03Z"
+        "last_portal_update": "08:30",
+        "scrape_timestamp": "2026-05-09T22:30:03Z"
       }
     },
     {
       "site": "Maroondah Hospital",
       "network": "Eastern Health",
-      "latest_obs_utc": "2026-05-09T22:15:03Z",
+      "latest_obs_utc": "2026-05-09T22:30:03Z",
       "waiting_count": 8,
-      "treating_count": 18,
+      "treating_count": 19,
       "current_wait_min": 58.0,
-      "max_wait_min": 95,
-      "predicted_wait_min": 53.6,
-      "wait_momentum": 44.0,
-      "confidence": 0.503,
-      "confidence_label": "Moderate",
+      "max_wait_min": 83,
+      "predicted_wait_min": 54.9,
+      "wait_momentum": 0.0,
+      "confidence": 0.803,
+      "confidence_label": "High",
       "ctx_source": "VAHI",
       "vahi_p90_mins": 60,
       "vahi_median_cat123_mins": 6,
       "vahi_median_cat45_mins": 6,
       "color": "amber",
       "heartbeat_age_mins": 0.2,
-      "strain_index": 0.893,
-      "last_updated_display": "~08:15",
+      "strain_index": 0.915,
+      "last_updated_display": "~08:30",
       "scraper_sync_mins": 0,
-      "recent_accuracy": 29.4,
+      "recent_accuracy": 34.9,
       "recent_accuracy_trend": [
         10.0,
-        10.0,
-        10.7
+        45.7,
+        30.7
       ],
       "metadata": {
         "cache_lag_minutes": 0,
         "fidelity_status": "SYNCED",
         "is_stale": false,
-        "last_portal_update": "08:15",
-        "scrape_timestamp": "2026-05-09T22:15:03Z"
+        "last_portal_update": "08:30",
+        "scrape_timestamp": "2026-05-09T22:30:03Z"
       }
     },
     {
@@ -127,7 +127,7 @@
       "vahi_median_cat123_mins": 10,
       "vahi_median_cat45_mins": 11,
       "color": "green",
-      "heartbeat_age_mins": 60.2,
+      "heartbeat_age_mins": 75.2,
       "strain_index": 0.715,
       "last_updated_display": "^Last Updated: 10 May 26 06:36",
       "scraper_sync_mins": 0,
@@ -138,7 +138,7 @@
         75.7
       ],
       "metadata": {
-        "cache_lag_minutes": 99,
+        "cache_lag_minutes": 114,
         "fidelity_status": "PORTAL_STALE_WARNING",
         "is_stale": true,
         "last_portal_update": "10 May 26 06:36",
@@ -168,7 +168,7 @@
       "vahi_median_cat123_mins": 10,
       "vahi_median_cat45_mins": 10,
       "color": "amber",
-      "heartbeat_age_mins": 60.2,
+      "heartbeat_age_mins": 75.2,
       "strain_index": 1.265,
       "last_updated_display": "^Last Updated: 10 May 26 06:36",
       "scraper_sync_mins": 0,
@@ -179,7 +179,7 @@
         86.1
       ],
       "metadata": {
-        "cache_lag_minutes": 99,
+        "cache_lag_minutes": 114,
         "fidelity_status": "PORTAL_STALE_WARNING",
         "is_stale": true,
         "last_portal_update": "10 May 26 06:36",
@@ -209,7 +209,7 @@
       "vahi_median_cat123_mins": 9,
       "vahi_median_cat45_mins": 9,
       "color": "green",
-      "heartbeat_age_mins": 60.2,
+      "heartbeat_age_mins": 75.2,
       "strain_index": 1.3,
       "last_updated_display": "^Last Updated: 10 May 26 06:36",
       "scraper_sync_mins": 0,
@@ -220,7 +220,7 @@
         95.3
       ],
       "metadata": {
-        "cache_lag_minutes": 99,
+        "cache_lag_minutes": 114,
         "fidelity_status": "PORTAL_STALE_WARNING",
         "is_stale": true,
         "last_portal_update": "10 May 26 06:36",
@@ -230,23 +230,23 @@
     {
       "site": "Royal Melbourne Hospital",
       "network": "Melbourne Health",
-      "latest_obs_utc": "2026-05-09T22:00:03Z",
+      "latest_obs_utc": "2026-05-09T22:30:03Z",
       "waiting_count": 14,
-      "treating_count": 28,
-      "current_wait_min": 28.0,
-      "max_wait_min": 96,
-      "predicted_wait_min": 35.7,
-      "wait_momentum": 4.0,
-      "confidence": 0.798,
+      "treating_count": 29,
+      "current_wait_min": 21.0,
+      "max_wait_min": 79,
+      "predicted_wait_min": 32.2,
+      "wait_momentum": -3.5,
+      "confidence": 0.803,
       "confidence_label": "High",
       "ctx_source": "VAHI",
       "vahi_p90_mins": 99,
       "vahi_median_cat123_mins": 17,
       "vahi_median_cat45_mins": 30,
       "color": "amber",
-      "heartbeat_age_mins": 15.2,
-      "strain_index": 0.361,
-      "last_updated_display": "~08:00",
+      "heartbeat_age_mins": 0.2,
+      "strain_index": 0.325,
+      "last_updated_display": "~08:30",
       "scraper_sync_mins": 0,
       "recent_accuracy": 69.3,
       "recent_accuracy_trend": [
@@ -255,23 +255,23 @@
         0.0
       ],
       "metadata": {
-        "cache_lag_minutes": 15,
-        "fidelity_status": "API_LEAD_ACTIVE",
+        "cache_lag_minutes": 0,
+        "fidelity_status": "SYNCED",
         "is_stale": false,
-        "last_portal_update": "8:00am on 10 May 2026",
-        "scrape_timestamp": "2026-05-09T22:00:03Z"
+        "last_portal_update": "8:30am on 10 May 2026",
+        "scrape_timestamp": "2026-05-09T22:30:03Z"
       }
     }
   ],
   "status_sites": [
     {
       "site": "Royal Childrens Hospital",
-      "scrape_timestamp_utc": "2026-05-09T22:15:03Z",
+      "scrape_timestamp_utc": "2026-05-09T22:30:03Z",
       "heartbeat_age_mins": 0.2,
       "reported_wait_str": "Busy: 48.573",
       "busy_label": null,
       "busy_index": 48.573,
-      "fidelity_status": "SYNCED",
+      "fidelity_status": "API_LEAD_ACTIVE",
       "last_portal_update": "10 May 2026 08:03:05 +AEST"
     }
   ],
