@@ -1,5 +1,5 @@
 {
-  "generated_utc": "2026-05-12T03:30:14Z",
+  "generated_utc": "2026-05-12T03:45:26Z",
   "history_hours": 3.0,
   "snapshots": [
     {
@@ -16,8 +16,8 @@
           "predicted_wait_min": 78.9,
           "confidence": 0.631,
           "confidence_label": "Moderate",
-          "forecast_accuracy": null,
-          "actual_60m_wait_min": null
+          "forecast_accuracy": 0.0,
+          "actual_60m_wait_min": 30.0
         },
         {
           "site": "Box Hill Hospital",
@@ -30,8 +30,8 @@
           "predicted_wait_min": 29.8,
           "confidence": 0.772,
           "confidence_label": "High",
-          "forecast_accuracy": null,
-          "actual_60m_wait_min": null
+          "forecast_accuracy": 0.0,
+          "actual_60m_wait_min": 6.0
         },
         {
           "site": "Casey Hospital",
@@ -44,8 +44,8 @@
           "predicted_wait_min": 27.8,
           "confidence": 0.795,
           "confidence_label": "High",
-          "forecast_accuracy": null,
-          "actual_60m_wait_min": null
+          "forecast_accuracy": 99.3,
+          "actual_60m_wait_min": 28.0
         },
         {
           "site": "Dandenong Hospital",
@@ -58,8 +58,8 @@
           "predicted_wait_min": 30.3,
           "confidence": 0.796,
           "confidence_label": "High",
-          "forecast_accuracy": null,
-          "actual_60m_wait_min": null
+          "forecast_accuracy": 81.9,
+          "actual_60m_wait_min": 37.0
         },
         {
           "site": "Maroondah Hospital",
@@ -72,8 +72,8 @@
           "predicted_wait_min": 17.8,
           "confidence": 0.786,
           "confidence_label": "High",
-          "forecast_accuracy": null,
-          "actual_60m_wait_min": null
+          "forecast_accuracy": 49.4,
+          "actual_60m_wait_min": 36.0
         },
         {
           "site": "Monash Medical Centre - Clayton",
@@ -86,8 +86,8 @@
           "predicted_wait_min": 40.9,
           "confidence": 0.78,
           "confidence_label": "High",
-          "forecast_accuracy": null,
-          "actual_60m_wait_min": null
+          "forecast_accuracy": 74.4,
+          "actual_60m_wait_min": 55.0
         },
         {
           "site": "Royal Melbourne Hospital",
@@ -100,8 +100,8 @@
           "predicted_wait_min": 91.8,
           "confidence": 0.837,
           "confidence_label": "High",
-          "forecast_accuracy": null,
-          "actual_60m_wait_min": null
+          "forecast_accuracy": 77.1,
+          "actual_60m_wait_min": 119.0
         }
       ]
     },
@@ -305,6 +305,109 @@
           "wait_momentum": 17.0,
           "predicted_wait_min": 92.6,
           "confidence": 0.668,
+          "confidence_label": "Moderate",
+          "forecast_accuracy": null,
+          "actual_60m_wait_min": null
+        }
+      ]
+    },
+    {
+      "bucket_utc": "2026-05-12T03:45:00Z",
+      "sites": [
+        {
+          "site": "Angliss Hospital",
+          "timestamp_utc": "2026-05-12T03:45:10Z",
+          "current_wait_min": 30.0,
+          "max_wait_min": 130,
+          "waiting_count": 9,
+          "treating_count": 19,
+          "wait_momentum": 0.0,
+          "predicted_wait_min": 31.3,
+          "confidence": 0.882,
+          "confidence_label": "High",
+          "forecast_accuracy": null,
+          "actual_60m_wait_min": null
+        },
+        {
+          "site": "Box Hill Hospital",
+          "timestamp_utc": "2026-05-12T03:45:10Z",
+          "current_wait_min": 6.0,
+          "max_wait_min": 99,
+          "waiting_count": 15,
+          "treating_count": 50,
+          "wait_momentum": 0.0,
+          "predicted_wait_min": 16.9,
+          "confidence": 0.775,
+          "confidence_label": "High",
+          "forecast_accuracy": null,
+          "actual_60m_wait_min": null
+        },
+        {
+          "site": "Casey Hospital",
+          "timestamp_utc": "2026-05-12T03:45:10Z",
+          "current_wait_min": 28.0,
+          "max_wait_min": 173,
+          "waiting_count": 22,
+          "treating_count": 42,
+          "wait_momentum": 0.0,
+          "predicted_wait_min": 30.7,
+          "confidence": 0.824,
+          "confidence_label": "High",
+          "forecast_accuracy": null,
+          "actual_60m_wait_min": null
+        },
+        {
+          "site": "Dandenong Hospital",
+          "timestamp_utc": "2026-05-12T03:45:10Z",
+          "current_wait_min": 37.0,
+          "max_wait_min": 110,
+          "waiting_count": 13,
+          "treating_count": 58,
+          "wait_momentum": 0.0,
+          "predicted_wait_min": 39.5,
+          "confidence": 0.7,
+          "confidence_label": "High",
+          "forecast_accuracy": null,
+          "actual_60m_wait_min": null
+        },
+        {
+          "site": "Maroondah Hospital",
+          "timestamp_utc": "2026-05-12T03:45:10Z",
+          "current_wait_min": 36.0,
+          "max_wait_min": 87,
+          "waiting_count": 7,
+          "treating_count": 28,
+          "wait_momentum": 1.0,
+          "predicted_wait_min": 37.4,
+          "confidence": 0.793,
+          "confidence_label": "High",
+          "forecast_accuracy": null,
+          "actual_60m_wait_min": null
+        },
+        {
+          "site": "Monash Medical Centre - Clayton",
+          "timestamp_utc": "2026-05-12T03:45:10Z",
+          "current_wait_min": 55.0,
+          "max_wait_min": 161,
+          "waiting_count": 33,
+          "treating_count": 66,
+          "wait_momentum": 6.9,
+          "predicted_wait_min": 44.3,
+          "confidence": 0.657,
+          "confidence_label": "Moderate",
+          "forecast_accuracy": null,
+          "actual_60m_wait_min": null
+        },
+        {
+          "site": "Royal Melbourne Hospital",
+          "timestamp_utc": "2026-05-12T03:45:10Z",
+          "current_wait_min": 119.0,
+          "max_wait_min": 179,
+          "waiting_count": 42,
+          "treating_count": 40,
+          "wait_momentum": 22.8,
+          "predicted_wait_min": 107.2,
+          "confidence": 0.57,
           "confidence_label": "Moderate",
           "forecast_accuracy": null,
           "actual_60m_wait_min": null
