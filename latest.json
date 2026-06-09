@@ -1,6 +1,6 @@
 {
   "schema_version": "2.1",
-  "generated_utc": "2026-06-09T07:15:58Z",
+  "generated_utc": "2026-06-09T07:30:31Z",
   "horizon_min": 60,
   "vahi_p90_all_mins": 89,
   "vahi_qly_label": "Q2 2026",
@@ -8,13 +8,13 @@
     {
       "site": "Angliss Hospital",
       "network": "Eastern Health",
-      "latest_obs_utc": "2026-06-09T07:15:06Z",
-      "waiting_count": 21,
-      "treating_count": 22,
-      "current_wait_min": 46.0,
-      "max_wait_min": 194,
-      "predicted_wait_min": 42.9,
-      "wait_momentum": -2.0,
+      "latest_obs_utc": "2026-06-09T07:30:15Z",
+      "waiting_count": 20,
+      "treating_count": 24,
+      "current_wait_min": 48.0,
+      "max_wait_min": 190,
+      "predicted_wait_min": 46.0,
+      "wait_momentum": 2.0,
       "confidence": 0.862,
       "confidence_label": "High",
       "ctx_source": "VAHI",
@@ -22,33 +22,33 @@
       "vahi_median_cat123_mins": 6,
       "vahi_median_cat45_mins": 6,
       "color": "amber",
-      "heartbeat_age_mins": 0.9,
-      "strain_index": 0.858,
-      "last_updated_display": "~17:15",
-      "scraper_sync_mins": 1,
-      "recent_accuracy": 60.8,
+      "heartbeat_age_mins": 0.3,
+      "strain_index": 0.92,
+      "last_updated_display": "~17:30",
+      "scraper_sync_mins": 0,
+      "recent_accuracy": 63.1,
       "recent_accuracy_trend": [
-        17.9,
         90.0,
-        65.0
+        67.8,
+        75.2
       ],
       "metadata": {
         "cache_lag_minutes": 0,
         "fidelity_status": "SYNCED",
         "is_stale": false,
-        "last_portal_update": "17:15",
-        "scrape_timestamp": "2026-06-09T07:15:06Z"
+        "last_portal_update": "17:30",
+        "scrape_timestamp": "2026-06-09T07:30:15Z"
       }
     },
     {
       "site": "Box Hill Hospital",
       "network": "Eastern Health",
-      "latest_obs_utc": "2026-06-09T07:15:06Z",
-      "waiting_count": 24,
-      "treating_count": 52,
+      "latest_obs_utc": "2026-06-09T07:30:15Z",
+      "waiting_count": 26,
+      "treating_count": 49,
       "current_wait_min": 29.0,
-      "max_wait_min": 193,
-      "predicted_wait_min": 32.8,
+      "max_wait_min": 198,
+      "predicted_wait_min": 32.0,
       "wait_momentum": 0.0,
       "confidence": 0.775,
       "confidence_label": "High",
@@ -57,57 +57,57 @@
       "vahi_median_cat123_mins": 5,
       "vahi_median_cat45_mins": 6,
       "color": "amber",
-      "heartbeat_age_mins": 0.9,
-      "strain_index": 0.41,
-      "last_updated_display": "~17:15",
-      "scraper_sync_mins": 1,
-      "recent_accuracy": 75.2,
+      "heartbeat_age_mins": 0.3,
+      "strain_index": 0.4,
+      "last_updated_display": "~17:30",
+      "scraper_sync_mins": 0,
+      "recent_accuracy": 70.3,
       "recent_accuracy_trend": [
-        67.2,
         51.0,
-        59.3
+        59.3,
+        25.2
       ],
       "metadata": {
         "cache_lag_minutes": 0,
         "fidelity_status": "SYNCED",
         "is_stale": false,
-        "last_portal_update": "17:15",
-        "scrape_timestamp": "2026-06-09T07:15:06Z"
+        "last_portal_update": "17:30",
+        "scrape_timestamp": "2026-06-09T07:30:15Z"
       }
     },
     {
       "site": "Maroondah Hospital",
       "network": "Eastern Health",
-      "latest_obs_utc": "2026-06-09T07:15:06Z",
+      "latest_obs_utc": "2026-06-09T07:30:15Z",
       "waiting_count": 28,
       "treating_count": 44,
-      "current_wait_min": 9.0,
-      "max_wait_min": 200,
-      "predicted_wait_min": 17.6,
-      "wait_momentum": 4.0,
-      "confidence": 0.763,
-      "confidence_label": "High",
+      "current_wait_min": 21.0,
+      "max_wait_min": 197,
+      "predicted_wait_min": 27.9,
+      "wait_momentum": 11.9,
+      "confidence": 0.684,
+      "confidence_label": "Moderate",
       "ctx_source": "VAHI",
       "vahi_p90_mins": 60,
       "vahi_median_cat123_mins": 6,
       "vahi_median_cat45_mins": 6,
       "color": "amber",
-      "heartbeat_age_mins": 0.9,
-      "strain_index": 0.293,
-      "last_updated_display": "~17:15",
-      "scraper_sync_mins": 1,
-      "recent_accuracy": 15.3,
+      "heartbeat_age_mins": 0.3,
+      "strain_index": 0.465,
+      "last_updated_display": "~17:30",
+      "scraper_sync_mins": 0,
+      "recent_accuracy": 18.9,
       "recent_accuracy_trend": [
         0.0,
-        0.0,
-        0.0
+        33.3,
+        10.0
       ],
       "metadata": {
         "cache_lag_minutes": 0,
         "fidelity_status": "SYNCED",
         "is_stale": false,
-        "last_portal_update": "17:15",
-        "scrape_timestamp": "2026-06-09T07:15:06Z"
+        "last_portal_update": "17:30",
+        "scrape_timestamp": "2026-06-09T07:30:15Z"
       }
     },
     {
@@ -127,10 +127,10 @@
       "vahi_median_cat123_mins": 10,
       "vahi_median_cat45_mins": 11,
       "color": "amber",
-      "heartbeat_age_mins": 15.9,
+      "heartbeat_age_mins": 30.4,
       "strain_index": 1.118,
       "last_updated_display": "^Last Updated: 09 Jun 26 16:56",
-      "scraper_sync_mins": 1,
+      "scraper_sync_mins": 0,
       "recent_accuracy": 81.5,
       "recent_accuracy_trend": [
         84.1,
@@ -138,7 +138,7 @@
         69.1
       ],
       "metadata": {
-        "cache_lag_minutes": 19,
+        "cache_lag_minutes": 34,
         "fidelity_status": "API_LEAD_ACTIVE",
         "is_stale": false,
         "last_portal_update": "09 Jun 26 16:56",
@@ -148,30 +148,30 @@
         "waiting": 9,
         "treating": 31,
         "wait_str": "0 hr 25 min - 1 hr 3 min ",
-        "heartbeat_age_mins": 0.9
+        "heartbeat_age_mins": 0.3
       }
     },
     {
       "site": "Casey Hospital",
       "network": "Monash Health",
-      "latest_obs_utc": "2026-06-09T07:15:06Z",
+      "latest_obs_utc": "2026-06-09T07:30:15Z",
       "waiting_count": 15,
       "treating_count": 62,
-      "current_wait_min": 0.0,
-      "max_wait_min": 0,
-      "predicted_wait_min": 21.3,
-      "wait_momentum": -38.0,
-      "confidence": 0.524,
+      "current_wait_min": 38.0,
+      "max_wait_min": 403,
+      "predicted_wait_min": 40.9,
+      "wait_momentum": 37.6,
+      "confidence": 0.479,
       "confidence_label": "Moderate",
       "ctx_source": "VAHI",
       "vahi_p90_mins": 31,
       "vahi_median_cat123_mins": 10,
       "vahi_median_cat45_mins": 10,
-      "color": "green",
-      "heartbeat_age_mins": 0.9,
-      "strain_index": 0.687,
+      "color": "amber",
+      "heartbeat_age_mins": 0.3,
+      "strain_index": 1.319,
       "last_updated_display": "^Last Updated: 09 Jun 26 16:56",
-      "scraper_sync_mins": 1,
+      "scraper_sync_mins": 0,
       "recent_accuracy": 80.8,
       "recent_accuracy_trend": [
         66.1,
@@ -179,17 +179,17 @@
         75.3
       ],
       "metadata": {
-        "cache_lag_minutes": 19,
+        "cache_lag_minutes": 34,
         "fidelity_status": "API_LEAD_ACTIVE",
         "is_stale": false,
         "last_portal_update": "09 Jun 26 16:56",
-        "scrape_timestamp": "2026-06-09T07:15:06Z"
+        "scrape_timestamp": "2026-06-09T07:30:15Z"
       },
       "paediatric": {
         "waiting": 1,
         "treating": 9,
         "wait_str": "0 hr 15 min - 0 hr 45 min ",
-        "heartbeat_age_mins": 0.9
+        "heartbeat_age_mins": 0.3
       }
     },
     {
@@ -209,10 +209,10 @@
       "vahi_median_cat123_mins": 9,
       "vahi_median_cat45_mins": 9,
       "color": "amber",
-      "heartbeat_age_mins": 15.9,
+      "heartbeat_age_mins": 30.4,
       "strain_index": 2.186,
       "last_updated_display": "^Last Updated: 09 Jun 26 16:56",
-      "scraper_sync_mins": 1,
+      "scraper_sync_mins": 0,
       "recent_accuracy": 66.5,
       "recent_accuracy_trend": [
         69.4,
@@ -220,7 +220,7 @@
         67.8
       ],
       "metadata": {
-        "cache_lag_minutes": 19,
+        "cache_lag_minutes": 34,
         "fidelity_status": "API_LEAD_ACTIVE",
         "is_stale": false,
         "last_portal_update": "09 Jun 26 16:56",
@@ -230,48 +230,48 @@
     {
       "site": "Royal Melbourne Hospital",
       "network": "Melbourne Health",
-      "latest_obs_utc": "2026-06-09T07:15:06Z",
-      "waiting_count": 27,
-      "treating_count": 40,
-      "current_wait_min": 109.0,
-      "max_wait_min": 189,
-      "predicted_wait_min": 102.6,
-      "wait_momentum": 5.0,
-      "confidence": 0.768,
-      "confidence_label": "High",
+      "latest_obs_utc": "2026-06-09T07:30:15Z",
+      "waiting_count": 31,
+      "treating_count": 39,
+      "current_wait_min": 146.0,
+      "max_wait_min": 226,
+      "predicted_wait_min": 124.9,
+      "wait_momentum": 36.6,
+      "confidence": 0.443,
+      "confidence_label": "Moderate",
       "ctx_source": "VAHI",
       "vahi_p90_mins": 99,
       "vahi_median_cat123_mins": 17,
       "vahi_median_cat45_mins": 30,
       "color": "red",
-      "heartbeat_age_mins": 0.9,
-      "strain_index": 1.036,
-      "last_updated_display": "~17:00",
-      "scraper_sync_mins": 1,
-      "recent_accuracy": 68.2,
+      "heartbeat_age_mins": 0.3,
+      "strain_index": 1.262,
+      "last_updated_display": "~17:30",
+      "scraper_sync_mins": 0,
+      "recent_accuracy": 67.7,
       "recent_accuracy_trend": [
-        70.7,
-        57.8,
-        78.5
+        78.5,
+        83.5,
+        84.4
       ],
       "metadata": {
-        "cache_lag_minutes": 15,
-        "fidelity_status": "API_LEAD_ACTIVE",
+        "cache_lag_minutes": 0,
+        "fidelity_status": "SYNCED",
         "is_stale": false,
-        "last_portal_update": "5:00pm on 09 June 2026",
-        "scrape_timestamp": "2026-06-09T07:15:06Z"
+        "last_portal_update": "5:30pm on 09 June 2026",
+        "scrape_timestamp": "2026-06-09T07:30:15Z"
       }
     }
   ],
   "status_sites": [
     {
       "site": "Royal Childrens Hospital",
-      "scrape_timestamp_utc": "2026-06-09T07:15:06Z",
-      "heartbeat_age_mins": 0.9,
+      "scrape_timestamp_utc": "2026-06-09T07:30:15Z",
+      "heartbeat_age_mins": 0.3,
       "reported_wait_str": "Busy: 58.873",
       "busy_label": null,
       "busy_index": 58.873,
-      "fidelity_status": "SYNCED",
+      "fidelity_status": "API_LEAD_ACTIVE",
       "last_portal_update": "09 Jun 2026 17:01:48 +AEST"
     }
   ],
