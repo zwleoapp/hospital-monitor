@@ -1,68 +1,7 @@
 {
-  "generated_utc": "2026-06-20T20:00:36Z",
+  "generated_utc": "2026-06-20T20:15:31Z",
   "history_hours": 3.0,
   "snapshots": [
-    {
-      "bucket_utc": "2026-06-20T17:15:00Z",
-      "sites": [
-        {
-          "site": "Casey Hospital",
-          "timestamp_utc": "2026-06-20T17:15:07Z",
-          "current_wait_min": 65.0,
-          "max_wait_min": 202,
-          "waiting_count": 11,
-          "treating_count": 30,
-          "wait_momentum": 0.0,
-          "predicted_wait_min": 50.5,
-          "confidence": 0.624,
-          "confidence_label": "Moderate",
-          "forecast_accuracy": 25.9,
-          "actual_60m_wait_min": 29.0
-        },
-        {
-          "site": "Dandenong Hospital",
-          "timestamp_utc": "2026-06-20T17:15:07Z",
-          "current_wait_min": 47.0,
-          "max_wait_min": 325,
-          "waiting_count": 22,
-          "treating_count": 42,
-          "wait_momentum": 0.0,
-          "predicted_wait_min": 39.3,
-          "confidence": 0.653,
-          "confidence_label": "Moderate",
-          "forecast_accuracy": 0.0,
-          "actual_60m_wait_min": 10.0
-        },
-        {
-          "site": "Monash Medical Centre - Clayton",
-          "timestamp_utc": "2026-06-20T17:15:07Z",
-          "current_wait_min": 52.0,
-          "max_wait_min": 151,
-          "waiting_count": 8,
-          "treating_count": 59,
-          "wait_momentum": 0.0,
-          "predicted_wait_min": 41.8,
-          "confidence": 0.743,
-          "confidence_label": "High",
-          "forecast_accuracy": 92.9,
-          "actual_60m_wait_min": 45.0
-        },
-        {
-          "site": "Royal Melbourne Hospital",
-          "timestamp_utc": "2026-06-20T17:15:07Z",
-          "current_wait_min": 222.0,
-          "max_wait_min": 404,
-          "waiting_count": 34,
-          "treating_count": 14,
-          "wait_momentum": 0.0,
-          "predicted_wait_min": 173.4,
-          "confidence": 0.638,
-          "confidence_label": "Moderate",
-          "forecast_accuracy": 75.4,
-          "actual_60m_wait_min": 230.0
-        }
-      ]
-    },
     {
       "bucket_utc": "2026-06-20T17:30:00Z",
       "sites": [
@@ -317,8 +256,8 @@
           "predicted_wait_min": 131.0,
           "confidence": 0.456,
           "confidence_label": "Moderate",
-          "forecast_accuracy": 73.6,
-          "actual_60m_wait_min": 178.0
+          "forecast_accuracy": 96.0,
+          "actual_60m_wait_min": 126.0
         }
       ]
     },
@@ -336,8 +275,8 @@
           "predicted_wait_min": 10.4,
           "confidence": 0.862,
           "confidence_label": "High",
-          "forecast_accuracy": null,
-          "actual_60m_wait_min": null
+          "forecast_accuracy": 51.4,
+          "actual_60m_wait_min": 7.0
         },
         {
           "site": "Box Hill Hospital",
@@ -350,8 +289,8 @@
           "predicted_wait_min": 98.1,
           "confidence": 0.592,
           "confidence_label": "Moderate",
-          "forecast_accuracy": null,
-          "actual_60m_wait_min": null
+          "forecast_accuracy": 77.9,
+          "actual_60m_wait_min": 126.0
         },
         {
           "site": "Casey Hospital",
@@ -392,8 +331,8 @@
           "predicted_wait_min": 94.5,
           "confidence": 0.627,
           "confidence_label": "Moderate",
-          "forecast_accuracy": null,
-          "actual_60m_wait_min": null
+          "forecast_accuracy": 86.7,
+          "actual_60m_wait_min": 109.0
         },
         {
           "site": "Monash Medical Centre - Clayton",
@@ -420,8 +359,8 @@
           "predicted_wait_min": 125.8,
           "confidence": 0.647,
           "confidence_label": "Moderate",
-          "forecast_accuracy": null,
-          "actual_60m_wait_min": null
+          "forecast_accuracy": 99.8,
+          "actual_60m_wait_min": 126.0
         }
       ]
     },
@@ -569,6 +508,67 @@
           "wait_momentum": 14.5,
           "predicted_wait_min": 146.0,
           "confidence": 0.534,
+          "confidence_label": "Moderate",
+          "forecast_accuracy": null,
+          "actual_60m_wait_min": null
+        }
+      ]
+    },
+    {
+      "bucket_utc": "2026-06-20T20:15:00Z",
+      "sites": [
+        {
+          "site": "Angliss Hospital",
+          "timestamp_utc": "2026-06-20T20:15:07Z",
+          "current_wait_min": 7.0,
+          "max_wait_min": 122,
+          "waiting_count": 1,
+          "treating_count": 11,
+          "wait_momentum": -5.0,
+          "predicted_wait_min": 12.2,
+          "confidence": 0.832,
+          "confidence_label": "High",
+          "forecast_accuracy": null,
+          "actual_60m_wait_min": null
+        },
+        {
+          "site": "Box Hill Hospital",
+          "timestamp_utc": "2026-06-20T20:15:07Z",
+          "current_wait_min": 126.0,
+          "max_wait_min": 194,
+          "waiting_count": 18,
+          "treating_count": 43,
+          "wait_momentum": 2.0,
+          "predicted_wait_min": 97.1,
+          "confidence": 0.64,
+          "confidence_label": "Moderate",
+          "forecast_accuracy": null,
+          "actual_60m_wait_min": null
+        },
+        {
+          "site": "Maroondah Hospital",
+          "timestamp_utc": "2026-06-20T20:15:07Z",
+          "current_wait_min": 109.0,
+          "max_wait_min": 172,
+          "waiting_count": 3,
+          "treating_count": 21,
+          "wait_momentum": -1.0,
+          "predicted_wait_min": 100.2,
+          "confidence": 0.629,
+          "confidence_label": "Moderate",
+          "forecast_accuracy": null,
+          "actual_60m_wait_min": null
+        },
+        {
+          "site": "Royal Melbourne Hospital",
+          "timestamp_utc": "2026-06-20T20:15:07Z",
+          "current_wait_min": 126.0,
+          "max_wait_min": 212,
+          "waiting_count": 30,
+          "treating_count": 26,
+          "wait_momentum": -52.5,
+          "predicted_wait_min": 116.1,
+          "confidence": 0.484,
           "confidence_label": "Moderate",
           "forecast_accuracy": null,
           "actual_60m_wait_min": null
