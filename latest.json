@@ -1,6 +1,6 @@
 {
   "schema_version": "2.1",
-  "generated_utc": "2026-06-21T09:00:27Z",
+  "generated_utc": "2026-06-21T09:15:18Z",
   "horizon_min": 60,
   "vahi_p90_all_mins": 89,
   "vahi_qly_label": "Q2 2026",
@@ -22,9 +22,9 @@
       "vahi_median_cat123_mins": 6,
       "vahi_median_cat45_mins": 6,
       "color": "green",
-      "heartbeat_age_mins": 15.4,
+      "heartbeat_age_mins": 30.2,
       "strain_index": 0.458,
-      "last_updated_display": "~19:00",
+      "last_updated_display": "~19:15",
       "scraper_sync_mins": 0,
       "recent_accuracy": 23.5,
       "recent_accuracy_trend": [
@@ -36,7 +36,7 @@
         "cache_lag_minutes": 0,
         "fidelity_status": "SYNCED",
         "is_stale": false,
-        "last_portal_update": "19:00",
+        "last_portal_update": "19:15",
         "scrape_timestamp": "2026-06-21T08:45:05Z"
       }
     },
@@ -57,9 +57,9 @@
       "vahi_median_cat123_mins": 5,
       "vahi_median_cat45_mins": 6,
       "color": "amber",
-      "heartbeat_age_mins": 15.4,
+      "heartbeat_age_mins": 30.2,
       "strain_index": 0.315,
-      "last_updated_display": "~19:00",
+      "last_updated_display": "~19:15",
       "scraper_sync_mins": 0,
       "recent_accuracy": 40.5,
       "recent_accuracy_trend": [
@@ -71,7 +71,7 @@
         "cache_lag_minutes": 0,
         "fidelity_status": "SYNCED",
         "is_stale": false,
-        "last_portal_update": "19:00",
+        "last_portal_update": "19:15",
         "scrape_timestamp": "2026-06-21T08:45:05Z"
       }
     },
@@ -92,9 +92,9 @@
       "vahi_median_cat123_mins": 6,
       "vahi_median_cat45_mins": 6,
       "color": "green",
-      "heartbeat_age_mins": 15.4,
+      "heartbeat_age_mins": 30.2,
       "strain_index": 0.482,
-      "last_updated_display": "~19:00",
+      "last_updated_display": "~19:15",
       "scraper_sync_mins": 0,
       "recent_accuracy": 48.5,
       "recent_accuracy_trend": [
@@ -106,7 +106,7 @@
         "cache_lag_minutes": 0,
         "fidelity_status": "SYNCED",
         "is_stale": false,
-        "last_portal_update": "19:00",
+        "last_portal_update": "19:15",
         "scrape_timestamp": "2026-06-21T08:45:05Z"
       }
     },
@@ -127,19 +127,19 @@
       "vahi_median_cat123_mins": 10,
       "vahi_median_cat45_mins": 11,
       "color": "amber",
-      "heartbeat_age_mins": 0.2,
+      "heartbeat_age_mins": 15.1,
       "strain_index": 0.991,
       "last_updated_display": "^Last Updated: 21 Jun 26 18:46",
       "scraper_sync_mins": 0,
-      "recent_accuracy": 85.8,
+      "recent_accuracy": 84.8,
       "recent_accuracy_trend": [
-        85.1,
         86.1,
-        72.1
+        72.1,
+        74.8
       ],
       "metadata": {
-        "cache_lag_minutes": 14,
-        "fidelity_status": "SYNCED",
+        "cache_lag_minutes": 29,
+        "fidelity_status": "API_LEAD_ACTIVE",
         "is_stale": false,
         "last_portal_update": "21 Jun 26 18:46",
         "scrape_timestamp": "2026-06-21T09:00:15Z"
@@ -168,19 +168,19 @@
       "vahi_median_cat123_mins": 10,
       "vahi_median_cat45_mins": 10,
       "color": "amber",
-      "heartbeat_age_mins": 0.2,
+      "heartbeat_age_mins": 15.1,
       "strain_index": 1.277,
       "last_updated_display": "^Last Updated: 21 Jun 26 18:46",
       "scraper_sync_mins": 0,
-      "recent_accuracy": 92.0,
+      "recent_accuracy": 93.1,
       "recent_accuracy_trend": [
-        90.0,
         92.0,
-        82.3
+        82.3,
+        97.4
       ],
       "metadata": {
-        "cache_lag_minutes": 14,
-        "fidelity_status": "SYNCED",
+        "cache_lag_minutes": 29,
+        "fidelity_status": "API_LEAD_ACTIVE",
         "is_stale": false,
         "last_portal_update": "21 Jun 26 18:46",
         "scrape_timestamp": "2026-06-21T09:00:15Z"
@@ -209,19 +209,19 @@
       "vahi_median_cat123_mins": 9,
       "vahi_median_cat45_mins": 9,
       "color": "amber",
-      "heartbeat_age_mins": 0.2,
+      "heartbeat_age_mins": 15.1,
       "strain_index": 1.924,
       "last_updated_display": "^Last Updated: 21 Jun 26 18:46",
       "scraper_sync_mins": 0,
-      "recent_accuracy": 80.6,
+      "recent_accuracy": 79.7,
       "recent_accuracy_trend": [
-        83.5,
         94.6,
-        90.2
+        90.2,
+        87.3
       ],
       "metadata": {
-        "cache_lag_minutes": 14,
-        "fidelity_status": "SYNCED",
+        "cache_lag_minutes": 29,
+        "fidelity_status": "API_LEAD_ACTIVE",
         "is_stale": false,
         "last_portal_update": "21 Jun 26 18:46",
         "scrape_timestamp": "2026-06-21T09:00:15Z"
@@ -230,23 +230,23 @@
     {
       "site": "Royal Melbourne Hospital",
       "network": "Melbourne Health",
-      "latest_obs_utc": "2026-06-21T08:30:15Z",
-      "waiting_count": 24,
-      "treating_count": 26,
-      "current_wait_min": 100.0,
-      "max_wait_min": 182,
-      "predicted_wait_min": 88.4,
-      "wait_momentum": 5.9,
-      "confidence": 0.777,
+      "latest_obs_utc": "2026-06-21T09:15:05Z",
+      "waiting_count": 18,
+      "treating_count": 28,
+      "current_wait_min": 88.0,
+      "max_wait_min": 186,
+      "predicted_wait_min": 82.1,
+      "wait_momentum": -4.0,
+      "confidence": 0.798,
       "confidence_label": "High",
       "ctx_source": "VAHI",
       "vahi_p90_mins": 99,
       "vahi_median_cat123_mins": 17,
       "vahi_median_cat45_mins": 30,
       "color": "red",
-      "heartbeat_age_mins": 30.2,
-      "strain_index": 0.893,
-      "last_updated_display": "~18:45",
+      "heartbeat_age_mins": 0.2,
+      "strain_index": 0.829,
+      "last_updated_display": "~19:00",
       "scraper_sync_mins": 0,
       "recent_accuracy": 76.2,
       "recent_accuracy_trend": [
@@ -258,21 +258,21 @@
         "cache_lag_minutes": 15,
         "fidelity_status": "API_LEAD_ACTIVE",
         "is_stale": false,
-        "last_portal_update": "6:45pm on 21 June 2026",
-        "scrape_timestamp": "2026-06-21T08:30:15Z"
+        "last_portal_update": "7:00pm on 21 June 2026",
+        "scrape_timestamp": "2026-06-21T09:15:05Z"
       }
     }
   ],
   "status_sites": [
     {
       "site": "Royal Childrens Hospital",
-      "scrape_timestamp_utc": "2026-06-21T09:00:15Z",
+      "scrape_timestamp_utc": "2026-06-21T09:15:05Z",
       "heartbeat_age_mins": 0.2,
-      "reported_wait_str": "Busy: 125.073",
+      "reported_wait_str": "Busy: 134.063",
       "busy_label": null,
-      "busy_index": 125.073,
-      "fidelity_status": "API_LEAD_ACTIVE",
-      "last_portal_update": "21 Jun 2026 18:03:06 +AEST"
+      "busy_index": 134.063,
+      "fidelity_status": "SYNCED",
+      "last_portal_update": "21 Jun 2026 19:03:08 +AEST"
     }
   ],
   "ui_thresholds": {
