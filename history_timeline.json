@@ -1,5 +1,5 @@
 {
-  "generated_utc": "2026-08-22T21:00:51Z",
+  "generated_utc": "2026-08-22T21:15:45Z",
   "history_hours": 3.0,
   "snapshots": [
     {
@@ -248,7 +248,7 @@
           "confidence": 0.305,
           "confidence_label": "Low",
           "forecast_accuracy": 95.5,
-          "actual_60m_wait_min": 116.0
+          "actual_60m_wait_min": 106.0
         },
         {
           "site": "Casey Hospital",
@@ -336,8 +336,8 @@
           "predicted_wait_min": 44.9,
           "confidence": 0.582,
           "confidence_label": "Moderate",
-          "forecast_accuracy": null,
-          "actual_60m_wait_min": null
+          "forecast_accuracy": 93.5,
+          "actual_60m_wait_min": 48.0
         },
         {
           "site": "Box Hill Hospital",
@@ -350,8 +350,8 @@
           "predicted_wait_min": 100.7,
           "confidence": 0.545,
           "confidence_label": "Moderate",
-          "forecast_accuracy": null,
-          "actual_60m_wait_min": null
+          "forecast_accuracy": 95.0,
+          "actual_60m_wait_min": 106.0
         },
         {
           "site": "Maroondah Hospital",
@@ -485,6 +485,39 @@
           "wait_momentum": 45.0,
           "predicted_wait_min": 97.3,
           "confidence": 0.524,
+          "confidence_label": "Moderate",
+          "forecast_accuracy": null,
+          "actual_60m_wait_min": null
+        }
+      ]
+    },
+    {
+      "bucket_utc": "2026-08-22T21:15:00Z",
+      "sites": [
+        {
+          "site": "Angliss Hospital",
+          "timestamp_utc": "2026-08-22T21:15:08Z",
+          "current_wait_min": 48.0,
+          "max_wait_min": 127,
+          "waiting_count": 6,
+          "treating_count": 18,
+          "wait_momentum": 0.0,
+          "predicted_wait_min": 41.9,
+          "confidence": 0.882,
+          "confidence_label": "High",
+          "forecast_accuracy": null,
+          "actual_60m_wait_min": null
+        },
+        {
+          "site": "Box Hill Hospital",
+          "timestamp_utc": "2026-08-22T21:15:08Z",
+          "current_wait_min": 106.0,
+          "max_wait_min": 130,
+          "waiting_count": 17,
+          "treating_count": 22,
+          "wait_momentum": -10.0,
+          "predicted_wait_min": 76.9,
+          "confidence": 0.61,
           "confidence_label": "Moderate",
           "forecast_accuracy": null,
           "actual_60m_wait_min": null
