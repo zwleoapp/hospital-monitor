@@ -1,5 +1,5 @@
 {
-  "generated_utc": "2026-08-23T20:00:47Z",
+  "generated_utc": "2026-08-23T20:15:47Z",
   "history_hours": 3.0,
   "snapshots": [
     {
@@ -498,8 +498,8 @@
           "predicted_wait_min": 159.9,
           "confidence": 0.376,
           "confidence_label": "Low",
-          "forecast_accuracy": 71.4,
-          "actual_60m_wait_min": 224.0
+          "forecast_accuracy": 68.9,
+          "actual_60m_wait_min": 122.0
         }
       ]
     },
@@ -601,8 +601,8 @@
           "predicted_wait_min": 167.5,
           "confidence": 0.633,
           "confidence_label": "Moderate",
-          "forecast_accuracy": null,
-          "actual_60m_wait_min": null
+          "forecast_accuracy": 62.7,
+          "actual_60m_wait_min": 122.0
         }
       ]
     },
@@ -680,6 +680,25 @@
           "wait_momentum": 2.0,
           "predicted_wait_min": 184.8,
           "confidence": 0.622,
+          "confidence_label": "Moderate",
+          "forecast_accuracy": null,
+          "actual_60m_wait_min": null
+        }
+      ]
+    },
+    {
+      "bucket_utc": "2026-08-23T20:15:00Z",
+      "sites": [
+        {
+          "site": "Royal Melbourne Hospital",
+          "timestamp_utc": "2026-08-23T20:15:10Z",
+          "current_wait_min": 122.0,
+          "max_wait_min": 206,
+          "waiting_count": 25,
+          "treating_count": 32,
+          "wait_momentum": -102.0,
+          "predicted_wait_min": 123.8,
+          "confidence": 0.522,
           "confidence_label": "Moderate",
           "forecast_accuracy": null,
           "actual_60m_wait_min": null
