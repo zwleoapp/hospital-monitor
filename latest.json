@@ -1,59 +1,18 @@
 {
   "schema_version": "2.1",
-  "generated_utc": "2026-09-06T20:15:26Z",
+  "generated_utc": "2026-09-06T20:30:20Z",
   "horizon_min": 60,
   "vahi_p90_all_mins": 89,
   "vahi_qly_label": "Q3 2026",
   "sites": [
     {
-      "site": "Monash Medical Centre - Clayton",
-      "network": "Monash Health",
-      "latest_obs_utc": "2026-09-06T20:15:07Z",
-      "waiting_count": 1,
-      "treating_count": 75,
-      "current_wait_min": 15.0,
-      "max_wait_min": 273,
-      "predicted_wait_min": 26.1,
-      "wait_momentum": 0.0,
-      "confidence": 0.849,
-      "confidence_label": "High",
-      "ctx_source": "VAHI",
-      "vahi_p90_mins": 32,
-      "vahi_median_cat123_mins": 9,
-      "vahi_median_cat45_mins": 10,
-      "color": "green",
-      "heartbeat_age_mins": 0.3,
-      "strain_index": 0.816,
-      "last_updated_display": "^Last Updated: 07 Sep 26 06:01",
-      "scraper_sync_mins": 0,
-      "recent_accuracy": 89.2,
-      "recent_accuracy_trend": [
-        96.2,
-        91.6,
-        86.5
-      ],
-      "metadata": {
-        "cache_lag_minutes": 14,
-        "fidelity_status": "SYNCED",
-        "is_stale": false,
-        "last_portal_update": "07 Sep 26 06:01",
-        "scrape_timestamp": "2026-09-06T20:15:07Z"
-      },
-      "paediatric": {
-        "waiting": 4,
-        "treating": 27,
-        "wait_str": "1 hr 1 min - 2 hr 47 min ",
-        "heartbeat_age_mins": 0.3
-      }
-    },
-    {
       "site": "Casey Hospital",
       "network": "Monash Health",
-      "latest_obs_utc": "2026-09-06T20:15:07Z",
+      "latest_obs_utc": "2026-09-06T20:30:01Z",
       "waiting_count": 2,
       "treating_count": 52,
       "current_wait_min": 40.0,
-      "max_wait_min": 174,
+      "max_wait_min": 188,
       "predicted_wait_min": 41.7,
       "wait_momentum": 0.0,
       "confidence": 0.802,
@@ -65,7 +24,7 @@
       "color": "amber",
       "heartbeat_age_mins": 0.3,
       "strain_index": 1.158,
-      "last_updated_display": "^Last Updated: 07 Sep 26 06:01",
+      "last_updated_display": "^Last Updated: 07 Sep 26 06:11",
       "scraper_sync_mins": 0,
       "recent_accuracy": 46.2,
       "recent_accuracy_trend": [
@@ -74,39 +33,80 @@
         64.0
       ],
       "metadata": {
-        "cache_lag_minutes": 14,
-        "fidelity_status": "SYNCED",
+        "cache_lag_minutes": 19,
+        "fidelity_status": "API_LEAD_ACTIVE",
         "is_stale": false,
-        "last_portal_update": "07 Sep 26 06:01",
-        "scrape_timestamp": "2026-09-06T20:15:07Z"
+        "last_portal_update": "07 Sep 26 06:11",
+        "scrape_timestamp": "2026-09-06T20:30:01Z"
       },
       "paediatric": {
         "waiting": 7,
         "treating": 8,
-        "wait_str": "2 hr 31 min - 7 hr 46 min ",
+        "wait_str": "0 hr 28 min - 8 hr 0 min ",
+        "heartbeat_age_mins": 0.3
+      }
+    },
+    {
+      "site": "Monash Medical Centre - Clayton",
+      "network": "Monash Health",
+      "latest_obs_utc": "2026-09-06T20:30:01Z",
+      "waiting_count": 1,
+      "treating_count": 74,
+      "current_wait_min": 15.0,
+      "max_wait_min": 287,
+      "predicted_wait_min": 25.8,
+      "wait_momentum": 0.0,
+      "confidence": 0.849,
+      "confidence_label": "High",
+      "ctx_source": "VAHI",
+      "vahi_p90_mins": 32,
+      "vahi_median_cat123_mins": 9,
+      "vahi_median_cat45_mins": 10,
+      "color": "green",
+      "heartbeat_age_mins": 0.3,
+      "strain_index": 0.806,
+      "last_updated_display": "^Last Updated: 07 Sep 26 06:11",
+      "scraper_sync_mins": 0,
+      "recent_accuracy": 89.2,
+      "recent_accuracy_trend": [
+        96.2,
+        91.6,
+        86.5
+      ],
+      "metadata": {
+        "cache_lag_minutes": 19,
+        "fidelity_status": "API_LEAD_ACTIVE",
+        "is_stale": false,
+        "last_portal_update": "07 Sep 26 06:11",
+        "scrape_timestamp": "2026-09-06T20:30:01Z"
+      },
+      "paediatric": {
+        "waiting": 2,
+        "treating": 29,
+        "wait_str": "0 hr 54 min - 3 hr 1 min ",
         "heartbeat_age_mins": 0.3
       }
     },
     {
       "site": "Dandenong Hospital",
       "network": "Monash Health",
-      "latest_obs_utc": "2026-09-06T20:15:07Z",
-      "waiting_count": 13,
+      "latest_obs_utc": "2026-09-06T20:30:01Z",
+      "waiting_count": 14,
       "treating_count": 47,
       "current_wait_min": 34.0,
-      "max_wait_min": 419,
-      "predicted_wait_min": 33.6,
-      "wait_momentum": -6.0,
-      "confidence": 0.697,
-      "confidence_label": "Moderate",
+      "max_wait_min": 433,
+      "predicted_wait_min": 34.1,
+      "wait_momentum": 0.0,
+      "confidence": 0.757,
+      "confidence_label": "High",
       "ctx_source": "VAHI",
       "vahi_p90_mins": 23,
       "vahi_median_cat123_mins": 9,
       "vahi_median_cat45_mins": 10,
       "color": "amber",
       "heartbeat_age_mins": 0.3,
-      "strain_index": 1.461,
-      "last_updated_display": "^Last Updated: 07 Sep 26 06:01",
+      "strain_index": 1.483,
+      "last_updated_display": "^Last Updated: 07 Sep 26 06:11",
       "scraper_sync_mins": 0,
       "recent_accuracy": 32.2,
       "recent_accuracy_trend": [
@@ -115,24 +115,24 @@
         16.0
       ],
       "metadata": {
-        "cache_lag_minutes": 14,
-        "fidelity_status": "SYNCED",
+        "cache_lag_minutes": 19,
+        "fidelity_status": "API_LEAD_ACTIVE",
         "is_stale": false,
-        "last_portal_update": "07 Sep 26 06:01",
-        "scrape_timestamp": "2026-09-06T20:15:07Z"
+        "last_portal_update": "07 Sep 26 06:11",
+        "scrape_timestamp": "2026-09-06T20:30:01Z"
       }
     },
     {
       "site": "Royal Melbourne Hospital",
       "network": "Melbourne Health",
-      "latest_obs_utc": "2026-09-06T20:15:07Z",
-      "waiting_count": 26,
-      "treating_count": 40,
-      "current_wait_min": 138.0,
-      "max_wait_min": 222,
-      "predicted_wait_min": 130.5,
-      "wait_momentum": -38.1,
-      "confidence": 0.494,
+      "latest_obs_utc": "2026-09-06T20:30:01Z",
+      "waiting_count": 24,
+      "treating_count": 41,
+      "current_wait_min": 158.0,
+      "max_wait_min": 244,
+      "predicted_wait_min": 137.3,
+      "wait_momentum": 20.1,
+      "confidence": 0.558,
       "confidence_label": "Moderate",
       "ctx_source": "VAHI",
       "vahi_p90_mins": 113,
@@ -140,8 +140,8 @@
       "vahi_median_cat45_mins": 36,
       "color": "red",
       "heartbeat_age_mins": 0.3,
-      "strain_index": 1.155,
-      "last_updated_display": "~06:00",
+      "strain_index": 1.215,
+      "last_updated_display": "~06:15",
       "scraper_sync_mins": 0,
       "recent_accuracy": 50.4,
       "recent_accuracy_trend": [
@@ -153,20 +153,20 @@
         "cache_lag_minutes": 15,
         "fidelity_status": "API_LEAD_ACTIVE",
         "is_stale": false,
-        "last_portal_update": "6:00am on 07 September 2026",
-        "scrape_timestamp": "2026-09-06T20:15:07Z"
+        "last_portal_update": "6:15am on 07 September 2026",
+        "scrape_timestamp": "2026-09-06T20:30:01Z"
       }
     }
   ],
   "status_sites": [
     {
       "site": "Royal Childrens Hospital",
-      "scrape_timestamp_utc": "2026-09-06T20:15:07Z",
+      "scrape_timestamp_utc": "2026-09-06T20:30:01Z",
       "heartbeat_age_mins": 0.3,
       "reported_wait_str": "Busy: 169.583",
       "busy_label": null,
       "busy_index": 169.583,
-      "fidelity_status": "SYNCED",
+      "fidelity_status": "API_LEAD_ACTIVE",
       "last_portal_update": "07 Sep 2026 06:01:44 +AEST"
     }
   ],
