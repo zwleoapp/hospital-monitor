@@ -1,26 +1,7 @@
 {
-  "generated_utc": "2026-09-14T20:16:08Z",
+  "generated_utc": "2026-09-14T20:30:52Z",
   "history_hours": 3.0,
   "snapshots": [
-    {
-      "bucket_utc": "2026-09-14T17:30:00Z",
-      "sites": [
-        {
-          "site": "Royal Melbourne Hospital",
-          "timestamp_utc": "2026-09-14T17:30:06Z",
-          "current_wait_min": 74.0,
-          "max_wait_min": 254,
-          "waiting_count": 15,
-          "treating_count": 35,
-          "wait_momentum": 2.0,
-          "predicted_wait_min": 74.1,
-          "confidence": 0.818,
-          "confidence_label": "High",
-          "forecast_accuracy": 89.3,
-          "actual_60m_wait_min": 83.0
-        }
-      ]
-    },
     {
       "bucket_utc": "2026-09-14T17:45:00Z",
       "sites": [
@@ -149,8 +130,8 @@
           "predicted_wait_min": 84.3,
           "confidence": 0.62,
           "confidence_label": "Moderate",
-          "forecast_accuracy": 89.7,
-          "actual_60m_wait_min": 94.0
+          "forecast_accuracy": 86.9,
+          "actual_60m_wait_min": 97.0
         }
       ]
     },
@@ -168,8 +149,8 @@
           "predicted_wait_min": 87.0,
           "confidence": 0.828,
           "confidence_label": "High",
-          "forecast_accuracy": null,
-          "actual_60m_wait_min": null
+          "forecast_accuracy": 89.7,
+          "actual_60m_wait_min": 97.0
         }
       ]
     },
@@ -186,6 +167,25 @@
           "wait_momentum": 5.0,
           "predicted_wait_min": 94.4,
           "confidence": 0.788,
+          "confidence_label": "High",
+          "forecast_accuracy": null,
+          "actual_60m_wait_min": null
+        }
+      ]
+    },
+    {
+      "bucket_utc": "2026-09-14T20:30:00Z",
+      "sites": [
+        {
+          "site": "Royal Melbourne Hospital",
+          "timestamp_utc": "2026-09-14T20:30:06Z",
+          "current_wait_min": 97.0,
+          "max_wait_min": 173,
+          "waiting_count": 11,
+          "treating_count": 45,
+          "wait_momentum": 3.1,
+          "predicted_wait_min": 96.4,
+          "confidence": 0.807,
           "confidence_label": "High",
           "forecast_accuracy": null,
           "actual_60m_wait_min": null
